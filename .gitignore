@@ -1,0 +1,7 @@
+bun.lock
+node-modules
+go.mod
+package-lock.json
+dist
+.idea
+.claude

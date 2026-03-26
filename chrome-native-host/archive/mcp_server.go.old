@@ -1,0 +1,712 @@
+package main
+
+import (
+	"bufio"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"net"
+	"os"
+	"time"
+)
+
+const (
+	udsPath        = "/tmp/chrome-native-host.sock"
+	connectTimeout = 5 * time.Second
+	connectRetries = 3
+)
+
+// MCP Protocol types
+type MCPRequest struct {
+	JSONRPC string          `json:"jsonrpc"`
+	ID      interface{}     `json:"id"`
+	Method  string          `json:"method"`
+	Params  json.RawMessage `json:"params,omitempty"`
+}
+
+type MCPResponse struct {
+	JSONRPC string      `json:"jsonrpc"`
+	ID      interface{} `json:"id"`
+	Result  interface{} `json:"result,omitempty"`
+	Error   *MCPError   `json:"error,omitempty"`
+}
+
+type MCPError struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+}
+
+type ToolsListParams struct{}
+
+type ToolsCallParams struct {
+	Name      string                 `json:"name"`
+	Arguments map[string]interface{} `json:"arguments,omitempty"`
+}
+
+// Chrome Native Host tools definition
+var chromeTools = []map[string]interface{}{
+	{
+		"name":        "javascript_tool",
+		"description": "Execute JavaScript code in the context of the current page. The code runs in the page's context and can interact with the DOM, window object, and page variables. Returns the result of the last expression or any thrown errors.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"action": map[string]interface{}{
+					"type":        "string",
+					"description": "Must be set to 'javascript_exec'",
+				},
+				"text": map[string]interface{}{
+					"type":        "string",
+					"description": "The JavaScript code to execute. The code will be evaluated in the page context. The result of the last expression will be returned automatically. Do NOT use 'return' statements - just write the expression you want to evaluate.",
+				},
+				"tabId": map[string]interface{}{
+					"type":        "number",
+					"description": "Tab ID to execute the code in. Must be a tab in the current group.",
+				},
+			},
+			"required": []string{"action", "text", "tabId"},
+		},
+	},
+	{
+		"name":        "navigate",
+		"description": "Navigate to a URL, or go forward/back in browser history",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"url":   map[string]interface{}{"type": "string"},
+				"tabId": map[string]interface{}{"type": "number"},
+			},
+			"required": []string{"url", "tabId"},
+		},
+	},
+	{
+		"name":        "computer",
+		"description": "Control mouse, keyboard, and take screenshots via Chrome DevTools Protocol",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"action": map[string]interface{}{
+					"type":        "string",
+					"enum":        []string{"left_click", "right_click", "double_click", "triple_click", "hover", "type", "key", "screenshot", "wait", "scroll", "scroll_to", "left_click_drag", "zoom"},
+					"description": "The action to perform. Different actions require different parameters.",
+				},
+				"coordinate": map[string]interface{}{
+					"type":        "array",
+					"items":       map[string]interface{}{"type": "number"},
+					"minItems":    2,
+					"maxItems":    2,
+					"description": "(x, y): The x (pixels from the left edge) and y (pixels from the top edge) coordinates. Required for `scroll` and `left_click_drag`. For click actions (left_click, right_click, double_click, triple_click, hover), either `coordinate` or `ref` must be provided.",
+				},
+				"text": map[string]interface{}{
+					"type":        "string",
+					"description": "The text to type (for `type` action) or the key(s) to press (for `key` action).",
+				},
+				"duration": map[string]interface{}{
+					"type":        "number",
+					"minimum":     0,
+					"maximum":     30,
+					"description": "The number of seconds to wait. Required for `wait`. Maximum 30 seconds.",
+				},
+				"scroll_direction": map[string]interface{}{
+					"type":        "string",
+					"enum":        []string{"up", "down", "left", "right"},
+					"description": "The direction to scroll. Required for `scroll`.",
+				},
+				"scroll_amount": map[string]interface{}{
+					"type":        "number",
+					"minimum":     1,
+					"maximum":     10,
+					"description": "The number of scroll wheel ticks. Optional for `scroll`, defaults to 3.",
+				},
+				"start_coordinate": map[string]interface{}{
+					"type":        "array",
+					"items":       map[string]interface{}{"type": "number"},
+					"minItems":    2,
+					"maxItems":    2,
+					"description": "(x, y): The starting coordinates for `left_click_drag`.",
+				},
+				"region": map[string]interface{}{
+					"type":        "array",
+					"items":       map[string]interface{}{"type": "number"},
+					"minItems":    4,
+					"maxItems":    4,
+					"description": "(x0, y0, x1, y1): The rectangular region to capture for `zoom`. Required for `zoom` action.",
+				},
+				"repeat": map[string]interface{}{
+					"type":        "number",
+					"minimum":     1,
+					"maximum":     100,
+					"description": "Number of times to repeat the key sequence. Only applicable for `key` action. Default is 1.",
+				},
+				"ref": map[string]interface{}{
+					"type":        "string",
+					"description": "Element reference ID from read_page or find tools (e.g., \"ref_1\"). Required for `scroll_to` action. Can be used as alternative to `coordinate` for click actions.",
+				},
+				"modifiers": map[string]interface{}{
+					"type":        "string",
+					"description": "Modifier keys for click actions. Supports: \"ctrl\", \"shift\", \"alt\", \"cmd\". Can be combined with \"+\" (e.g., \"ctrl+shift\").",
+				},
+				"tabId": map[string]interface{}{
+					"type":        "number",
+					"description": "Tab ID to execute the action on. Must be a tab in the current group.",
+				},
+			},
+			"required": []string{"tabId"},
+		},
+	},
+	{
+		"name":        "find",
+		"description": "Find elements on the page using natural language",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"query": map[string]interface{}{"type": "string"},
+				"tabId": map[string]interface{}{"type": "number"},
+			},
+			"required": []string{"query", "tabId"},
+		},
+	},
+	{
+		"name":        "form_input",
+		"description": "Set values in form elements using element reference ID",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"ref":   map[string]interface{}{"type": "string"},
+				"value": map[string]interface{}{},
+				"tabId": map[string]interface{}{"type": "number"},
+			},
+			"required": []string{"ref", "value", "tabId"},
+		},
+	},
+	{
+		"name":        "get_page_text",
+		"description": "Extract raw text content from the page",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"tabId":     map[string]interface{}{"type": "number"},
+				"max_chars": map[string]interface{}{"type": "number"},
+			},
+			"required": []string{"tabId"},
+		},
+	},
+	{
+		"name":        "read_page",
+		"description": "Get accessibility tree representation of page elements",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"filter":    map[string]interface{}{"type": "string", "enum": []string{"interactive", "all"}},
+				"tabId":     map[string]interface{}{"type": "number"},
+				"depth":     map[string]interface{}{"type": "number"},
+				"ref_id":    map[string]interface{}{"type": "string"},
+				"max_chars": map[string]interface{}{"type": "number"},
+			},
+			"required": []string{"tabId"},
+		},
+	},
+	{
+		"name":        "resize_window",
+		"description": "Resize the current browser window to specified dimensions",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"width":  map[string]interface{}{"type": "number"},
+				"height": map[string]interface{}{"type": "number"},
+				"tabId":  map[string]interface{}{"type": "number"},
+			},
+			"required": []string{"width", "height", "tabId"},
+		},
+	},
+	//{
+	//	"name":        "tabs_context",
+	//	"description": "Get context information about all tabs in the current tab group",
+	//	"inputSchema": map[string]interface{}{
+	//		"type":       "object",
+	//		"properties": map[string]interface{}{},
+	//		"required":   []string{},
+	//	},
+	//},
+	//{
+	//	"name":        "tabs_create",
+	//	"description": "Creates a new empty tab in the current tab group",
+	//	"inputSchema": map[string]interface{}{
+	//		"type":       "object",
+	//		"properties": map[string]interface{}{},
+	//		"required":   []string{},
+	//	},
+	//},
+	{
+		"name":        "turn_answer_start",
+		"description": "Call this immediately before your text response to the user for this turn",
+		"inputSchema": map[string]interface{}{
+			"type":       "object",
+			"properties": map[string]interface{}{},
+			"required":   []string{},
+		},
+	},
+	{
+		"name":        "update_plan",
+		"description": "Present a plan to the user for approval before taking actions",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"domains": map[string]interface{}{
+					"type":  "array",
+					"items": map[string]interface{}{"type": "string"},
+				},
+				"approach": map[string]interface{}{
+					"type":  "array",
+					"items": map[string]interface{}{"type": "string"},
+				},
+			},
+			"required": []string{"domains", "approach"},
+		},
+	},
+	{
+		"name":        "upload_image",
+		"description": "Upload a previously captured screenshot or user-uploaded image to a file input or drag & drop target",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"imageId":    map[string]interface{}{"type": "string"},
+				"ref":        map[string]interface{}{"type": "string"},
+				"coordinate": map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "number"}},
+				"tabId":      map[string]interface{}{"type": "number"},
+				"filename":   map[string]interface{}{"type": "string"},
+			},
+			"required": []string{"imageId", "tabId"},
+		},
+	},
+	{
+		"name":        "read_console_messages",
+		"description": "Read browser console messages from a specific tab",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"tabId":      map[string]interface{}{"type": "number"},
+				"onlyErrors": map[string]interface{}{"type": "boolean"},
+				"clear":      map[string]interface{}{"type": "boolean"},
+				"pattern":    map[string]interface{}{"type": "string"},
+				"limit":      map[string]interface{}{"type": "number"},
+			},
+			"required": []string{"tabId"},
+		},
+	},
+	{
+		"name":        "read_network_requests",
+		"description": "Read HTTP network requests from a specific tab",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"tabId":      map[string]interface{}{"type": "number"},
+				"urlPattern": map[string]interface{}{"type": "string"},
+				"clear":      map[string]interface{}{"type": "boolean"},
+				"limit":      map[string]interface{}{"type": "number"},
+			},
+			"required": []string{"tabId"},
+		},
+	},
+	{
+		"name":        "gif_creator",
+		"description": "Manage GIF recording and export for browser automation sessions",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"action":     map[string]interface{}{"type": "string"},
+				"tabId":      map[string]interface{}{"type": "number"},
+				"coordinate": map[string]interface{}{"type": "array"},
+				"download":   map[string]interface{}{"type": "boolean"},
+				"filename":   map[string]interface{}{"type": "string"},
+				"options":    map[string]interface{}{"type": "object"},
+			},
+			"required": []string{"action", "tabId"},
+		},
+	},
+	{
+		"name":        "tabs_context_mcp",
+		"description": "Get context information about the current MCP tab group",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"createIfEmpty": map[string]interface{}{"type": "boolean"},
+			},
+			"required": []string{},
+		},
+	},
+	{
+		"name":        "tabs_create_mcp",
+		"description": "Creates a new empty tab in the MCP tab group",
+		"inputSchema": map[string]interface{}{
+			"type":       "object",
+			"properties": map[string]interface{}{},
+			"required":   []string{},
+		},
+	},
+	{
+		"name":        "shortcuts_list",
+		"description": "List all available shortcuts and workflows",
+		"inputSchema": map[string]interface{}{
+			"type":       "object",
+			"properties": map[string]interface{}{},
+			"required":   []string{},
+		},
+	},
+	{
+		"name":        "shortcuts_execute",
+		"description": "Execute a shortcut or workflow by running it in a new sidepanel window",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"shortcutId": map[string]interface{}{"type": "string"},
+				"command":    map[string]interface{}{"type": "string"},
+			},
+			"required": []string{},
+		},
+	},
+}
+
+type MCPServer struct {
+	udsConn net.Conn
+}
+
+func NewMCPServer() (*MCPServer, error) {
+	var conn net.Conn
+	var err error
+
+	// Retry connection with timeout
+	for i := 0; i < connectRetries; i++ {
+		conn, err = net.DialTimeout("unix", udsPath, connectTimeout)
+		if err == nil {
+			break
+		}
+		slog.Warn("failed to connect to UDS", "attempt", i+1, "max", connectRetries, "error", err)
+		if i < connectRetries-1 {
+			time.Sleep(time.Second)
+		}
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to chrome-native-host at %s: %w\nMake sure chrome-native-host is running with --uds flag", udsPath, err)
+	}
+
+	slog.Info("connected to chrome-native-host", "path", udsPath)
+
+	return &MCPServer{
+		udsConn: conn,
+	}, nil
+}
+
+func (s *MCPServer) forwardToNativeHost(tool string, args map[string]interface{}) (interface{}, error) {
+	// Normalize arguments before forwarding
+	args = s.normalizeArgs(tool, args)
+
+	slog.Debug("forwarding to native host", "tool", tool, "args", args)
+	// Send tool_request to native host
+	req := map[string]interface{}{
+		"type":   "tool_request",
+		"method": "execute_tool",
+		"params": map[string]interface{}{
+			"tool": tool,
+			"args": args,
+		},
+	}
+
+	if err := sendMessage(s.udsConn, req); err != nil {
+		return nil, fmt.Errorf("failed to send to native host: %w", err)
+	}
+
+	// Wait for tool_response
+	response, err := readMessage(s.udsConn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	var resp ToolResponseMsg
+	if err := json.Unmarshal(response, &resp); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	if resp.Error != nil {
+		return nil, fmt.Errorf("tool error: %v", resp.Error.Content)
+	}
+
+	// Debug log the result structure
+	resultJSON, _ := json.Marshal(resp.Result.Content)
+	slog.Debug("native host response", "result", string(resultJSON))
+
+	return resp.Result.Content, nil
+}
+
+// normalizeArgs normalizes tool arguments to match Chrome extension expectations
+func (s *MCPServer) normalizeArgs(tool string, args map[string]interface{}) map[string]interface{} {
+	normalized := make(map[string]interface{})
+	for k, v := range args {
+		normalized[k] = v
+	}
+
+	// Handle computer tool duration parameter (convert milliseconds to seconds if needed)
+	if tool == "computer" {
+		if duration, ok := normalized["duration"].(float64); ok {
+			// If duration > 30, assume it's in milliseconds and convert to seconds
+			if duration > 30 {
+				normalized["duration"] = duration / 1000
+				slog.Debug("converted duration from milliseconds to seconds", "original", duration, "converted", normalized["duration"])
+			}
+			// Validate max duration
+			if normalized["duration"].(float64) > 30 {
+				slog.Warn("duration exceeds maximum", "duration", normalized["duration"], "max", 30)
+			}
+		}
+	}
+
+	return normalized
+}
+
+// convertToMCPContent converts Chrome tool response to MCP content format
+func (s *MCPServer) convertToMCPContent(result interface{}) []interface{} {
+	// If result is already an array, convert Anthropic format to MCP format
+	if arr, ok := result.([]interface{}); ok {
+		mcpContent := []interface{}{}
+
+		for _, item := range arr {
+			if m, ok := item.(map[string]interface{}); ok {
+				itemType, hasType := m["type"].(string)
+				if !hasType {
+					continue // Skip items without type
+				}
+
+				switch itemType {
+				case "text":
+					// Text format is the same
+					mcpContent = append(mcpContent, m)
+
+				case "image":
+					// Convert Anthropic format to MCP format
+					if source, hasSource := m["source"].(map[string]interface{}); hasSource {
+						if data, hasData := source["data"].(string); hasData {
+							mimeType := "image/png"
+							if mt, hasMT := source["media_type"].(string); hasMT {
+								mimeType = mt
+							}
+							mcpContent = append(mcpContent, map[string]interface{}{
+								"type":     "image",
+								"data":     data,
+								"mimeType": mimeType,
+							})
+							continue
+						}
+					}
+					// If already in MCP format, keep it
+					if _, hasData := m["data"]; hasData {
+						mcpContent = append(mcpContent, m)
+					}
+
+				default:
+					// Keep other types as-is
+					mcpContent = append(mcpContent, m)
+				}
+			}
+		}
+
+		return mcpContent
+	}
+
+	// Convert map result to MCP content
+	if m, ok := result.(map[string]interface{}); ok {
+		content := []interface{}{}
+
+		// Handle screenshot response with base64Image
+		if base64Image, hasImage := m["base64Image"].(string); hasImage {
+			// Add text output if present
+			if output, hasOutput := m["output"].(string); hasOutput {
+				content = append(content, map[string]interface{}{
+					"type": "text",
+					"text": output,
+				})
+			}
+
+			// Add image
+			imageFormat := "png"
+			if format, ok := m["imageFormat"].(string); ok {
+				imageFormat = format
+			}
+
+			content = append(content, map[string]interface{}{
+				"type":     "image",
+				"data":     base64Image,
+				"mimeType": "image/" + imageFormat,
+			})
+
+			return content
+		}
+
+		// Handle regular output response
+		if output, hasOutput := m["output"].(string); hasOutput {
+			return []interface{}{
+				map[string]interface{}{
+					"type": "text",
+					"text": output,
+				},
+			}
+		}
+
+		// Handle error response
+		if errMsg, hasError := m["error"].(string); hasError {
+			return []interface{}{
+				map[string]interface{}{
+					"type": "text",
+					"text": "Error: " + errMsg,
+				},
+			}
+		}
+	}
+
+	// Fallback: convert to JSON string
+	jsonBytes, _ := json.Marshal(result)
+	return []interface{}{
+		map[string]interface{}{
+			"type": "text",
+			"text": string(jsonBytes),
+		},
+	}
+}
+
+func (s *MCPServer) handleRequest(req MCPRequest) MCPResponse {
+	slog.Debug("handling request", "method", req.Method, "id", req.ID)
+
+	switch req.Method {
+	case "initialize":
+		return MCPResponse{
+			JSONRPC: "2.0",
+			ID:      req.ID,
+			Result: map[string]interface{}{
+				"protocolVersion": "2024-11-05",
+				"capabilities": map[string]interface{}{
+					"tools": map[string]interface{}{},
+				},
+				"serverInfo": map[string]interface{}{
+					"name":    "chrome-mcp-server",
+					"version": "1.0.0",
+				},
+			},
+		}
+
+	case "tools/list":
+		return MCPResponse{
+			JSONRPC: "2.0",
+			ID:      req.ID,
+			Result: map[string]interface{}{
+				"tools": chromeTools,
+			},
+		}
+
+	case "tools/call":
+		var params ToolsCallParams
+		if err := json.Unmarshal(req.Params, &params); err != nil {
+			return MCPResponse{
+				JSONRPC: "2.0",
+				ID:      req.ID,
+				Error: &MCPError{
+					Code:    -32602,
+					Message: fmt.Sprintf("Invalid params: %v", err),
+				},
+			}
+		}
+
+		result, err := s.forwardToNativeHost(params.Name, params.Arguments)
+		if err != nil {
+			return MCPResponse{
+				JSONRPC: "2.0",
+				ID:      req.ID,
+				Error: &MCPError{
+					Code:    -32603,
+					Message: err.Error(),
+				},
+			}
+		}
+
+		// Convert result to MCP content format
+		content := s.convertToMCPContent(result)
+
+		return MCPResponse{
+			JSONRPC: "2.0",
+			ID:      req.ID,
+			Result: map[string]interface{}{
+				"content": content,
+			},
+		}
+
+	default:
+		return MCPResponse{
+			JSONRPC: "2.0",
+			ID:      req.ID,
+			Error: &MCPError{
+				Code:    -32601,
+				Message: fmt.Sprintf("Method not found: %s", req.Method),
+			},
+		}
+	}
+}
+
+func (s *MCPServer) Run() error {
+	scanner := bufio.NewScanner(os.Stdin)
+
+	for scanner.Scan() {
+		line := scanner.Bytes()
+
+		var req MCPRequest
+		if err := json.Unmarshal(line, &req); err != nil {
+			slog.Error("failed to parse request", "error", err)
+			continue
+		}
+
+		resp := s.handleRequest(req)
+
+		respBytes, err := json.Marshal(resp)
+		if err != nil {
+			slog.Error("failed to marshal response", "error", err)
+			continue
+		}
+
+		fmt.Println(string(respBytes))
+	}
+
+	return scanner.Err()
+}
+
+func (s *MCPServer) Close() error {
+	if s.udsConn != nil {
+		return s.udsConn.Close()
+	}
+	return nil
+}
+
+func main() {
+	logFile, err := os.OpenFile("/tmp/chrome-mcp-server.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to open log file: %v\n", err)
+		os.Exit(1)
+	}
+	defer logFile.Close()
+
+	logger := slog.New(slog.NewJSONHandler(logFile, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	}))
+	slog.SetDefault(logger)
+
+	slog.Info("MCP Server started")
+
+	server, err := NewMCPServer()
+	if err != nil {
+		slog.Error("failed to create MCP server", "error", err)
+		os.Exit(1)
+	}
+	defer server.Close()
+
+	if err := server.Run(); err != nil {
+		slog.Error("server error", "error", err)
+		os.Exit(1)
+	}
+}

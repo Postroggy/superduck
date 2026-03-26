@@ -1,0 +1,64 @@
+.rich-text-input {
+  min-height: 24px;
+  max-height: 50vh;
+  overflow-y: auto;
+  outline: none;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-family: inherit;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  width: 100%;
+  resize: none;
+  border: none;
+  background: transparent;
+}
+
+.rich-text-input:focus {
+  outline: none;
+  ring: 0;
+  border-color: transparent;
+}
+
+.rich-text-input p {
+  margin: 0;
+}
+
+.rich-text-input .is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: #999;
+  pointer-events: none;
+  height: 0;
+}
+
+.shortcut-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  margin: 0 2px;
+  background-color: #e3f2fd;
+  border: 1px solid #90caf9;
+  border-radius: 12px;
+  font-size: 0.875em;
+  color: #1976d2;
+  cursor: pointer;
+  user-select: none;
+  vertical-align: middle;
+}
+
+.shortcut-chip:hover {
+  background-color: #bbdefb;
+}
+
+/* TipTap ProseMirror 样式 */
+.ProseMirror {
+  outline: none;
+}
+
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: #999;
+  pointer-events: none;
+  height: 0;
+}
