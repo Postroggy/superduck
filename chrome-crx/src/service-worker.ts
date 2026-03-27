@@ -21,6 +21,7 @@ import {
   syncPermissions,
 } from "./mcpPermissions";
 import { initSentry } from "./PermissionManager";
+import { initModelMappingListener } from "./utils/modelMapping";
 
 // --- Native Messaging State ---
 
@@ -451,6 +452,7 @@ async function restoreScheduledAlarms() {
 // initSentry();
 connectBridge();
 connectNativeHost();
+initModelMappingListener();
 
 const mainTabAckCache = new Map<number, { timestamp: number; isAlive: boolean }>();
 

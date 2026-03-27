@@ -92,6 +92,7 @@ import {
 import { Anthropic } from '../mcpServersStore';
 import { parseModelTag, getBaseModel } from './sessionPool';
 import { useAnalytics, getModelsConfig, AnalyticsContext } from '../components/SchedulingFields';
+import { mapModelName, loadModelMapping, MODEL_MAPPING_KEYS, getMappedModelName } from '../utils/modelMapping';
 import { EmptyState } from './EmptyState';
 import { useTabEvent } from './hooks';
 import { ScrollContainer, type ScrollContainerHandle } from './ScrollContainer';
@@ -3423,8 +3424,9 @@ function useLightningMode({
       const betas = ['oauth-2025-04-20'];
       if (fast) betas.push('fast-mode-2026-02-01');
       const model = params.model || getEffectiveModel();
+      const mappedModel = await mapModelName(getBaseModel(model));
       const requestBody: any = {
-        model: getBaseModel(model),
+        model: mappedModel,
         max_tokens: params.maxTokens,
         messages: params.messages,
         system: params.system,
@@ -3617,9 +3619,10 @@ function useLightningMode({
             const model = getEffectiveModel();
             const effort = resolveEffortLevel(effortRef.current, model, modelsConfigRef.current);
             const fast = isFastModel();
+            const mappedModel = await mapModelName(getBaseModel(model));
             const requestBody: any = {
               messages: apiMessages,
-              model: getBaseModel(model),
+              model: mappedModel,
               max_tokens: 10000,
               tools: [],
               system: systemPromptRef.current,
@@ -6907,9 +6910,31 @@ export function SidepanelApp() {
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('follow_a_plan');
   const [selectedModel, setSelectedModel] = useState<string>('');
   const selectedModelRef = useRef(selectedModel);
+  const [modelMapping, setModelMapping] = useState<{
+    haiku?: string;
+    sonnet?: string;
+    opus?: string;
+  }>({});
+
   useEffect(() => {
     selectedModelRef.current = selectedModel;
   }, [selectedModel]);
+
+  // Load model mapping on mount
+  useEffect(() => {
+    loadModelMapping().then(setModelMapping);
+
+    // Listen for storage changes
+    const listener = (changes: any, areaName: string) => {
+      if (areaName !== 'local') return;
+      const mappingKeys = Object.values(MODEL_MAPPING_KEYS);
+      if (mappingKeys.some(key => key in changes)) {
+        loadModelMapping().then(setModelMapping);
+      }
+    };
+    chrome.storage.onChanged.addListener(listener);
+    return () => chrome.storage.onChanged.removeListener(listener);
+  }, []);
 
   // Lightning (Quick/Purl) mode toggle state — persisted to chrome.storage
   const [purlModeToggle, setPurlModeToggle] = useState(false);
@@ -7636,6 +7661,9 @@ export function SidepanelApp() {
         resolvedModel = (modelConfig as any)?.small_fast_model || 'claude-haiku-4-5-20251001';
       }
 
+      // Apply model mapping if custom API is configured
+      const mappedModel = await mapModelName(resolvedModel);
+
       // Resolve [[shortcut:id:name]] markers in messages (matching compiled mi)
       const messages = rawMessages
         ? await resolveShortcutMarkersInMessages(rawMessages)
@@ -7646,7 +7674,7 @@ export function SidepanelApp() {
           ...rest,
           messages,
           max_tokens: effectiveMaxTokens,
-          model: resolvedModel,
+          model: mappedModel,
           ...(authToken ? { betas: ['oauth-2025-04-20'] } : {})
         },
         undefined
@@ -8091,9 +8119,12 @@ export function SidepanelApp() {
                 );
               }
 
+              // Apply model mapping if custom API is configured
+              const mappedModel = await mapModelName(selectedModel || DEFAULT_MODEL);
+
               const stream = anthropicClient.beta.messages.stream(
                 {
-                  model: selectedModel || DEFAULT_MODEL,
+                  model: mappedModel,
                   max_tokens: MAX_TOKENS,
                   ...(authToken ? { betas: ['oauth-2025-04-20'] } : {}),
                   system: systemPrompt,
@@ -9484,9 +9515,19 @@ export function SidepanelApp() {
       const trimmedValue = value.trim();
       if (!trimmedValue || seen.has(trimmedValue)) return;
       seen.add(trimmedValue);
+
+      // Get base label
+      let baseLabel = label && label.trim() ? label : getModelDisplayName(trimmedValue, modelConfig);
+
+      // Add mapped model name if configured
+      const mappedModelName = getMappedModelName(trimmedValue, modelMapping);
+
+      // Append mapped model name to label if exists
+      const finalLabel = mappedModelName ? `${baseLabel} (${mappedModelName})` : baseLabel;
+
       options.push({
         value: trimmedValue,
-        label: label && label.trim() ? label : getModelDisplayName(trimmedValue, modelConfig)
+        label: finalLabel
       });
     };
 
@@ -9521,7 +9562,7 @@ export function SidepanelApp() {
     }
 
     return options;
-  }, [modelConfig, selectedModel]);
+  }, [modelConfig, selectedModel, modelMapping]);
 
   const effectiveSelectedModel =
     selectedModel ||

@@ -15,6 +15,7 @@ import {
 import { StorageKeys, getStorageValue, loginWithAnthropic } from './SavedPromptsService';
 import { T as TasksTab } from '@/components/TasksTab';
 import { IntlMessageLoaderProvider } from './index-react-dom-intl';
+import { MODEL_MAPPING_KEYS } from './utils/modelMapping';
 
 const CUSTOM_API_URL_KEY = 'customApiUrl';
 const CUSTOM_API_KEY_KEY = 'customApiKey';
@@ -588,10 +589,17 @@ const PermissionsTab: React.FC = () => {
   );
   const [customApiUrl, setCustomApiUrl] = useStorageState<string>(CUSTOM_API_URL_KEY, '');
   const [customApiKey, setCustomApiKey] = useStorageState<string>(CUSTOM_API_KEY_KEY, '');
+  const [modelMappingHaiku, setModelMappingHaiku] = useStorageState<string>(MODEL_MAPPING_KEYS.HAIKU, '');
+  const [modelMappingSonnet, setModelMappingSonnet] = useStorageState<string>(MODEL_MAPPING_KEYS.SONNET, '');
+  const [modelMappingOpus, setModelMappingOpus] = useStorageState<string>(MODEL_MAPPING_KEYS.OPUS, '');
   const [apiUrlInput, setApiUrlInput] = useState('');
   const [apiKeyInput, setApiKeyInput] = useState('');
+  const [haikuModelInput, setHaikuModelInput] = useState('');
+  const [sonnetModelInput, setSonnetModelInput] = useState('');
+  const [opusModelInput, setOpusModelInput] = useState('');
   const [apiSaveStatus, setApiSaveStatus] = useState<string | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const { analytics } = useAnalytics();
 
   const permissionManager = useMemo(() => new PermissionManager(() => false), []);
@@ -624,6 +632,18 @@ const PermissionsTab: React.FC = () => {
     setApiKeyInput(customApiKey || '');
   }, [customApiKey]);
 
+  useEffect(() => {
+    setHaikuModelInput(modelMappingHaiku || '');
+  }, [modelMappingHaiku]);
+
+  useEffect(() => {
+    setSonnetModelInput(modelMappingSonnet || '');
+  }, [modelMappingSonnet]);
+
+  useEffect(() => {
+    setOpusModelInput(modelMappingOpus || '');
+  }, [modelMappingOpus]);
+
   const handleRevoke = async (id: string) => {
     await permissionManager.revokePermission(id);
     loadPermissions();
@@ -644,12 +664,25 @@ const PermissionsTab: React.FC = () => {
 
   const handleSaveCustomApi = async () => {
     const normalizedUrl = apiUrlInput.trim().replace(/\/+$/, '');
-    await Promise.all([setCustomApiUrl(normalizedUrl), setCustomApiKey(apiKeyInput.trim())]);
+    // Atomic write to avoid racing between sidepanel listeners
+    await chrome.storage.local.set({
+      [CUSTOM_API_URL_KEY]: normalizedUrl,
+      [CUSTOM_API_KEY_KEY]: apiKeyInput.trim(),
+      [MODEL_MAPPING_KEYS.HAIKU]: haikuModelInput.trim(),
+      [MODEL_MAPPING_KEYS.SONNET]: sonnetModelInput.trim(),
+      [MODEL_MAPPING_KEYS.OPUS]: opusModelInput.trim()
+    });
     setApiSaveStatus('Saved. Reopen sidepanel to apply.');
   };
 
   const handleClearCustomApi = async () => {
-    await Promise.all([setCustomApiUrl(''), setCustomApiKey('')]);
+    await chrome.storage.local.set({
+      [CUSTOM_API_URL_KEY]: '',
+      [CUSTOM_API_KEY_KEY]: '',
+      [MODEL_MAPPING_KEYS.HAIKU]: '',
+      [MODEL_MAPPING_KEYS.SONNET]: '',
+      [MODEL_MAPPING_KEYS.OPUS]: ''
+    });
     setApiSaveStatus('Cleared.');
   };
 
@@ -711,6 +744,69 @@ const PermissionsTab: React.FC = () => {
                   )}
                 </button>
               </div>
+            </div>
+
+            {/* Advanced Configuration */}
+            <div className="border-t border-border-300 pt-4">
+              <button
+                type="button"
+                onClick={() => setShowAdvanced(!showAdvanced)}
+                className="flex items-center gap-2 text-text-200 hover:text-text-100 font-base-sm transition-colors"
+              >
+                <svg
+                  className={`w-4 h-4 transition-transform ${showAdvanced ? 'rotate-90' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+                高级配置
+              </button>
+
+              {showAdvanced && (
+                <div className="mt-4 space-y-4 pl-6">
+                  <div className="text-text-300 font-base-sm mb-4">
+                    <p className="font-semibold text-text-200 mb-1">模型映射</p>
+                    <p>如果供应商原生提供 Claude 系列模型，通常无需配置。仅在需要将请求映射到不同模型名称时填写。</p>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-text-200 font-base-sm mb-1">Opus 默认模型</label>
+                      <input
+                        type="text"
+                        value={opusModelInput}
+                        onChange={(e) => setOpusModelInput(e.target.value)}
+                        placeholder="例如: kimi-k2.5"
+                        className="w-full rounded-lg border border-border-300 bg-bg-000 px-3 py-2 text-sm text-text-100"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-text-200 font-base-sm mb-1">Sonnet 默认模型</label>
+                      <input
+                        type="text"
+                        value={sonnetModelInput}
+                        onChange={(e) => setSonnetModelInput(e.target.value)}
+                        placeholder="例如: kimi-k2.5"
+                        className="w-full rounded-lg border border-border-300 bg-bg-000 px-3 py-2 text-sm text-text-100"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-text-200 font-base-sm mb-1">Haiku 默认模型</label>
+                      <input
+                        type="text"
+                        value={haikuModelInput}
+                        onChange={(e) => setHaikuModelInput(e.target.value)}
+                        placeholder="例如: kimi-k2.5"
+                        className="w-full rounded-lg border border-border-300 bg-bg-000 px-3 py-2 text-sm text-text-100"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

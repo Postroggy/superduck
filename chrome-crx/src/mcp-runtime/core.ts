@@ -11,6 +11,7 @@ import {
 } from '../SavedPromptsService';
 import { Anthropic } from '../mcpServersStore';
 import { withTracing, PermissionManager as PermissionManagerClass } from '../PermissionManager';
+import { mapModelName } from '../utils/modelMapping';
 import {
   MCP_NATIVE_SESSION_ID,
   PermissionDuration,
@@ -981,10 +982,12 @@ class ToolExecutor {
           const modelConfig = await getFeatureValue('chrome_ext_models');
           model = modelConfig?.small_fast_model || FAST_MODEL;
         }
+        // Apply model mapping if custom API is configured
+        const mappedModel = await mapModelName(model);
         return await this.context.anthropicClient.beta.messages.create({
           ...rest,
           max_tokens: maxTokens,
-          model,
+          model: mappedModel,
           betas: ['oauth-2025-04-20']
         });
       };
@@ -1229,6 +1232,7 @@ async function recordToolAction(toolName: string, toolInput: any, tabId: number)
 let cachedAnthropicClient: any;
 let lastOauthToken: string | undefined;
 let lastApiKey: string | undefined;
+let lastApiBaseUrl: string | undefined;
 let toolExecutorInstance: ToolExecutor | undefined;
 let navigationBlockedError: string | undefined;
 let navigationBlockedTime: number | undefined;
@@ -1283,10 +1287,11 @@ async function refreshAnthropicClient(): Promise<any> {
     (typeof customApiKey === 'string' && customApiKey.trim()) ||
     (typeof anthropicApiKey === 'string' && anthropicApiKey.trim()) ||
     undefined;
-  if (lastOauthToken !== oauthToken || lastApiKey !== apiKey) {
+  if (lastOauthToken !== oauthToken || lastApiKey !== apiKey || lastApiBaseUrl !== apiBaseUrl) {
     cachedAnthropicClient = undefined;
     lastOauthToken = oauthToken;
     lastApiKey = apiKey;
+    lastApiBaseUrl = apiBaseUrl;
   }
   if (cachedAnthropicClient) return cachedAnthropicClient;
   if (!oauthToken && !apiKey) return undefined;
