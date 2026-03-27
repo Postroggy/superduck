@@ -106,7 +106,7 @@ export const RichTextInput = forwardRef<RichTextInputHandle, RichTextInputProps>
           bulletList: false
         }),
         Placeholder.configure({
-          placeholder: placeholder || 'Type a message...'
+          placeholder: placeholder || ''
         }),
         ShortcutChip
       ],
@@ -181,7 +181,7 @@ export const RichTextInput = forwardRef<RichTextInputHandle, RichTextInputProps>
         );
         if (placeholderExt) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (placeholderExt.options as any).placeholder = placeholder || 'Type a message...';
+          (placeholderExt.options as any).placeholder = placeholder || '';
           editor.view.dispatch(editor.state.tr);
         }
       }

@@ -21,10 +21,13 @@ import {
   syncPermissions,
 } from "./mcpPermissions";
 import { initSentry } from "./PermissionManager";
+import { initModelMappingListener } from "./utils/modelMapping";
 
 // --- Native Messaging State ---
 
 const NATIVE_HOST_NAMES = [
+  { name: "com.me.superduck_browser_extension", label: "Desktop" },
+  { name: "com.me.superduck_code_browser_extension", label: "Claude Code" },
   { name: "com.me.klaude_browser_extension", label: "Desktop" },
   { name: "com.me.klaude_code_browser_extension", label: "Claude Code" },
 ] as const;
@@ -385,7 +388,7 @@ async function closeTab(tabId: number) {
 async function setupUserAgentRule() {
   const config = getConfig();
   const extensionVersion = chrome.runtime.getManifest().version;
-  const userAgentValue = `claude-browser-extension/${extensionVersion} (external) ${navigator.userAgent} `;
+  const userAgentValue = `superduck-browser-extension/${extensionVersion} (external) ${navigator.userAgent} `;
 
   const rules: chrome.declarativeNetRequest.Rule[] = [
     {
@@ -451,6 +454,7 @@ async function restoreScheduledAlarms() {
 // initSentry();
 connectBridge();
 connectNativeHost();
+initModelMappingListener();
 
 const mainTabAckCache = new Map<number, { timestamp: number; isAlive: boolean }>();
 

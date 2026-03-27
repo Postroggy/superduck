@@ -10,15 +10,15 @@ export interface ModelOption {
 export const BUILT_IN_MODELS: ModelOption[] = [
   {
     value: 'claude-opus-4-6',
-    label: 'Opus 4.6'
+    label: 'Opus'
   },
   {
     value: 'claude-sonnet-4-6',
-    label: 'Sonnet 4.6'
+    label: 'Sonnet'
   },
   {
     value: 'claude-haiku-4-5-20251001',
-    label: 'Haiku 4.5'
+    label: 'Haiku'
   }
 ];
 

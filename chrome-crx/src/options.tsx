@@ -15,6 +15,7 @@ import {
 import { StorageKeys, getStorageValue, loginWithAnthropic } from './SavedPromptsService';
 import { T as TasksTab } from '@/components/TasksTab';
 import { IntlMessageLoaderProvider } from './index-react-dom-intl';
+import { MODEL_MAPPING_KEYS } from './utils/modelMapping';
 
 const CUSTOM_API_URL_KEY = 'customApiUrl';
 const CUSTOM_API_KEY_KEY = 'customApiKey';
@@ -136,8 +137,8 @@ const MicrophonePermissionModal: React.FC<MicrophonePermissionModalProps> = ({
 
           <p className="text-text-300 font-base mb-6">
             <FormattedMessage
-              defaultMessage="Claude needs microphone access to hear your voice narration while you demonstrate workflows. When prompted, select <strong>Allow while visiting the site</strong> to enable voice narration."
-              id="claude_needs_microphone_access_to_hear"
+              defaultMessage="SuperDuck needs microphone access to hear your voice narration while you demonstrate workflows. When prompted, select <strong>Allow while visiting the site</strong> to enable voice narration."
+              id="claude_needs_microphone_access_to_hear_your_voice"
               values={{
                 strong: (chunks: React.ReactNode) => (
                   <span className="font-semibold text-text-200">{chunks}</span>
@@ -173,7 +174,7 @@ const MicrophonePermissionModal: React.FC<MicrophonePermissionModalProps> = ({
               <p className="font-base text-danger-000">
                 <FormattedMessage
                   defaultMessage="Microphone access was denied. You can either try again or <link>open Chrome settings</link> to enable microphone access."
-                  id="microphone_access_was_denied_you_can"
+                  id="microphone_access_was_denied_you_can_either_try"
                   values={{
                     link: (chunks: React.ReactNode) => (
                       <button
@@ -216,7 +217,7 @@ const MicrophonePermissionModal: React.FC<MicrophonePermissionModalProps> = ({
                   } else {
                     setIsRequesting(false);
                     setError(
-                      'You selected "Allow this time" which doesn\'t persist. Please click the button again and select "Allow while visiting the site" to enable voice narration.'
+                      intl.formatMessage({ id: 'allow_this_time_warning', defaultMessage: 'You selected "Allow this time" which doesn\'t persist. Please click the button again and select "Allow while visiting the site" to enable voice narration.' })
                     );
                   }
                 } catch (err: any) {
@@ -225,14 +226,14 @@ const MicrophonePermissionModal: React.FC<MicrophonePermissionModalProps> = ({
                     if (err.name === 'NotAllowedError') {
                       await checkPermission();
                     } else if (err.name === 'NotFoundError') {
-                      setError('No microphone found. Please connect a microphone and try again.');
+                      setError(intl.formatMessage({ id: 'no_microphone_found_please_connect_a_microphone_and', defaultMessage: 'No microphone found. Please connect a microphone and try again.' }));
                     } else {
                       setError(`Error: ${err.message}`);
                     }
                   } else if (err instanceof Error) {
                     setError(`Error: ${err.message}`);
                   } else {
-                    setError('An unknown error occurred');
+                    setError(intl.formatMessage({ id: 'an_unknown_error_occurred', defaultMessage: 'An unknown error occurred' }));
                   }
                 }
               }}
@@ -307,6 +308,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({
   large,
   narrow
 }) => {
+  const intl = useIntl();
   const isEmpty = !children && !mdTitle;
   const isLarge = large;
 
@@ -339,7 +341,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({
                 isLarge ? 'text-2xl' : 'text-lg'
               )}
             >
-              <span className="truncate">{mdTitle}</span>
+              <span className="truncate">{mdTitle === 'Settings' ? intl.formatMessage({ id: 'settings', defaultMessage: 'Settings' }) : mdTitle}</span>
             </h1>
             <div />
             {children}
@@ -398,7 +400,7 @@ const MicrophoneSettings: React.FC<MicrophoneSettingsProps> = ({ analytics }) =>
       <p className="text-text-300 font-base mt-2 mb-6">
         <FormattedMessage
           defaultMessage="Enable microphone access to use your browser's speech-to-text functionality for voice narration during workflow recording"
-          id="enable_microphone_access_to_use_your"
+          id="enable_microphone_access_to_use_your_browsers_speechtotext"
         />
       </p>
 
@@ -509,7 +511,7 @@ const MicrophoneSettings: React.FC<MicrophoneSettingsProps> = ({ analytics }) =>
               <div className="text-text-400 font-base-sm mt-1">
                 <FormattedMessage
                   defaultMessage="You can now use voice narration when recording workflows. To disable, go to {chromeSettingsLink}."
-                  id="you_can_now_use_voice_narration"
+                  id="you_can_now_use_voice_narration_when_recording"
                   values={{
                     chromeSettingsLink: (
                       <button
@@ -588,9 +590,17 @@ const PermissionsTab: React.FC = () => {
   );
   const [customApiUrl, setCustomApiUrl] = useStorageState<string>(CUSTOM_API_URL_KEY, '');
   const [customApiKey, setCustomApiKey] = useStorageState<string>(CUSTOM_API_KEY_KEY, '');
+  const [modelMappingHaiku, setModelMappingHaiku] = useStorageState<string>(MODEL_MAPPING_KEYS.HAIKU, '');
+  const [modelMappingSonnet, setModelMappingSonnet] = useStorageState<string>(MODEL_MAPPING_KEYS.SONNET, '');
+  const [modelMappingOpus, setModelMappingOpus] = useStorageState<string>(MODEL_MAPPING_KEYS.OPUS, '');
   const [apiUrlInput, setApiUrlInput] = useState('');
   const [apiKeyInput, setApiKeyInput] = useState('');
+  const [haikuModelInput, setHaikuModelInput] = useState('');
+  const [sonnetModelInput, setSonnetModelInput] = useState('');
+  const [opusModelInput, setOpusModelInput] = useState('');
   const [apiSaveStatus, setApiSaveStatus] = useState<string | null>(null);
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const { analytics } = useAnalytics();
 
   const permissionManager = useMemo(() => new PermissionManager(() => false), []);
@@ -623,6 +633,18 @@ const PermissionsTab: React.FC = () => {
     setApiKeyInput(customApiKey || '');
   }, [customApiKey]);
 
+  useEffect(() => {
+    setHaikuModelInput(modelMappingHaiku || '');
+  }, [modelMappingHaiku]);
+
+  useEffect(() => {
+    setSonnetModelInput(modelMappingSonnet || '');
+  }, [modelMappingSonnet]);
+
+  useEffect(() => {
+    setOpusModelInput(modelMappingOpus || '');
+  }, [modelMappingOpus]);
+
   const handleRevoke = async (id: string) => {
     await permissionManager.revokePermission(id);
     loadPermissions();
@@ -643,13 +665,26 @@ const PermissionsTab: React.FC = () => {
 
   const handleSaveCustomApi = async () => {
     const normalizedUrl = apiUrlInput.trim().replace(/\/+$/, '');
-    await Promise.all([setCustomApiUrl(normalizedUrl), setCustomApiKey(apiKeyInput.trim())]);
-    setApiSaveStatus('Saved. Reopen sidepanel to apply.');
+    // Atomic write to avoid racing between sidepanel listeners
+    await chrome.storage.local.set({
+      [CUSTOM_API_URL_KEY]: normalizedUrl,
+      [CUSTOM_API_KEY_KEY]: apiKeyInput.trim(),
+      [MODEL_MAPPING_KEYS.HAIKU]: haikuModelInput.trim(),
+      [MODEL_MAPPING_KEYS.SONNET]: sonnetModelInput.trim(),
+      [MODEL_MAPPING_KEYS.OPUS]: opusModelInput.trim()
+    });
+    setApiSaveStatus(intl.formatMessage({ id: 'saved_reopen_sidepanel', defaultMessage: 'Saved. Reopen sidepanel to apply.' }));
   };
 
   const handleClearCustomApi = async () => {
-    await Promise.all([setCustomApiUrl(''), setCustomApiKey('')]);
-    setApiSaveStatus('Cleared.');
+    await chrome.storage.local.set({
+      [CUSTOM_API_URL_KEY]: '',
+      [CUSTOM_API_KEY_KEY]: '',
+      [MODEL_MAPPING_KEYS.HAIKU]: '',
+      [MODEL_MAPPING_KEYS.SONNET]: '',
+      [MODEL_MAPPING_KEYS.OPUS]: ''
+    });
+    setApiSaveStatus(intl.formatMessage({ id: 'cleared_status', defaultMessage: 'Cleared.' }));
   };
 
   if (isLoading) {
@@ -665,15 +700,14 @@ const PermissionsTab: React.FC = () => {
       <div className="space-y-6">
         {/* Custom API */}
         <div className="bg-bg-100 border border-border-300 rounded-xl px-6 pt-6 pb-6 md:px-8 md:pt-8 md:pb-8">
-          <h3 className="text-text-100 font-xl-bold">Custom API Endpoint</h3>
+          <h3 className="text-text-100 font-xl-bold"><FormattedMessage id="custom_api_endpoint" defaultMessage="Custom API Endpoint" /></h3>
           <p className="text-text-300 font-base mt-2 mb-6">
-            Configure `api_url` and `api_key` used by sidepanel so it can run without the Sign in
-            page.
+            <FormattedMessage id="configure_api_url_and_api_key" defaultMessage="Configure api_url and api_key used by sidepanel so it can run without the Sign in page." />
           </p>
 
           <div className="space-y-4">
             <div>
-              <label className="block text-text-200 font-base-sm mb-1">API URL</label>
+              <label className="block text-text-200 font-base-sm mb-1"><FormattedMessage id="api_url_label" defaultMessage="API URL" /></label>
               <input
                 type="text"
                 value={apiUrlInput}
@@ -683,14 +717,96 @@ const PermissionsTab: React.FC = () => {
               />
             </div>
             <div>
-              <label className="block text-text-200 font-base-sm mb-1">API Key</label>
-              <input
-                type="password"
-                value={apiKeyInput}
-                onChange={(e) => setApiKeyInput(e.target.value)}
-                placeholder="your_api_key"
-                className="w-full rounded-lg border border-border-300 bg-bg-000 px-3 py-2 text-sm text-text-100"
-              />
+              <label className="block text-text-200 font-base-sm mb-1"><FormattedMessage id="api_key_label" defaultMessage="API Key" /></label>
+              <div className="relative">
+                <input
+                  type={showApiKey ? "text" : "password"}
+                  value={apiKeyInput}
+                  onChange={(e) => setApiKeyInput(e.target.value)}
+                  placeholder="your_api_key"
+                  className="w-full rounded-lg border border-border-300 bg-bg-000 px-3 py-2 pr-10 text-sm text-text-100"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowApiKey(!showApiKey)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-text-300 hover:text-text-100 transition-colors"
+                  aria-label={intl.formatMessage({ id: showApiKey ? 'hide_api_key' : 'show_api_key', defaultMessage: showApiKey ? 'Hide API key' : 'Show API key' })}
+                >
+                  {showApiKey ? (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Advanced Configuration */}
+            <div className="border-t border-border-300 pt-4">
+              <button
+                type="button"
+                onClick={() => setShowAdvanced(!showAdvanced)}
+                className="flex items-center gap-2 text-text-200 hover:text-text-100 font-base-sm transition-colors"
+              >
+                <svg
+                  className={`w-4 h-4 transition-transform ${showAdvanced ? 'rotate-90' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+                <FormattedMessage id="advanced_configuration" defaultMessage="Advanced Configuration" />
+              </button>
+
+              {showAdvanced && (
+                <div className="mt-4 space-y-4 pl-6">
+                  <div className="text-text-300 font-base-sm mb-4">
+                    <p className="font-semibold text-text-200 mb-1"><FormattedMessage id="model_mapping" defaultMessage="Model Mapping" /></p>
+                    <p><FormattedMessage id="model_mapping_description" defaultMessage="If the provider natively supports Claude models, no configuration is usually needed. Only fill in when you need to map requests to different model names." /></p>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-text-200 font-base-sm mb-1"><FormattedMessage id="opus_default_model" defaultMessage="Opus Default Model" /></label>
+                      <input
+                        type="text"
+                        value={opusModelInput}
+                        onChange={(e) => setOpusModelInput(e.target.value)}
+                        placeholder={intl.formatMessage({ id: 'model_placeholder', defaultMessage: 'e.g.: kimi-k2.5' })}
+                        className="w-full rounded-lg border border-border-300 bg-bg-000 px-3 py-2 text-sm text-text-100"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-text-200 font-base-sm mb-1"><FormattedMessage id="sonnet_default_model" defaultMessage="Sonnet Default Model" /></label>
+                      <input
+                        type="text"
+                        value={sonnetModelInput}
+                        onChange={(e) => setSonnetModelInput(e.target.value)}
+                        placeholder={intl.formatMessage({ id: 'model_placeholder', defaultMessage: 'e.g.: kimi-k2.5' })}
+                        className="w-full rounded-lg border border-border-300 bg-bg-000 px-3 py-2 text-sm text-text-100"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-text-200 font-base-sm mb-1"><FormattedMessage id="haiku_default_model" defaultMessage="Haiku Default Model" /></label>
+                      <input
+                        type="text"
+                        value={haikuModelInput}
+                        onChange={(e) => setHaikuModelInput(e.target.value)}
+                        placeholder={intl.formatMessage({ id: 'model_placeholder', defaultMessage: 'e.g.: kimi-k2.5' })}
+                        className="w-full rounded-lg border border-border-300 bg-bg-000 px-3 py-2 text-sm text-text-100"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -699,13 +815,13 @@ const PermissionsTab: React.FC = () => {
               onClick={() => void handleSaveCustomApi()}
               className="px-4 py-2 bg-accent-main-100 text-oncolor-100 rounded-lg font-base-sm hover:bg-accent-main-200 transition-colors"
             >
-              Save
+              <FormattedMessage id="save" defaultMessage="Save" />
             </button>
             <button
               onClick={() => void handleClearCustomApi()}
               className="px-4 py-2 border border-border-300 text-text-200 rounded-lg font-base-sm hover:bg-bg-200 transition-colors"
             >
-              Clear
+              <FormattedMessage id="clear" defaultMessage="Clear" />
             </button>
           </div>
 
@@ -722,7 +838,7 @@ const PermissionsTab: React.FC = () => {
           <p className="text-text-300 font-base mt-2 mb-6">
             <FormattedMessage
               defaultMessage="Get notified when tasks complete or need your input"
-              id="get_notified_when_tasks_complete_or"
+              id="get_notified_when_tasks_complete_or_need_your"
             />
           </p>
           <div className="flex items-center justify-between py-4">
@@ -741,7 +857,7 @@ const PermissionsTab: React.FC = () => {
                 ) : (
                   <FormattedMessage
                     defaultMessage="You haven't set your notification preference yet"
-                    id="you_havent_set_your_notification_preference"
+                    id="you_havent_set_your_notification_preference_yet"
                   />
                 )}
               </div>
@@ -771,8 +887,8 @@ const PermissionsTab: React.FC = () => {
           </h3>
           <p className="text-text-300 font-base mt-2 mb-6">
             <FormattedMessage
-              defaultMessage="You have allowed Claude to take all actions (browse, click, type) on these sites."
-              id="you_have_allowed_claude_to_take"
+              defaultMessage="You have allowed SuperDuck to take all actions (browse, click, type) on these sites."
+              id="you_have_allowed_claude_to_take_all_actions"
             />
           </p>
           {permissions?.netloc && permissions.netloc.length > 0 ? (
@@ -994,7 +1110,7 @@ function OptionsPage() {
         {!isAuthenticated && !apiKey && (
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 text-text-300 font-base-sm">
-              <FormattedMessage defaultMessage="Not logged in" id="Y0gAGF8ERt" />
+              <FormattedMessage defaultMessage="Not logged in" id="not_logged_in" />
             </div>
             <button
               onClick={async () => {
@@ -1053,7 +1169,7 @@ function OptionsPage() {
                         await resetAnalytics();
                         window.location.reload();
                       } catch {
-                        alert('Failed to logout. Please try again.');
+                        alert(intl.formatMessage({ id: 'failed_to_logout', defaultMessage: 'Failed to logout. Please try again.' }));
                       }
                     }}
                     className="w-full flex items-center gap-2 px-3 py-3 text-danger-000 hover:bg-danger-000/10 rounded-lg transition-all font-base"

@@ -14,33 +14,13 @@ export const DEFAULT_LOCALE = 'en-US';
 
 export const SUPPORTED_LOCALES = [
   'en-US',
-  'de-DE',
-  'fr-FR',
-  'ko-KR',
-  'ja-JP',
-  'es-419',
-  'es-ES',
-  'it-IT',
-  'hi-IN',
-  'pt-BR',
-  'id-ID',
   'zh-CN'
 ] as const;
 
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
 
 export const LOCALE_DISPLAY_NAMES: Record<SupportedLocale, string> = {
-  'de-DE': 'Deutsch',
   'en-US': 'English',
-  'es-419': 'Espanol (Latinoamerica)',
-  'es-ES': 'Espanol (Espana)',
-  'fr-FR': 'Francais',
-  'hi-IN': 'Hindi',
-  'id-ID': 'Bahasa Indonesia',
-  'it-IT': 'Italiano',
-  'ja-JP': '日本語',
-  'ko-KR': '한국어',
-  'pt-BR': 'Portugues (Brasil)',
   'zh-CN': '简体中文'
 };
 

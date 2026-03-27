@@ -1029,7 +1029,7 @@ const gifCreatorTool: ToolDefinition = {
             },
             showWatermark: {
               type: 'boolean',
-              description: 'Show Claude logo watermark (default: true)'
+              description: 'Show SuperDuck logo watermark (default: true)'
             },
             quality: {
               type: 'number',

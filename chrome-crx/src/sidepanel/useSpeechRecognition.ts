@@ -18,7 +18,7 @@ interface UseSpeechRecognitionReturn {
   clearSegments: () => void;
 }
 
-export const useSpeechRecognition = (): UseSpeechRecognitionReturn => {
+export const useSpeechRecognition = (lang?: string): UseSpeechRecognitionReturn => {
   const [isRecording, setIsRecording] = useState(false);
   const [speechSegments, setSpeechSegments] = useState<SpeechSegment[]>([]);
   const [currentInterimTranscript, setCurrentInterimTranscript] = useState('');
@@ -60,7 +60,7 @@ export const useSpeechRecognition = (): UseSpeechRecognitionReturn => {
 
     recognition.continuous = true;
     recognition.interimResults = true;
-    recognition.lang = 'en-US';
+    recognition.lang = lang || navigator.language || 'en-US';
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
       const now = Date.now();
@@ -144,7 +144,7 @@ export const useSpeechRecognition = (): UseSpeechRecognitionReturn => {
         }
       }
     };
-  }, [isSupported]);
+  }, [isSupported, lang]);
 
   // Start recording
   const startRecording = useCallback(async (): Promise<boolean> => {

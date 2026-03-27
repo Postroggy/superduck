@@ -94,13 +94,13 @@ export function ErrorDisplay({ error, tabId, title, onRetry }: ErrorDisplayProps
             {isExtensionConflict ? (
               conflictingExtension ? (
                 <FormattedMessage
-                  defaultMessage="Another extension you're using is preventing Claude in Chrome from operating. Turn off extensions such as {extensionName} to use Claude in your browser."
+                  defaultMessage="Another extension you're using is preventing SuperDuck in Chrome from operating. Turn off extensions such as {extensionName} to use SuperDuck in your browser."
                   id="another_extension_youre_using_is_preventing"
                   values={{ extensionName: conflictingExtension }}
                 />
               ) : (
                 <FormattedMessage
-                  defaultMessage="Another extension you're using is preventing Claude in Chrome from operating."
+                  defaultMessage="Another extension you're using is preventing SuperDuck in Chrome from operating."
                   id="another_extension_youre_using_is_preventing_2"
                 />
               )

@@ -278,7 +278,7 @@ export function ShortcutsMenu({
             </div>
             <div className="flex-1">
               <div className="text-sm font-medium text-text-100">
-                <FormattedMessage defaultMessage="Schedule task" id="KL/gQqGUU1" />
+                <FormattedMessage defaultMessage="Schedule task" id="schedule_task" />
               </div>
             </div>
           </div>
@@ -291,7 +291,7 @@ export function ShortcutsMenu({
           <p className="text-sm text-text-300">
             <FormattedMessage
               defaultMessage="No shortcuts found for '{searchTerm}'"
-              id="noShortcutsFound"
+              id="no_shortcuts_found_for"
               values={{ searchTerm }}
             />
           </p>

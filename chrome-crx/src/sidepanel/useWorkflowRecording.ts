@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { useIntlSafe } from '../index-react-dom-intl';
 import { useSpeechRecognition } from './useSpeechRecognition';
 import { useScreenCapture } from './useScreenCapture';
 import { useTabStatusListener } from './useTabStatusListener';
@@ -83,6 +84,8 @@ export const useWorkflowRecording = ({
   onComplete,
   createMessage
 }: UseWorkflowRecordingProps) => {
+  const intl = useIntlSafe();
+
   // Recording state
   const [recordingState, setRecordingState] = useState<RecordingState>({
     isRecording: false,
@@ -132,7 +135,7 @@ export const useWorkflowRecording = ({
     hasPermission: hasSpeechPermission,
     startRecording: startSpeechRecording,
     stopRecording: stopSpeechRecording
-  } = useSpeechRecognition();
+  } = useSpeechRecognition(intl.locale);
 
   // Screen capture hook
   const { captureFullScreen } = useScreenCapture({

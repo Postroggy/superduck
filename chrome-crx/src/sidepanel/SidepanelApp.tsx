@@ -92,6 +92,7 @@ import {
 import { Anthropic } from '../mcpServersStore';
 import { parseModelTag, getBaseModel } from './sessionPool';
 import { useAnalytics, getModelsConfig, AnalyticsContext } from '../components/SchedulingFields';
+import { mapModelName, loadModelMapping, MODEL_MAPPING_KEYS, getMappedModelName } from '../utils/modelMapping';
 import { EmptyState } from './EmptyState';
 import { useTabEvent } from './hooks';
 import { ScrollContainer, type ScrollContainerHandle } from './ScrollContainer';
@@ -430,16 +431,16 @@ const PERMISSION_MODE_OPTIONS: PermissionModeOption[] = [
     value: 'follow_a_plan',
     labelId: 'ask_before_acting',
     labelDefault: 'Ask before acting',
-    descriptionId: 'dNvIs5mEPO',
-    descriptionDefault: 'Claude aligns on its approach before taking actions',
+    descriptionId: 'claude_aligns_on_its_approach_before_taking_actions',
+    descriptionDefault: 'SuperDuck aligns on its approach before taking actions',
     Icon: Hand
   },
   {
     value: 'skip_all_permission_checks',
-    labelId: 'LStwu4n1yT',
+    labelId: 'act_without_asking',
     labelDefault: 'Act without asking',
-    descriptionId: 'KduIvQDYMp',
-    descriptionDefault: 'Claude takes actions without asking for permission',
+    descriptionId: 'claude_takes_actions_without_asking_for_permission',
+    descriptionDefault: 'SuperDuck takes actions without asking for permission',
     Icon: ChevronsRight
   }
 ];
@@ -3423,8 +3424,9 @@ function useLightningMode({
       const betas = ['oauth-2025-04-20'];
       if (fast) betas.push('fast-mode-2026-02-01');
       const model = params.model || getEffectiveModel();
+      const mappedModel = await mapModelName(getBaseModel(model));
       const requestBody: any = {
-        model: getBaseModel(model),
+        model: mappedModel,
         max_tokens: params.maxTokens,
         messages: params.messages,
         system: params.system,
@@ -3617,9 +3619,10 @@ function useLightningMode({
             const model = getEffectiveModel();
             const effort = resolveEffortLevel(effortRef.current, model, modelsConfigRef.current);
             const fast = isFastModel();
+            const mappedModel = await mapModelName(getBaseModel(model));
             const requestBody: any = {
               messages: apiMessages,
-              model: getBaseModel(model),
+              model: mappedModel,
               max_tokens: 10000,
               tools: [],
               system: systemPromptRef.current,
@@ -4581,7 +4584,7 @@ function PlanApprovalModal({
       <div className="flex items-center justify-between py-[10px] px-4">
         <div className="flex items-center gap-2">
           <ChecklistIcon size={20} className="text-text-100" />
-          <h3 className="font-base text-text-100">Claude's plan</h3>
+          <h3 className="font-base text-text-100">SuperDuck's plan</h3>
         </div>
         {isReadOnly && onClose && (
           <button
@@ -4628,7 +4631,7 @@ function PlanApprovalModal({
                     <span className="font-base text-text-100">{name}</span>
                     {isForceAsk && (
                       <Tooltip
-                        tooltipContent="You must approve any Claude action on this site"
+                        tooltipContent="You must approve any SuperDuck action on this site"
                         side="top"
                       >
                         <span className="flex-shrink-0 cursor-help">
@@ -4680,7 +4683,7 @@ function PlanApprovalModal({
             </span>
           </PermissionActionButton>
           <p className="font-small text-text-500 pt-1 px-1">
-            Claude will only use the sites listed. You'll be asked before accessing anything else.
+            SuperDuck will only use the sites listed. You'll be asked before accessing anything else.
           </p>
         </div>
       )}
@@ -6425,7 +6428,7 @@ function SecondaryTabView({
   return (
     <div className="h-screen bg-bg-100 text-text-100 flex items-center justify-center p-4">
       <div className="max-w-md text-center">
-        <h2 className="text-lg font-medium mb-2">Klaude is active in this tab group</h2>
+        <h2 className="text-lg font-medium mb-2">SuperDuck is active in this tab group</h2>
         <p className="text-sm text-text-300 mb-4">
           Open chat in the main tab to continue this session.
         </p>
@@ -6447,7 +6450,7 @@ function BrowserPermissionGate({ onAccept }: { onAccept: () => Promise<void> }) 
       <div className="max-w-lg rounded-xl border border-border-300 bg-bg-000 p-5">
         <h2 className="text-lg font-medium mb-2">Enable browser control</h2>
         <p className="text-sm text-text-300 mb-4">
-          Klaude needs browser control permission before running actions.
+          SuperDuck needs browser control permission before running actions.
         </p>
         <button
           type="button"
@@ -6544,8 +6547,8 @@ function BlockedDomainView({
         </h2>
         <p className="text-sm text-text-300 mb-3">
           {isMainTabBlocked
-            ? 'Claude cannot assist with the content on this page.'
-            : 'Claude landed on a blocked site and cannot complete your request.'}{' '}
+            ? 'SuperDuck cannot assist with the content on this page.'
+            : 'SuperDuck landed on a blocked site and cannot complete your request.'}{' '}
           <span className="font-mono">({category})</span>
         </p>
         {!isMainTabBlocked ? (
@@ -6586,7 +6589,7 @@ function PermissionPrompt({ requestId }: { requestId: string }) {
       <div className="max-w-xl mx-auto mt-10 rounded-2xl border border-border-300 bg-bg-000 p-5">
         <h1 className="text-lg font-semibold mb-2">Permission request</h1>
         <p className="text-sm text-text-300 mb-4">
-          Claude is requesting permission to continue. Confirm to allow this action.
+          SuperDuck is requesting permission to continue. Confirm to allow this action.
         </p>
         <div className="flex gap-2">
           <button
@@ -6711,7 +6714,7 @@ function InlinePermissionPrompt({
     return (
       <div className="p-4">
         <div className="text-sm text-text-300 mb-3">
-          Claude wants to navigate from{' '}
+          SuperDuck wants to navigate from{' '}
           <span className="font-medium text-text-100">{prompt.actionData?.fromDomain || '?'}</span>{' '}
           to <span className="font-medium text-text-100">{prompt.actionData?.toDomain || '?'}</span>
         </div>
@@ -6772,7 +6775,7 @@ function InlinePermissionPrompt({
               <span className="font-medium text-text-100">{mcp.toolDisplayName}</span>
             </>
           ) : (
-            'Claude wants to use an MCP tool'
+            'SuperDuck wants to use an MCP tool'
           )}
         </div>
         <div className="flex flex-col gap-2">
@@ -6811,7 +6814,7 @@ function InlinePermissionPrompt({
   return (
     <div className="p-4">
       <div className="text-sm text-text-300 mb-1">
-        Claude wants to <span className="font-medium text-text-100">{actionText}</span>
+        SuperDuck wants to <span className="font-medium text-text-100">{actionText}</span>
       </div>
       <div className="text-sm text-text-100 font-medium mb-3 truncate">{hostname}</div>
       {prompt.actionData?.screenshot && (
@@ -6866,7 +6869,7 @@ function InlinePermissionPrompt({
         )}
       </div>
       <div className="mt-3 text-[11px] text-text-400 leading-relaxed">
-        Claude will not purchase items, create accounts, or attempt to bypass CAPTCHAs.
+        SuperDuck will not purchase items, create accounts, or attempt to bypass CAPTCHAs.
       </div>
     </div>
   );
@@ -6907,9 +6910,31 @@ export function SidepanelApp() {
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('follow_a_plan');
   const [selectedModel, setSelectedModel] = useState<string>('');
   const selectedModelRef = useRef(selectedModel);
+  const [modelMapping, setModelMapping] = useState<{
+    haiku?: string;
+    sonnet?: string;
+    opus?: string;
+  }>({});
+
   useEffect(() => {
     selectedModelRef.current = selectedModel;
   }, [selectedModel]);
+
+  // Load model mapping on mount
+  useEffect(() => {
+    loadModelMapping().then(setModelMapping);
+
+    // Listen for storage changes
+    const listener = (changes: any, areaName: string) => {
+      if (areaName !== 'local') return;
+      const mappingKeys = Object.values(MODEL_MAPPING_KEYS);
+      if (mappingKeys.some(key => key in changes)) {
+        loadModelMapping().then(setModelMapping);
+      }
+    };
+    chrome.storage.onChanged.addListener(listener);
+    return () => chrome.storage.onChanged.removeListener(listener);
+  }, []);
 
   // Lightning (Quick/Purl) mode toggle state — persisted to chrome.storage
   const [purlModeToggle, setPurlModeToggle] = useState(false);
@@ -7601,7 +7626,7 @@ export function SidepanelApp() {
       {
         type: 'text' as const,
         text: [
-          'You are Claude running in the Klaude Chrome sidepanel.',
+          'You are SuperDuck running in the SuperDuck Chrome sidepanel.',
           `Current model: ${selectedModel || 'default'}.`,
           `Permission mode: ${permissionMode}.`,
           `Platform: ${platform}. Use ${modifier} for shortcut modifier keys.`,
@@ -7636,6 +7661,9 @@ export function SidepanelApp() {
         resolvedModel = (modelConfig as any)?.small_fast_model || 'claude-haiku-4-5-20251001';
       }
 
+      // Apply model mapping if custom API is configured
+      const mappedModel = await mapModelName(resolvedModel);
+
       // Resolve [[shortcut:id:name]] markers in messages (matching compiled mi)
       const messages = rawMessages
         ? await resolveShortcutMarkersInMessages(rawMessages)
@@ -7646,7 +7674,7 @@ export function SidepanelApp() {
           ...rest,
           messages,
           max_tokens: effectiveMaxTokens,
-          model: resolvedModel,
+          model: mappedModel,
           ...(authToken ? { betas: ['oauth-2025-04-20'] } : {})
         },
         undefined
@@ -7810,7 +7838,7 @@ export function SidepanelApp() {
       await chrome.notifications.create(`notification_${Date.now()}`, {
         type: 'basic',
         iconUrl: chrome.runtime.getURL('claude_icon.svg'),
-        title: 'Claude is done',
+        title: 'SuperDuck is done',
         message: 'Your task is completed. Ready to check in?',
         priority: 2
       });
@@ -7828,7 +7856,7 @@ export function SidepanelApp() {
           messages: [
             {
               role: 'user',
-              content: `<message>\n${text.slice(0, 500)}\n</message>\n\nBased on this message, generate a 7-word-or-less status describing the high-level task or goal Claude is working on. Put it between <status> tags.`
+              content: `<message>\n${text.slice(0, 500)}\n</message>\n\nBased on this message, generate a 7-word-or-less status describing the high-level task or goal SuperDuck is working on. Put it between <status> tags.`
             },
             {
               role: 'assistant',
@@ -7837,7 +7865,7 @@ export function SidepanelApp() {
           ],
           max_tokens: 128,
           system:
-            'Generate ultra-concise status updates describing the current high-level task or goal.\nYour status should describe WHAT Claude is trying to accomplish, not the specific action.\n\nREQUIREMENTS:\n- Maximum 7 words\n- Describe the goal/task, not the action\n- Be high-level and task-oriented\n- No punctuation at the end\n\nExamples of GOOD statuses (goal-oriented):\n- Researching company information\n- Looking up flight options\n- Completing checkout process\n- Finding product details\n- Setting up account\n- Analyzing search results\n- Gathering page content\n\nExamples of BAD statuses (too action-specific):\n- Clicking submit button\n- Reading page content\n- Taking screenshot\n- Typing into form field',
+            'Generate ultra-concise status updates describing the current high-level task or goal.\nYour status should describe WHAT SuperDuck is trying to accomplish, not the specific action.\n\nREQUIREMENTS:\n- Maximum 7 words\n- Describe the goal/task, not the action\n- Be high-level and task-oriented\n- No punctuation at the end\n\nExamples of GOOD statuses (goal-oriented):\n- Researching company information\n- Looking up flight options\n- Completing checkout process\n- Finding product details\n- Setting up account\n- Analyzing search results\n- Gathering page content\n\nExamples of BAD statuses (too action-specific):\n- Clicking submit button\n- Reading page content\n- Taking screenshot\n- Typing into form field',
           model: 'claude-haiku-4-5-20251001'
         });
         if (response?.content) {
@@ -8091,9 +8119,12 @@ export function SidepanelApp() {
                 );
               }
 
+              // Apply model mapping if custom API is configured
+              const mappedModel = await mapModelName(selectedModel || DEFAULT_MODEL);
+
               const stream = anthropicClient.beta.messages.stream(
                 {
-                  model: selectedModel || DEFAULT_MODEL,
+                  model: mappedModel,
                   max_tokens: MAX_TOKENS,
                   ...(authToken ? { betas: ['oauth-2025-04-20'] } : {}),
                   system: systemPrompt,
@@ -9484,9 +9515,19 @@ export function SidepanelApp() {
       const trimmedValue = value.trim();
       if (!trimmedValue || seen.has(trimmedValue)) return;
       seen.add(trimmedValue);
+
+      // Get base label
+      let baseLabel = label && label.trim() ? label : getModelDisplayName(trimmedValue, modelConfig);
+
+      // Add mapped model name if configured
+      const mappedModelName = getMappedModelName(trimmedValue, modelMapping);
+
+      // Append mapped model name to label if exists
+      const finalLabel = mappedModelName ? `${baseLabel} (${mappedModelName})` : baseLabel;
+
       options.push({
         value: trimmedValue,
-        label: label && label.trim() ? label : getModelDisplayName(trimmedValue, modelConfig)
+        label: finalLabel
       });
     };
 
@@ -9521,7 +9562,7 @@ export function SidepanelApp() {
     }
 
     return options;
-  }, [modelConfig, selectedModel]);
+  }, [modelConfig, selectedModel, modelMapping]);
 
   const effectiveSelectedModel =
     selectedModel ||
@@ -10015,7 +10056,7 @@ export function SidepanelApp() {
                           onClick={() => handleLanguageSelection(entry)}
                           className="w-full min-h-8 px-2 py-1.5 rounded-lg text-left text-sm flex items-center gap-2 hover:bg-bg-200 hover:text-text-100 transition-colors"
                         >
-                          <span className="flex-1">{LOCALE_DISPLAY_NAMES[entry]}</span>
+                          <span className="flex-1 whitespace-nowrap">{LOCALE_DISPLAY_NAMES[entry]}</span>
                           {locale === entry ? (
                             <Check size={14} className="text-accent-secondary-200" />
                           ) : null}
@@ -10028,7 +10069,7 @@ export function SidepanelApp() {
                   <p className="px-2 pt-2 text-[11px] text-text-300">
                     <MemoizedFormattedMessage
                       defaultMessage="Start a chat to convert it into a task."
-                      id="start_a_chat_to_convert_it"
+                      id="start_a_chat_to_convert_it_into_a"
                     />
                   </p>
                 ) : null}
@@ -10121,7 +10162,7 @@ export function SidepanelApp() {
                           return isEligible ? null : (
                             <CompactBanner key="eligibility" type="info">
                               <div className="flex justify-between items-center w-full">
-                                <span>Claude in Chrome requires a paid plan</span>
+                                <span>SuperDuck in Chrome requires a paid plan</span>
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -10171,7 +10212,7 @@ export function SidepanelApp() {
                           return (
                             <CompactBanner key="refusal" type="refusal">
                               <span className="font-small">
-                                Claude is unable to respond to this request, which appears to
+                                SuperDuck is unable to respond to this request, which appears to
                                 violate our{' '}
                                 <button
                                   onClick={() =>
@@ -10225,14 +10266,21 @@ export function SidepanelApp() {
                               onDismiss={() => setSkipWarningDismissed(true)}
                               dismissWithGradient
                             >
-                              <span className="font-bold">HIGH RISK:</span> Claude can take most
-                              actions on the internet now. This setting could put your data at risk.{' '}
-                              <button
-                                onClick={() => chrome.tabs.create({ url: SAFE_USE_TIPS_URL })}
-                                className="underline hover:opacity-80 transition-colors"
-                              >
-                                See safe use tips
-                              </button>
+                              <MemoizedFormattedMessage
+                                id="high_risk_claude_can_take_most_actions_on"
+                                defaultMessage="<bold>HIGH RISK:</bold> SuperDuck can take most actions on the internet now. This setting could put your data at risk. <link>See safe use tips</link>"
+                                values={{
+                                  bold: (chunks: any) => <span className="font-bold">{chunks}</span>,
+                                  link: (chunks: any) => (
+                                    <button
+                                      onClick={() => chrome.tabs.create({ url: SAFE_USE_TIPS_URL })}
+                                      className="underline hover:opacity-80 transition-colors"
+                                    >
+                                      {chunks}
+                                    </button>
+                                  )
+                                }}
+                              />
                             </CompactBanner>
                           );
                         }
@@ -10415,7 +10463,7 @@ export function SidepanelApp() {
                                       })
                                     : intl.formatMessage({
                                         id: 'reply_to_claude',
-                                        defaultMessage: 'Reply to Claude'
+                                        defaultMessage: 'Reply to SuperDuck'
                                       })
                                 }
                                 disabled={false}
@@ -10537,7 +10585,7 @@ export function SidepanelApp() {
                               {/* Teach Claude button */}
                               <Tooltip
                                 tooltipContent={intl.formatMessage({
-                                  defaultMessage: 'Teach Claude',
+                                  defaultMessage: 'Teach SuperDuck',
                                   id: 'teach_claude'
                                 })}
                                 side="top"
@@ -10549,7 +10597,7 @@ export function SidepanelApp() {
                                   }}
                                   className="inline-flex items-center justify-center relative shrink-0 select-none font-medium h-7 w-7 rounded-lg active:scale-95 transition-all duration-200 text-text-300 hover:text-text-200 hover:bg-bg-200"
                                   aria-label={intl.formatMessage({
-                                    defaultMessage: 'Teach Claude',
+                                    defaultMessage: 'Teach SuperDuck',
                                     id: 'teach_claude'
                                   })}
                                 >
@@ -10671,8 +10719,8 @@ export function SidepanelApp() {
                             className="text-[11px] hover:text-text-300 transition-colors text-center"
                           >
                             <MemoizedFormattedMessage
-                              defaultMessage="Claude is AI and can make mistakes. Please double-check responses."
-                              id="ai_can_make_mistakes_please_doublecheck"
+                              defaultMessage="SuperDuck is AI and can make mistakes. Please double-check responses."
+                              id="ai_can_make_mistakes_please_doublecheck_responses"
                             />
                           </a>
                         </div>
@@ -10738,7 +10786,7 @@ export function SidepanelApp() {
             <p className="text-sm text-text-300 mt-4">
               <MemoizedFormattedMessage
                 defaultMessage="Changing the language will start a new chat."
-                id="changing_the_language_will_start_a"
+                id="changing_the_language_will_start_a_new_chat"
               />
             </p>
             <div className="flex justify-end gap-2 mt-6">
@@ -10765,17 +10813,20 @@ export function SidepanelApp() {
         <div className="fixed inset-0 bg-black/40 p-4 flex items-center justify-center">
           <div className="w-full max-w-md rounded-xl border border-border-300 bg-bg-000 p-4">
             <h3 className="text-base font-medium text-text-100 mb-2">
-              {pairingPrompt.clientType === 'claude-code' ? 'Claude Code' : 'Claude Desktop'} wants
-              to connect
+              <MemoizedFormattedMessage
+                id="wants_to_connect"
+                defaultMessage="{clientLabel} wants to connect"
+                values={{ clientLabel: pairingPrompt.clientType === 'claude-code' ? 'Claude Code' : 'Claude Desktop' }}
+              />
             </h3>
             <p className="text-sm text-text-300 mb-3">
-              Name this browser so you can identify it later.
+              <MemoizedFormattedMessage id="name_this_browser_so_you_can_identify_it" defaultMessage="Name this browser so you can identify it later." />
             </p>
             <input
               type="text"
               value={pairingName}
               onChange={(event) => setPairingName(event.target.value)}
-              placeholder='e.g. "Work laptop"'
+              placeholder={intl.formatMessage({ id: 'eg_work_laptop_personal_chrome', defaultMessage: 'e.g., "Work laptop", "Personal Chrome"' })}
               className="w-full px-3 py-2 text-sm rounded-lg border border-border-300 bg-bg-100 text-text-100"
             />
             <div className="flex justify-end gap-2 mt-4">
@@ -10791,7 +10842,7 @@ export function SidepanelApp() {
                 }}
                 className="px-3 py-2 text-sm rounded-lg border border-border-300 text-text-200"
               >
-                Ignore
+                <MemoizedFormattedMessage id="ignore" defaultMessage="Ignore" />
               </button>
               <button
                 type="button"
@@ -10807,7 +10858,7 @@ export function SidepanelApp() {
                 }}
                 className="px-3 py-2 text-sm rounded-lg bg-accent-main-100 text-oncolor-100 disabled:opacity-50"
               >
-                Connect
+                <MemoizedFormattedMessage id="connect" defaultMessage="Connect" />
               </button>
             </div>
           </div>
