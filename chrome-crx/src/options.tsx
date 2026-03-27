@@ -138,7 +138,7 @@ const MicrophonePermissionModal: React.FC<MicrophonePermissionModalProps> = ({
           <p className="text-text-300 font-base mb-6">
             <FormattedMessage
               defaultMessage="SuperDuck needs microphone access to hear your voice narration while you demonstrate workflows. When prompted, select <strong>Allow while visiting the site</strong> to enable voice narration."
-              id="claude_needs_microphone_access_to_hear"
+              id="claude_needs_microphone_access_to_hear_your_voice"
               values={{
                 strong: (chunks: React.ReactNode) => (
                   <span className="font-semibold text-text-200">{chunks}</span>
@@ -174,7 +174,7 @@ const MicrophonePermissionModal: React.FC<MicrophonePermissionModalProps> = ({
               <p className="font-base text-danger-000">
                 <FormattedMessage
                   defaultMessage="Microphone access was denied. You can either try again or <link>open Chrome settings</link> to enable microphone access."
-                  id="microphone_access_was_denied_you_can"
+                  id="microphone_access_was_denied_you_can_either_try"
                   values={{
                     link: (chunks: React.ReactNode) => (
                       <button
@@ -217,7 +217,7 @@ const MicrophonePermissionModal: React.FC<MicrophonePermissionModalProps> = ({
                   } else {
                     setIsRequesting(false);
                     setError(
-                      'You selected "Allow this time" which doesn\'t persist. Please click the button again and select "Allow while visiting the site" to enable voice narration.'
+                      intl.formatMessage({ id: 'allow_this_time_warning', defaultMessage: 'You selected "Allow this time" which doesn\'t persist. Please click the button again and select "Allow while visiting the site" to enable voice narration.' })
                     );
                   }
                 } catch (err: any) {
@@ -226,14 +226,14 @@ const MicrophonePermissionModal: React.FC<MicrophonePermissionModalProps> = ({
                     if (err.name === 'NotAllowedError') {
                       await checkPermission();
                     } else if (err.name === 'NotFoundError') {
-                      setError('No microphone found. Please connect a microphone and try again.');
+                      setError(intl.formatMessage({ id: 'no_microphone_found_please_connect_a_microphone_and', defaultMessage: 'No microphone found. Please connect a microphone and try again.' }));
                     } else {
                       setError(`Error: ${err.message}`);
                     }
                   } else if (err instanceof Error) {
                     setError(`Error: ${err.message}`);
                   } else {
-                    setError('An unknown error occurred');
+                    setError(intl.formatMessage({ id: 'an_unknown_error_occurred', defaultMessage: 'An unknown error occurred' }));
                   }
                 }
               }}
@@ -308,6 +308,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({
   large,
   narrow
 }) => {
+  const intl = useIntl();
   const isEmpty = !children && !mdTitle;
   const isLarge = large;
 
@@ -340,7 +341,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({
                 isLarge ? 'text-2xl' : 'text-lg'
               )}
             >
-              <span className="truncate">{mdTitle}</span>
+              <span className="truncate">{mdTitle === 'Settings' ? intl.formatMessage({ id: 'settings', defaultMessage: 'Settings' }) : mdTitle}</span>
             </h1>
             <div />
             {children}
@@ -399,7 +400,7 @@ const MicrophoneSettings: React.FC<MicrophoneSettingsProps> = ({ analytics }) =>
       <p className="text-text-300 font-base mt-2 mb-6">
         <FormattedMessage
           defaultMessage="Enable microphone access to use your browser's speech-to-text functionality for voice narration during workflow recording"
-          id="enable_microphone_access_to_use_your"
+          id="enable_microphone_access_to_use_your_browsers_speechtotext"
         />
       </p>
 
@@ -510,7 +511,7 @@ const MicrophoneSettings: React.FC<MicrophoneSettingsProps> = ({ analytics }) =>
               <div className="text-text-400 font-base-sm mt-1">
                 <FormattedMessage
                   defaultMessage="You can now use voice narration when recording workflows. To disable, go to {chromeSettingsLink}."
-                  id="you_can_now_use_voice_narration"
+                  id="you_can_now_use_voice_narration_when_recording"
                   values={{
                     chromeSettingsLink: (
                       <button
@@ -672,7 +673,7 @@ const PermissionsTab: React.FC = () => {
       [MODEL_MAPPING_KEYS.SONNET]: sonnetModelInput.trim(),
       [MODEL_MAPPING_KEYS.OPUS]: opusModelInput.trim()
     });
-    setApiSaveStatus('Saved. Reopen sidepanel to apply.');
+    setApiSaveStatus(intl.formatMessage({ id: 'saved_reopen_sidepanel', defaultMessage: 'Saved. Reopen sidepanel to apply.' }));
   };
 
   const handleClearCustomApi = async () => {
@@ -683,7 +684,7 @@ const PermissionsTab: React.FC = () => {
       [MODEL_MAPPING_KEYS.SONNET]: '',
       [MODEL_MAPPING_KEYS.OPUS]: ''
     });
-    setApiSaveStatus('Cleared.');
+    setApiSaveStatus(intl.formatMessage({ id: 'cleared_status', defaultMessage: 'Cleared.' }));
   };
 
   if (isLoading) {
@@ -699,15 +700,14 @@ const PermissionsTab: React.FC = () => {
       <div className="space-y-6">
         {/* Custom API */}
         <div className="bg-bg-100 border border-border-300 rounded-xl px-6 pt-6 pb-6 md:px-8 md:pt-8 md:pb-8">
-          <h3 className="text-text-100 font-xl-bold">Custom API Endpoint</h3>
+          <h3 className="text-text-100 font-xl-bold"><FormattedMessage id="custom_api_endpoint" defaultMessage="Custom API Endpoint" /></h3>
           <p className="text-text-300 font-base mt-2 mb-6">
-            Configure `api_url` and `api_key` used by sidepanel so it can run without the Sign in
-            page.
+            <FormattedMessage id="configure_api_url_and_api_key" defaultMessage="Configure api_url and api_key used by sidepanel so it can run without the Sign in page." />
           </p>
 
           <div className="space-y-4">
             <div>
-              <label className="block text-text-200 font-base-sm mb-1">API URL</label>
+              <label className="block text-text-200 font-base-sm mb-1"><FormattedMessage id="api_url_label" defaultMessage="API URL" /></label>
               <input
                 type="text"
                 value={apiUrlInput}
@@ -717,7 +717,7 @@ const PermissionsTab: React.FC = () => {
               />
             </div>
             <div>
-              <label className="block text-text-200 font-base-sm mb-1">API Key</label>
+              <label className="block text-text-200 font-base-sm mb-1"><FormattedMessage id="api_key_label" defaultMessage="API Key" /></label>
               <div className="relative">
                 <input
                   type={showApiKey ? "text" : "password"}
@@ -730,7 +730,7 @@ const PermissionsTab: React.FC = () => {
                   type="button"
                   onClick={() => setShowApiKey(!showApiKey)}
                   className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-text-300 hover:text-text-100 transition-colors"
-                  aria-label={showApiKey ? "Hide API key" : "Show API key"}
+                  aria-label={intl.formatMessage({ id: showApiKey ? 'hide_api_key' : 'show_api_key', defaultMessage: showApiKey ? 'Hide API key' : 'Show API key' })}
                 >
                   {showApiKey ? (
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -761,46 +761,46 @@ const PermissionsTab: React.FC = () => {
                 >
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
-                高级配置
+                <FormattedMessage id="advanced_configuration" defaultMessage="Advanced Configuration" />
               </button>
 
               {showAdvanced && (
                 <div className="mt-4 space-y-4 pl-6">
                   <div className="text-text-300 font-base-sm mb-4">
-                    <p className="font-semibold text-text-200 mb-1">模型映射</p>
-                    <p>如果供应商原生提供 Claude 系列模型，通常无需配置。仅在需要将请求映射到不同模型名称时填写。</p>
+                    <p className="font-semibold text-text-200 mb-1"><FormattedMessage id="model_mapping" defaultMessage="Model Mapping" /></p>
+                    <p><FormattedMessage id="model_mapping_description" defaultMessage="If the provider natively supports Claude models, no configuration is usually needed. Only fill in when you need to map requests to different model names." /></p>
                   </div>
 
                   <div className="space-y-3">
                     <div>
-                      <label className="block text-text-200 font-base-sm mb-1">Opus 默认模型</label>
+                      <label className="block text-text-200 font-base-sm mb-1"><FormattedMessage id="opus_default_model" defaultMessage="Opus Default Model" /></label>
                       <input
                         type="text"
                         value={opusModelInput}
                         onChange={(e) => setOpusModelInput(e.target.value)}
-                        placeholder="例如: kimi-k2.5"
+                        placeholder={intl.formatMessage({ id: 'model_placeholder', defaultMessage: 'e.g.: kimi-k2.5' })}
                         className="w-full rounded-lg border border-border-300 bg-bg-000 px-3 py-2 text-sm text-text-100"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-text-200 font-base-sm mb-1">Sonnet 默认模型</label>
+                      <label className="block text-text-200 font-base-sm mb-1"><FormattedMessage id="sonnet_default_model" defaultMessage="Sonnet Default Model" /></label>
                       <input
                         type="text"
                         value={sonnetModelInput}
                         onChange={(e) => setSonnetModelInput(e.target.value)}
-                        placeholder="例如: kimi-k2.5"
+                        placeholder={intl.formatMessage({ id: 'model_placeholder', defaultMessage: 'e.g.: kimi-k2.5' })}
                         className="w-full rounded-lg border border-border-300 bg-bg-000 px-3 py-2 text-sm text-text-100"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-text-200 font-base-sm mb-1">Haiku 默认模型</label>
+                      <label className="block text-text-200 font-base-sm mb-1"><FormattedMessage id="haiku_default_model" defaultMessage="Haiku Default Model" /></label>
                       <input
                         type="text"
                         value={haikuModelInput}
                         onChange={(e) => setHaikuModelInput(e.target.value)}
-                        placeholder="例如: kimi-k2.5"
+                        placeholder={intl.formatMessage({ id: 'model_placeholder', defaultMessage: 'e.g.: kimi-k2.5' })}
                         className="w-full rounded-lg border border-border-300 bg-bg-000 px-3 py-2 text-sm text-text-100"
                       />
                     </div>
@@ -815,13 +815,13 @@ const PermissionsTab: React.FC = () => {
               onClick={() => void handleSaveCustomApi()}
               className="px-4 py-2 bg-accent-main-100 text-oncolor-100 rounded-lg font-base-sm hover:bg-accent-main-200 transition-colors"
             >
-              Save
+              <FormattedMessage id="save" defaultMessage="Save" />
             </button>
             <button
               onClick={() => void handleClearCustomApi()}
               className="px-4 py-2 border border-border-300 text-text-200 rounded-lg font-base-sm hover:bg-bg-200 transition-colors"
             >
-              Clear
+              <FormattedMessage id="clear" defaultMessage="Clear" />
             </button>
           </div>
 
@@ -838,7 +838,7 @@ const PermissionsTab: React.FC = () => {
           <p className="text-text-300 font-base mt-2 mb-6">
             <FormattedMessage
               defaultMessage="Get notified when tasks complete or need your input"
-              id="get_notified_when_tasks_complete_or"
+              id="get_notified_when_tasks_complete_or_need_your"
             />
           </p>
           <div className="flex items-center justify-between py-4">
@@ -857,7 +857,7 @@ const PermissionsTab: React.FC = () => {
                 ) : (
                   <FormattedMessage
                     defaultMessage="You haven't set your notification preference yet"
-                    id="you_havent_set_your_notification_preference"
+                    id="you_havent_set_your_notification_preference_yet"
                   />
                 )}
               </div>
@@ -888,7 +888,7 @@ const PermissionsTab: React.FC = () => {
           <p className="text-text-300 font-base mt-2 mb-6">
             <FormattedMessage
               defaultMessage="You have allowed SuperDuck to take all actions (browse, click, type) on these sites."
-              id="you_have_allowed_claude_to_take"
+              id="you_have_allowed_claude_to_take_all_actions"
             />
           </p>
           {permissions?.netloc && permissions.netloc.length > 0 ? (
@@ -1110,7 +1110,7 @@ function OptionsPage() {
         {!isAuthenticated && !apiKey && (
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 text-text-300 font-base-sm">
-              <FormattedMessage defaultMessage="Not logged in" id="Y0gAGF8ERt" />
+              <FormattedMessage defaultMessage="Not logged in" id="not_logged_in" />
             </div>
             <button
               onClick={async () => {
@@ -1169,7 +1169,7 @@ function OptionsPage() {
                         await resetAnalytics();
                         window.location.reload();
                       } catch {
-                        alert('Failed to logout. Please try again.');
+                        alert(intl.formatMessage({ id: 'failed_to_logout', defaultMessage: 'Failed to logout. Please try again.' }));
                       }
                     }}
                     className="w-full flex items-center gap-2 px-3 py-3 text-danger-000 hover:bg-danger-000/10 rounded-lg transition-all font-base"

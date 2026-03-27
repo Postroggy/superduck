@@ -694,7 +694,7 @@ function TasksTab({
                 <p className="text-text-300 font-base mt-1">
                   <FormattedMessage
                     defaultMessage="Type / in the chat to use shortcuts or run them on schedule"
-                    id="type_in_the_chat_to_use"
+                    id="type_in_the_chat_to_use_shortcuts_or"
                   />
                 </p>
               </div>
@@ -715,7 +715,7 @@ function TasksTab({
             <p className="text-text-300 font-base mb-6">
               <FormattedMessage
                 defaultMessage="Type / to use shortcuts or run them on a schedule"
-                id="type_to_use_shortcuts_or_run"
+                id="type_to_use_shortcuts_or_run_them_on"
               />
             </p>
           )}
@@ -785,7 +785,7 @@ function TasksTab({
                 <p className="text-text-300 max-w-[200px] mx-auto">
                   <FormattedMessage
                     defaultMessage="Create your first shortcut to get started"
-                    id="create_your_first_shortcut_to_get"
+                    id="create_your_first_shortcut_to_get_started"
                   />
                 </p>
               </div>

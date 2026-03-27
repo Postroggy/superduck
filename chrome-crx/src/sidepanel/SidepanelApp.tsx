@@ -431,15 +431,15 @@ const PERMISSION_MODE_OPTIONS: PermissionModeOption[] = [
     value: 'follow_a_plan',
     labelId: 'ask_before_acting',
     labelDefault: 'Ask before acting',
-    descriptionId: 'dNvIs5mEPO',
+    descriptionId: 'claude_aligns_on_its_approach_before_taking_actions',
     descriptionDefault: 'SuperDuck aligns on its approach before taking actions',
     Icon: Hand
   },
   {
     value: 'skip_all_permission_checks',
-    labelId: 'LStwu4n1yT',
+    labelId: 'act_without_asking',
     labelDefault: 'Act without asking',
-    descriptionId: 'KduIvQDYMp',
+    descriptionId: 'claude_takes_actions_without_asking_for_permission',
     descriptionDefault: 'SuperDuck takes actions without asking for permission',
     Icon: ChevronsRight
   }
@@ -10069,7 +10069,7 @@ export function SidepanelApp() {
                   <p className="px-2 pt-2 text-[11px] text-text-300">
                     <MemoizedFormattedMessage
                       defaultMessage="Start a chat to convert it into a task."
-                      id="start_a_chat_to_convert_it"
+                      id="start_a_chat_to_convert_it_into_a"
                     />
                   </p>
                 ) : null}
@@ -10266,14 +10266,21 @@ export function SidepanelApp() {
                               onDismiss={() => setSkipWarningDismissed(true)}
                               dismissWithGradient
                             >
-                              <span className="font-bold">HIGH RISK:</span> SuperDuck can take most
-                              actions on the internet now. This setting could put your data at risk.{' '}
-                              <button
-                                onClick={() => chrome.tabs.create({ url: SAFE_USE_TIPS_URL })}
-                                className="underline hover:opacity-80 transition-colors"
-                              >
-                                See safe use tips
-                              </button>
+                              <MemoizedFormattedMessage
+                                id="high_risk_claude_can_take_most_actions_on"
+                                defaultMessage="<bold>HIGH RISK:</bold> SuperDuck can take most actions on the internet now. This setting could put your data at risk. <link>See safe use tips</link>"
+                                values={{
+                                  bold: (chunks: any) => <span className="font-bold">{chunks}</span>,
+                                  link: (chunks: any) => (
+                                    <button
+                                      onClick={() => chrome.tabs.create({ url: SAFE_USE_TIPS_URL })}
+                                      className="underline hover:opacity-80 transition-colors"
+                                    >
+                                      {chunks}
+                                    </button>
+                                  )
+                                }}
+                              />
                             </CompactBanner>
                           );
                         }
@@ -10713,7 +10720,7 @@ export function SidepanelApp() {
                           >
                             <MemoizedFormattedMessage
                               defaultMessage="SuperDuck is AI and can make mistakes. Please double-check responses."
-                              id="ai_can_make_mistakes_please_doublecheck"
+                              id="ai_can_make_mistakes_please_doublecheck_responses"
                             />
                           </a>
                         </div>
@@ -10779,7 +10786,7 @@ export function SidepanelApp() {
             <p className="text-sm text-text-300 mt-4">
               <MemoizedFormattedMessage
                 defaultMessage="Changing the language will start a new chat."
-                id="changing_the_language_will_start_a"
+                id="changing_the_language_will_start_a_new_chat"
               />
             </p>
             <div className="flex justify-end gap-2 mt-6">
@@ -10806,17 +10813,20 @@ export function SidepanelApp() {
         <div className="fixed inset-0 bg-black/40 p-4 flex items-center justify-center">
           <div className="w-full max-w-md rounded-xl border border-border-300 bg-bg-000 p-4">
             <h3 className="text-base font-medium text-text-100 mb-2">
-              {pairingPrompt.clientType === 'claude-code' ? 'Claude Code' : 'Claude Desktop'} wants
-              to connect
+              <MemoizedFormattedMessage
+                id="wants_to_connect"
+                defaultMessage="{clientLabel} wants to connect"
+                values={{ clientLabel: pairingPrompt.clientType === 'claude-code' ? 'Claude Code' : 'Claude Desktop' }}
+              />
             </h3>
             <p className="text-sm text-text-300 mb-3">
-              Name this browser so you can identify it later.
+              <MemoizedFormattedMessage id="name_this_browser_so_you_can_identify_it" defaultMessage="Name this browser so you can identify it later." />
             </p>
             <input
               type="text"
               value={pairingName}
               onChange={(event) => setPairingName(event.target.value)}
-              placeholder='e.g. "Work laptop"'
+              placeholder={intl.formatMessage({ id: 'eg_work_laptop_personal_chrome', defaultMessage: 'e.g., "Work laptop", "Personal Chrome"' })}
               className="w-full px-3 py-2 text-sm rounded-lg border border-border-300 bg-bg-100 text-text-100"
             />
             <div className="flex justify-end gap-2 mt-4">
@@ -10832,7 +10842,7 @@ export function SidepanelApp() {
                 }}
                 className="px-3 py-2 text-sm rounded-lg border border-border-300 text-text-200"
               >
-                Ignore
+                <MemoizedFormattedMessage id="ignore" defaultMessage="Ignore" />
               </button>
               <button
                 type="button"
@@ -10848,7 +10858,7 @@ export function SidepanelApp() {
                 }}
                 className="px-3 py-2 text-sm rounded-lg bg-accent-main-100 text-oncolor-100 disabled:opacity-50"
               >
-                Connect
+                <MemoizedFormattedMessage id="connect" defaultMessage="Connect" />
               </button>
             </div>
           </div>

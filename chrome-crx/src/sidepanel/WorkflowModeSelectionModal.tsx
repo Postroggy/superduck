@@ -166,12 +166,12 @@ export function WorkflowModeSelectionModal({
               {hasMicrophonePermission ? (
                 <FormattedMessage
                   defaultMessage="Go through the steps as if you're teaching a new teammate. SuperDuck will learn the process and repeat it for you."
-                  id="go_through_the_steps_as_if"
+                  id="go_through_the_steps_as_if_youre_teaching"
                 />
               ) : (
                 <FormattedMessage
                   defaultMessage="Enable your microphone to narrate as you demonstrate the workflow. SuperDuck will learn the process and repeat it for you."
-                  id="enable_your_microphone_to_narrate_as"
+                  id="enable_your_microphone_to_narrate_as_you_demonstrate"
                 />
               )}
             </p>

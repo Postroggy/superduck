@@ -46,9 +46,40 @@
     </style>
 </head>
 <body>
-<p>
+<p id="blocked-message">
     The content on this page isn't available<br/>when SuperDuck is active for
     safety reasons.
 </p>
+<script>
+    (function () {
+        var i18n = {
+            'zh-CN': {
+                title: '页面已屏蔽',
+                message: '出于安全原因，SuperDuck 处于活动状态时此页面的内容不可用。'
+            }
+        };
+
+        function applyLocale(locale) {
+            var lang = locale && locale.startsWith('zh') ? 'zh-CN' : null;
+            if (lang && i18n[lang]) {
+                document.title = i18n[lang].title;
+                document.getElementById('blocked-message').textContent = i18n[lang].message;
+                document.documentElement.lang = 'zh';
+            }
+        }
+
+        try {
+            chrome.storage.local.get('preferred_locale', function (result) {
+                if (result && result.preferred_locale) {
+                    applyLocale(result.preferred_locale);
+                } else {
+                    applyLocale(navigator.language);
+                }
+            });
+        } catch (e) {
+            applyLocale(navigator.language);
+        }
+    })();
+</script>
 </body>
 </html>
