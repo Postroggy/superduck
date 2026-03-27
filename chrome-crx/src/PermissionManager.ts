@@ -45,7 +45,7 @@ export function initSentry(): void {
 
 // --- OpenTelemetry Tracing ---
 
-const SERVICE_NAME = "claude-browser-extension";
+const SERVICE_NAME = "superduck-browser-extension";
 
 export async function withTracing<T>(
   name: string,

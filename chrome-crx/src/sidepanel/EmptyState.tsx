@@ -250,7 +250,7 @@ export function EmptyState({ tabId, onPromptClick }: EmptyStateProps) {
             lightImage="/assets/extension-light-min-CwWd0kAK.svg"
             darkImage="/assets/extension-dark-min-Ctxo0Z8w.svg"
             title={intl.formatMessage({
-              defaultMessage: "Pin Claude for quick access",
+              defaultMessage: "Pin SuperDuck for quick access",
               id: "9qJKQKXInl",
             })}
             subtitle={intl.formatMessage({

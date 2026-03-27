@@ -920,7 +920,7 @@ const Spinner: React.FC = () => {
       </h2>
       <p className="font-base text-text-300 text-center mt-[11px]">
         <FormattedMessage
-          defaultMessage="Claude in Chrome is available to"
+          defaultMessage="SuperDuck in Chrome is available to"
           id="claude_in_chrome_is_available_to"
         />
         <br />

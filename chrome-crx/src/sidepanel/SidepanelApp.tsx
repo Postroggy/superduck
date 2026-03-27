@@ -432,7 +432,7 @@ const PERMISSION_MODE_OPTIONS: PermissionModeOption[] = [
     labelId: 'ask_before_acting',
     labelDefault: 'Ask before acting',
     descriptionId: 'dNvIs5mEPO',
-    descriptionDefault: 'Claude aligns on its approach before taking actions',
+    descriptionDefault: 'SuperDuck aligns on its approach before taking actions',
     Icon: Hand
   },
   {
@@ -440,7 +440,7 @@ const PERMISSION_MODE_OPTIONS: PermissionModeOption[] = [
     labelId: 'LStwu4n1yT',
     labelDefault: 'Act without asking',
     descriptionId: 'KduIvQDYMp',
-    descriptionDefault: 'Claude takes actions without asking for permission',
+    descriptionDefault: 'SuperDuck takes actions without asking for permission',
     Icon: ChevronsRight
   }
 ];
@@ -4584,7 +4584,7 @@ function PlanApprovalModal({
       <div className="flex items-center justify-between py-[10px] px-4">
         <div className="flex items-center gap-2">
           <ChecklistIcon size={20} className="text-text-100" />
-          <h3 className="font-base text-text-100">Claude's plan</h3>
+          <h3 className="font-base text-text-100">SuperDuck's plan</h3>
         </div>
         {isReadOnly && onClose && (
           <button
@@ -4631,7 +4631,7 @@ function PlanApprovalModal({
                     <span className="font-base text-text-100">{name}</span>
                     {isForceAsk && (
                       <Tooltip
-                        tooltipContent="You must approve any Claude action on this site"
+                        tooltipContent="You must approve any SuperDuck action on this site"
                         side="top"
                       >
                         <span className="flex-shrink-0 cursor-help">
@@ -4683,7 +4683,7 @@ function PlanApprovalModal({
             </span>
           </PermissionActionButton>
           <p className="font-small text-text-500 pt-1 px-1">
-            Claude will only use the sites listed. You'll be asked before accessing anything else.
+            SuperDuck will only use the sites listed. You'll be asked before accessing anything else.
           </p>
         </div>
       )}
@@ -6428,7 +6428,7 @@ function SecondaryTabView({
   return (
     <div className="h-screen bg-bg-100 text-text-100 flex items-center justify-center p-4">
       <div className="max-w-md text-center">
-        <h2 className="text-lg font-medium mb-2">Klaude is active in this tab group</h2>
+        <h2 className="text-lg font-medium mb-2">SuperDuck is active in this tab group</h2>
         <p className="text-sm text-text-300 mb-4">
           Open chat in the main tab to continue this session.
         </p>
@@ -6450,7 +6450,7 @@ function BrowserPermissionGate({ onAccept }: { onAccept: () => Promise<void> }) 
       <div className="max-w-lg rounded-xl border border-border-300 bg-bg-000 p-5">
         <h2 className="text-lg font-medium mb-2">Enable browser control</h2>
         <p className="text-sm text-text-300 mb-4">
-          Klaude needs browser control permission before running actions.
+          SuperDuck needs browser control permission before running actions.
         </p>
         <button
           type="button"
@@ -6547,8 +6547,8 @@ function BlockedDomainView({
         </h2>
         <p className="text-sm text-text-300 mb-3">
           {isMainTabBlocked
-            ? 'Claude cannot assist with the content on this page.'
-            : 'Claude landed on a blocked site and cannot complete your request.'}{' '}
+            ? 'SuperDuck cannot assist with the content on this page.'
+            : 'SuperDuck landed on a blocked site and cannot complete your request.'}{' '}
           <span className="font-mono">({category})</span>
         </p>
         {!isMainTabBlocked ? (
@@ -6589,7 +6589,7 @@ function PermissionPrompt({ requestId }: { requestId: string }) {
       <div className="max-w-xl mx-auto mt-10 rounded-2xl border border-border-300 bg-bg-000 p-5">
         <h1 className="text-lg font-semibold mb-2">Permission request</h1>
         <p className="text-sm text-text-300 mb-4">
-          Claude is requesting permission to continue. Confirm to allow this action.
+          SuperDuck is requesting permission to continue. Confirm to allow this action.
         </p>
         <div className="flex gap-2">
           <button
@@ -6714,7 +6714,7 @@ function InlinePermissionPrompt({
     return (
       <div className="p-4">
         <div className="text-sm text-text-300 mb-3">
-          Claude wants to navigate from{' '}
+          SuperDuck wants to navigate from{' '}
           <span className="font-medium text-text-100">{prompt.actionData?.fromDomain || '?'}</span>{' '}
           to <span className="font-medium text-text-100">{prompt.actionData?.toDomain || '?'}</span>
         </div>
@@ -6775,7 +6775,7 @@ function InlinePermissionPrompt({
               <span className="font-medium text-text-100">{mcp.toolDisplayName}</span>
             </>
           ) : (
-            'Claude wants to use an MCP tool'
+            'SuperDuck wants to use an MCP tool'
           )}
         </div>
         <div className="flex flex-col gap-2">
@@ -6814,7 +6814,7 @@ function InlinePermissionPrompt({
   return (
     <div className="p-4">
       <div className="text-sm text-text-300 mb-1">
-        Claude wants to <span className="font-medium text-text-100">{actionText}</span>
+        SuperDuck wants to <span className="font-medium text-text-100">{actionText}</span>
       </div>
       <div className="text-sm text-text-100 font-medium mb-3 truncate">{hostname}</div>
       {prompt.actionData?.screenshot && (
@@ -6869,7 +6869,7 @@ function InlinePermissionPrompt({
         )}
       </div>
       <div className="mt-3 text-[11px] text-text-400 leading-relaxed">
-        Claude will not purchase items, create accounts, or attempt to bypass CAPTCHAs.
+        SuperDuck will not purchase items, create accounts, or attempt to bypass CAPTCHAs.
       </div>
     </div>
   );
@@ -7626,7 +7626,7 @@ export function SidepanelApp() {
       {
         type: 'text' as const,
         text: [
-          'You are Claude running in the Klaude Chrome sidepanel.',
+          'You are SuperDuck running in the SuperDuck Chrome sidepanel.',
           `Current model: ${selectedModel || 'default'}.`,
           `Permission mode: ${permissionMode}.`,
           `Platform: ${platform}. Use ${modifier} for shortcut modifier keys.`,
@@ -7838,7 +7838,7 @@ export function SidepanelApp() {
       await chrome.notifications.create(`notification_${Date.now()}`, {
         type: 'basic',
         iconUrl: chrome.runtime.getURL('claude_icon.svg'),
-        title: 'Claude is done',
+        title: 'SuperDuck is done',
         message: 'Your task is completed. Ready to check in?',
         priority: 2
       });
@@ -7856,7 +7856,7 @@ export function SidepanelApp() {
           messages: [
             {
               role: 'user',
-              content: `<message>\n${text.slice(0, 500)}\n</message>\n\nBased on this message, generate a 7-word-or-less status describing the high-level task or goal Claude is working on. Put it between <status> tags.`
+              content: `<message>\n${text.slice(0, 500)}\n</message>\n\nBased on this message, generate a 7-word-or-less status describing the high-level task or goal SuperDuck is working on. Put it between <status> tags.`
             },
             {
               role: 'assistant',
@@ -7865,7 +7865,7 @@ export function SidepanelApp() {
           ],
           max_tokens: 128,
           system:
-            'Generate ultra-concise status updates describing the current high-level task or goal.\nYour status should describe WHAT Claude is trying to accomplish, not the specific action.\n\nREQUIREMENTS:\n- Maximum 7 words\n- Describe the goal/task, not the action\n- Be high-level and task-oriented\n- No punctuation at the end\n\nExamples of GOOD statuses (goal-oriented):\n- Researching company information\n- Looking up flight options\n- Completing checkout process\n- Finding product details\n- Setting up account\n- Analyzing search results\n- Gathering page content\n\nExamples of BAD statuses (too action-specific):\n- Clicking submit button\n- Reading page content\n- Taking screenshot\n- Typing into form field',
+            'Generate ultra-concise status updates describing the current high-level task or goal.\nYour status should describe WHAT SuperDuck is trying to accomplish, not the specific action.\n\nREQUIREMENTS:\n- Maximum 7 words\n- Describe the goal/task, not the action\n- Be high-level and task-oriented\n- No punctuation at the end\n\nExamples of GOOD statuses (goal-oriented):\n- Researching company information\n- Looking up flight options\n- Completing checkout process\n- Finding product details\n- Setting up account\n- Analyzing search results\n- Gathering page content\n\nExamples of BAD statuses (too action-specific):\n- Clicking submit button\n- Reading page content\n- Taking screenshot\n- Typing into form field',
           model: 'claude-haiku-4-5-20251001'
         });
         if (response?.content) {
@@ -10162,7 +10162,7 @@ export function SidepanelApp() {
                           return isEligible ? null : (
                             <CompactBanner key="eligibility" type="info">
                               <div className="flex justify-between items-center w-full">
-                                <span>Claude in Chrome requires a paid plan</span>
+                                <span>SuperDuck in Chrome requires a paid plan</span>
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -10212,7 +10212,7 @@ export function SidepanelApp() {
                           return (
                             <CompactBanner key="refusal" type="refusal">
                               <span className="font-small">
-                                Claude is unable to respond to this request, which appears to
+                                SuperDuck is unable to respond to this request, which appears to
                                 violate our{' '}
                                 <button
                                   onClick={() =>
@@ -10266,7 +10266,7 @@ export function SidepanelApp() {
                               onDismiss={() => setSkipWarningDismissed(true)}
                               dismissWithGradient
                             >
-                              <span className="font-bold">HIGH RISK:</span> Claude can take most
+                              <span className="font-bold">HIGH RISK:</span> SuperDuck can take most
                               actions on the internet now. This setting could put your data at risk.{' '}
                               <button
                                 onClick={() => chrome.tabs.create({ url: SAFE_USE_TIPS_URL })}
@@ -10456,7 +10456,7 @@ export function SidepanelApp() {
                                       })
                                     : intl.formatMessage({
                                         id: 'reply_to_claude',
-                                        defaultMessage: 'Reply to Claude'
+                                        defaultMessage: 'Reply to SuperDuck'
                                       })
                                 }
                                 disabled={false}
@@ -10578,7 +10578,7 @@ export function SidepanelApp() {
                               {/* Teach Claude button */}
                               <Tooltip
                                 tooltipContent={intl.formatMessage({
-                                  defaultMessage: 'Teach Claude',
+                                  defaultMessage: 'Teach SuperDuck',
                                   id: 'teach_claude'
                                 })}
                                 side="top"
@@ -10590,7 +10590,7 @@ export function SidepanelApp() {
                                   }}
                                   className="inline-flex items-center justify-center relative shrink-0 select-none font-medium h-7 w-7 rounded-lg active:scale-95 transition-all duration-200 text-text-300 hover:text-text-200 hover:bg-bg-200"
                                   aria-label={intl.formatMessage({
-                                    defaultMessage: 'Teach Claude',
+                                    defaultMessage: 'Teach SuperDuck',
                                     id: 'teach_claude'
                                   })}
                                 >
@@ -10712,7 +10712,7 @@ export function SidepanelApp() {
                             className="text-[11px] hover:text-text-300 transition-colors text-center"
                           >
                             <MemoizedFormattedMessage
-                              defaultMessage="Claude is AI and can make mistakes. Please double-check responses."
+                              defaultMessage="SuperDuck is AI and can make mistakes. Please double-check responses."
                               id="ai_can_make_mistakes_please_doublecheck"
                             />
                           </a>

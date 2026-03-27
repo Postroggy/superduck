@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-HOST_NAME="com.me.klaude_browser_extension"
+HOST_NAME="com.me.superduck_browser_extension"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 HOST_BINARY="$SCRIPT_DIR/chrome-native-host"
 MCP_BINARY="$SCRIPT_DIR/chrome-mcp-server"
@@ -35,7 +35,7 @@ MANIFEST_PATH="$MANIFEST_DIR/$HOST_NAME.json"
 cat > "$MANIFEST_PATH" <<EOF
 {
   "name": "$HOST_NAME",
-  "description": "Claude Browser Extension Native Host",
+  "description": "SuperDuck Browser Extension Native Host",
   "path": "$HOST_BINARY",
   "type": "stdio",
   "allowed_origins": ["chrome-extension://fcoeoabgfenejglbffodgkkbkcdhcgfn/"]

@@ -104,7 +104,7 @@ export function ClaudeAvatar({
   }, [isInteractive, currentState]);
 
   // Tooltip message based on click count
-  let tooltipMessage = "Hi, I'm Claude. How can I help you today?";
+  let tooltipMessage = "Hi, I'm SuperDuck. How can I help you today?";
   if (clickCount < 32 && clickCount > 24) {
     tooltipMessage = "Ugh, well you can't do that forever";
   } else if (clickCount <= 24 && clickCount > 18) {

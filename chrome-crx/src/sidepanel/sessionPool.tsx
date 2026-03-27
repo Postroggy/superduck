@@ -972,7 +972,7 @@ export async function generateDailySummary(
       messages: [
         {
           role: "user",
-          content: `Here are the conversation titles from today:\n\n${deduped.map((title, index) => `${index + 1}. ${title}`).join("\n")}\n\nTransform these titles into a narrative daily summary (1-2 sentences) in first person as Claude. Rewrite into past tense actions with natural flow. If completely meaningless, return \"SKIP\".`,
+          content: `Here are the conversation titles from today:\n\n${deduped.map((title, index) => `${index + 1}. ${title}`).join("\n")}\n\nTransform these titles into a narrative daily summary (1-2 sentences) in first person as SuperDuck. Rewrite into past tense actions with natural flow. If completely meaningless, return \"SKIP\".`,
         },
       ],
       system:

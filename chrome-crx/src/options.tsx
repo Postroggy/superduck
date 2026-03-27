@@ -137,7 +137,7 @@ const MicrophonePermissionModal: React.FC<MicrophonePermissionModalProps> = ({
 
           <p className="text-text-300 font-base mb-6">
             <FormattedMessage
-              defaultMessage="Claude needs microphone access to hear your voice narration while you demonstrate workflows. When prompted, select <strong>Allow while visiting the site</strong> to enable voice narration."
+              defaultMessage="SuperDuck needs microphone access to hear your voice narration while you demonstrate workflows. When prompted, select <strong>Allow while visiting the site</strong> to enable voice narration."
               id="claude_needs_microphone_access_to_hear"
               values={{
                 strong: (chunks: React.ReactNode) => (
@@ -887,7 +887,7 @@ const PermissionsTab: React.FC = () => {
           </h3>
           <p className="text-text-300 font-base mt-2 mb-6">
             <FormattedMessage
-              defaultMessage="You have allowed Claude to take all actions (browse, click, type) on these sites."
+              defaultMessage="You have allowed SuperDuck to take all actions (browse, click, type) on these sites."
               id="you_have_allowed_claude_to_take"
             />
           </p>

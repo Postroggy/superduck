@@ -24,7 +24,7 @@ export const AntBuildUpsell: React.FC<AntBuildUpsellProps> = ({ isOpen, onClose 
           }}
         >
           <FormattedMessage
-            defaultMessage="Test the newest{br}Claude experience"
+            defaultMessage="Test the newest{br}SuperDuck experience"
             id="test_the_newestclaude_experience"
             values={{ br: <br /> }}
           />
@@ -35,7 +35,7 @@ export const AntBuildUpsell: React.FC<AntBuildUpsellProps> = ({ isOpen, onClose 
           style={{ fontSize: "14px", lineHeight: "140%" }}
         >
           <FormattedMessage
-            defaultMessage="Please help us Antfood the latest version of Claude. Your testing accelerates our development."
+            defaultMessage="Please help us Antfood the latest version of SuperDuck. Your testing accelerates our development."
             id="please_help_us_antfood_the_latest"
           />
         </p>

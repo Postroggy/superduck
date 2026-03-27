@@ -1797,7 +1797,7 @@ chrome.webNavigation.onBeforeNavigate.addListener(async (details) => {
       await chrome.tabs.update(details.tabId, { url: blockedUrl });
       if (context?.errorCallback) {
         context.errorCallback(
-          'Cannot access this page. Claude cannot assist with the content on this page.'
+          'Cannot access this page. SuperDuck cannot assist with the content on this page.'
         );
       }
       cleanupAfterToolExecution(details.tabId);
