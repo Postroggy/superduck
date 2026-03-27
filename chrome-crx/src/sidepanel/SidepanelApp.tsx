@@ -10056,7 +10056,7 @@ export function SidepanelApp() {
                           onClick={() => handleLanguageSelection(entry)}
                           className="w-full min-h-8 px-2 py-1.5 rounded-lg text-left text-sm flex items-center gap-2 hover:bg-bg-200 hover:text-text-100 transition-colors"
                         >
-                          <span className="flex-1">{LOCALE_DISPLAY_NAMES[entry]}</span>
+                          <span className="flex-1 whitespace-nowrap">{LOCALE_DISPLAY_NAMES[entry]}</span>
                           {locale === entry ? (
                             <Check size={14} className="text-accent-secondary-200" />
                           ) : null}
