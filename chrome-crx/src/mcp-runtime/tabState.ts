@@ -282,8 +282,8 @@ class TabEventManager {
 
 export const getTabEventManager = (): TabEventManager => TabEventManager.getInstance();
 
-const TAB_GROUP_TITLE = 'SuperDuck';
-const MCP_TAB_GROUP_TITLE = 'SuperDuck (MCP)';
+const TAB_GROUP_TITLE = '🦆 SuperDuck';
+const MCP_TAB_GROUP_TITLE = '🦆 SuperDuck (MCP)';
 
 // =============================================================================
 // Section 5: TabGroupManager
