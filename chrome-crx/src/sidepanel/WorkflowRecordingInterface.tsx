@@ -1,7 +1,7 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { FormattedMessage, useIntl } from 'react-intl';
 import { GlobeIcon } from './icons';
-import { Button } from '../components/SchedulingFields';
+import { Button, TextInput } from '../components/SchedulingFields';
 import { Trash2, Play, Pause, Mic, MicOff, X } from 'lucide-react';
 import { WorkflowStepsList, WorkflowStep } from './WorkflowStepsList';
 import { Tooltip } from './Tooltip';
@@ -22,7 +22,8 @@ interface WorkflowRecordingInterfaceProps {
   onTogglePause: () => void;
   onToggleSpeech: () => void;
   onRemoveStep: (index: number) => void;
-  onSave: (steps: WorkflowStep[], summary: string) => void;
+  onUpdateStep: (index: number, updates: Partial<WorkflowStep>) => void;
+  onSave: (steps: WorkflowStep[], summary: string, commandName?: string) => void;
   createMessage: (message: any, signal?: AbortSignal, label?: string) => Promise<any>;
   isGeneratingSummary: boolean;
   setIsGeneratingSummary: (value: boolean) => void;
@@ -40,6 +41,7 @@ export function WorkflowRecordingInterface({
   onTogglePause,
   onToggleSpeech,
   onRemoveStep,
+  onUpdateStep,
   onSave,
   createMessage,
   isGeneratingSummary,
@@ -49,6 +51,11 @@ export function WorkflowRecordingInterface({
 }: WorkflowRecordingInterfaceProps) {
   const intl = useIntl();
   const [faviconError, setFaviconError] = useState(false);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [hasEditedTitle, setHasEditedTitle] = useState(false);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+  const previousTitleRef = useRef('');
+  const skipTitleCommitRef = useRef(false);
 
   // Extract domain from URL
   const domain = useMemo(() => {
@@ -60,11 +67,46 @@ export function WorkflowRecordingInterface({
     }
   }, [currentUrl]);
 
+  const fallbackTitle =
+    pageTitle || domain || intl.formatMessage({ defaultMessage: 'Untitled', id: 'untitled' });
+  const [workflowTitle, setWorkflowTitle] = useState(fallbackTitle);
+
+  useEffect(() => {
+    if (!hasEditedTitle) {
+      setWorkflowTitle(fallbackTitle);
+    }
+  }, [fallbackTitle, hasEditedTitle]);
+
+  useEffect(() => {
+    if (isEditingTitle) {
+      titleInputRef.current?.focus();
+      titleInputRef.current?.select();
+    }
+  }, [isEditingTitle]);
+
   // Favicon URL
   const faviconUrl = useMemo(
     () => (domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=32` : ''),
     [domain]
   );
+
+  const commitWorkflowTitle = useCallback(() => {
+    if (skipTitleCommitRef.current) {
+      skipTitleCommitRef.current = false;
+      return;
+    }
+
+    const nextTitle = workflowTitle.trim() || fallbackTitle;
+    setWorkflowTitle(nextTitle);
+    setHasEditedTitle(nextTitle !== fallbackTitle);
+    setIsEditingTitle(false);
+  }, [fallbackTitle, workflowTitle]);
+
+  const cancelWorkflowTitleEdit = useCallback(() => {
+    skipTitleCommitRef.current = true;
+    setWorkflowTitle(previousTitleRef.current || fallbackTitle);
+    setIsEditingTitle(false);
+  }, [fallbackTitle]);
 
   // Handle save/done
   const handleSave = useCallback(async () => {
@@ -111,13 +153,15 @@ export function WorkflowRecordingInterface({
       screenshot: undefined
     }));
 
-    onSave(stepsWithoutScreenshots, summary);
+    onSave(stepsWithoutScreenshots, summary, workflowTitle.trim() || fallbackTitle);
   }, [
     recordingState.steps,
     createMessage,
     currentInterimTranscript,
     setIsGeneratingSummary,
-    onSave
+    onSave,
+    workflowTitle,
+    fallbackTitle
   ]);
 
   return (
@@ -135,9 +179,42 @@ export function WorkflowRecordingInterface({
           ) : (
             <GlobeIcon size={16} className="text-text-300" />
           )}
-          <span className="text-text-200 font-base-sm truncate max-w-[200px]">
-            {pageTitle || domain}
-          </span>
+          {isEditingTitle ? (
+            <div className="min-w-0 flex-1 max-w-[240px]">
+              <TextInput
+                ref={titleInputRef}
+                size="sm"
+                value={workflowTitle}
+                onValueChange={setWorkflowTitle}
+                onBlur={commitWorkflowTitle}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    commitWorkflowTitle();
+                  }
+
+                  if (event.key === 'Escape') {
+                    event.preventDefault();
+                    cancelWorkflowTitleEdit();
+                  }
+                }}
+                className="!h-8 !rounded-md !border-border-300 !bg-bg-000 !px-2 !text-sm"
+                aria-label="Workflow title"
+              />
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                previousTitleRef.current = workflowTitle;
+                setIsEditingTitle(true);
+              }}
+              className="min-w-0 max-w-[240px] rounded-md px-2 py-1 -mx-2 -my-1 text-left text-text-200 font-base-sm truncate transition-colors hover:bg-bg-300"
+              aria-label="Edit workflow title"
+            >
+              {workflowTitle}
+            </button>
+          )}
         </div>
         <button
           onClick={onStop}
@@ -154,6 +231,7 @@ export function WorkflowRecordingInterface({
           steps={recordingState.steps}
           isVisible={true}
           onRemoveStep={onRemoveStep}
+          onUpdateStep={onUpdateStep}
           fullScreen={true}
           currentInterimTranscript={currentInterimTranscript}
           isSpeechRecording={isSpeechRecording}

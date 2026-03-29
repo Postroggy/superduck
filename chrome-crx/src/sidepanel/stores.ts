@@ -88,7 +88,7 @@ interface UIState {
   pendingContinue: boolean;
   lastGroupShowExpandedTimeline: boolean;
   lastGroupAnimationCompletedAt: number;
-  promptToSave: { prompt: string } | null;
+  promptToSave: { prompt: string; command?: string } | null;
   promptToEdit: { prompt: string; command?: string; name?: string; id?: string } | null;
   setShowCommandMenu: (show: boolean) => void;
   setShowWorkflowModeSelectionModal: (show: boolean) => void;
@@ -107,7 +107,7 @@ interface UIState {
   setPendingContinue: (pending: boolean) => void;
   setLastGroupShowExpandedTimeline: (show: boolean) => void;
   setLastGroupAnimationCompletedAt: (time: number) => void;
-  setPromptToSave: (data: { prompt: string } | null) => void;
+  setPromptToSave: (data: { prompt: string; command?: string } | null) => void;
   setPromptToEdit: (
     data: { prompt: string; command?: string; name?: string; id?: string } | null
   ) => void;

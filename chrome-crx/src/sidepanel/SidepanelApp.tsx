@@ -7150,7 +7150,8 @@ export function SidepanelApp() {
     stopRecording,
     togglePause,
     toggleSpeechRecording,
-    removeStep
+    removeStep,
+    updateStep
   } = useWorkflowRecording({
     tabId: query.tabId || 0,
     onComplete: (steps) => {
@@ -10743,9 +10744,10 @@ export function SidepanelApp() {
               onTogglePause={togglePause}
               onToggleSpeech={toggleSpeechRecording}
               onRemoveStep={removeStep}
-              onSave={(steps, summary) => {
+              onUpdateStep={updateStep}
+              onSave={(steps, summary, commandName) => {
                 // Save workflow summary and stop recording
-                setPromptToSave({ prompt: summary });
+                setPromptToSave({ prompt: summary, command: commandName });
                 stopRecording();
               }}
               createMessage={createAnthropicMessage}

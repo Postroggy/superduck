@@ -16,7 +16,7 @@ declare global {
 
 // Types
 export interface WorkflowStep {
-  action: 'click' | 'type' | 'navigate' | 'create_tab';
+  action: 'click' | 'type' | 'navigate' | 'create_tab' | 'narration';
   selector?: string;
   value?: string;
   screenshot?: string;
@@ -890,6 +890,23 @@ export const useWorkflowRecording = ({
     }));
   }, []);
 
+  const updateStep = useCallback((index: number, updates: Partial<WorkflowStep>) => {
+    setRecordingState((prev) => {
+      if (index < 0 || index >= prev.steps.length) return prev;
+
+      const nextSteps = [...prev.steps];
+      nextSteps[index] = {
+        ...nextSteps[index],
+        ...updates
+      };
+
+      return {
+        ...prev,
+        steps: nextSteps
+      };
+    });
+  }, []);
+
   // Reorder steps
   const reorderSteps = useCallback((fromIndex: number, toIndex: number) => {
     setRecordingState((prev) => {
@@ -1064,6 +1081,7 @@ export const useWorkflowRecording = ({
     togglePause,
     toggleSpeechRecording,
     removeStep,
+    updateStep,
     reorderSteps,
     clearSteps
   };
