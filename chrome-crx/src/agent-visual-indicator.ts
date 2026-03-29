@@ -1,6 +1,47 @@
 (function () {
+  // I18n support
+  const SUPPORTED_LOCALES = ['en-US', 'zh-CN'] as const;
+  const DEFAULT_LOCALE = 'en-US';
+
+  function normalizeLocale(locale: string): string {
+    if (SUPPORTED_LOCALES.includes(locale as any)) {
+      return locale;
+    }
+    const language = locale.split('-')[0];
+    const matched = SUPPORTED_LOCALES.find(l => l.startsWith(`${language}-`));
+    return matched || DEFAULT_LOCALE;
+  }
+
+  let i18nMessages: Record<string, string> = {};
+  let i18nLoaded = false;
+
+  async function loadI18n(): Promise<void> {
+    if (i18nLoaded) return;
+    try {
+      const stored = await chrome.storage.local.get('preferred_locale');
+      const rawLocale = stored.preferred_locale || navigator.language || DEFAULT_LOCALE;
+      const locale = normalizeLocale(rawLocale);
+      const response = await fetch(chrome.runtime.getURL(`i18n/${locale}.json`));
+      if (response.ok) {
+        i18nMessages = await response.json();
+      }
+    } catch (e) {
+      // Fallback to empty messages
+    }
+    i18nLoaded = true;
+  }
+
+  function t(key: string, fallback: string = ''): string {
+    return i18nMessages[key] || fallback;
+  }
+
   // State variables
   let glowBorderEl: HTMLElement | null = null;
+  let waterRippleContainerEl: HTMLElement | null = null;
+  let waterRippleAnimationId: number | null = null;
+  let waterRippleResizeHandler: (() => void) | null = null;
+  let waterRippleAnimateFunc: (() => void) | null = null;
+  let blockingOverlayEl: HTMLElement | null = null;
   let stopContainerEl: HTMLElement | null = null;
   let staticIndicatorEl: HTMLElement | null = null;
   let isAgentActive = false;
@@ -8,6 +49,7 @@
   let isHiddenForToolUse = false;
   let wasStaticActiveBeforeToolUse = false;
   let staticIndicatorHeartbeatInterval: ReturnType<typeof setInterval> | null = null;
+  let ellipsisInterval: ReturnType<typeof setInterval> | null = null;
   let isMcpEnabled = false;
 
   // ============================================
@@ -20,26 +62,15 @@
     const styleEl = document.createElement("style");
     styleEl.id = "claude-agent-animation-styles";
     styleEl.textContent = `
-      @keyframes claude-pulse {
-        0% {
-          box-shadow:
-            inset 0 0 10px rgba(217, 119, 87, 0.5),
-            inset 0 0 20px rgba(217, 119, 87, 0.3),
-            inset 0 0 30px rgba(217, 119, 87, 0.1);
-        }
-        50% {
-          box-shadow:
-            inset 0 0 15px rgba(217, 119, 87, 0.7),
-            inset 0 0 25px rgba(217, 119, 87, 0.5),
-            inset 0 0 35px rgba(217, 119, 87, 0.2);
-        }
-        100% {
-          box-shadow:
-            inset 0 0 10px rgba(217, 119, 87, 0.5),
-            inset 0 0 20px rgba(217, 119, 87, 0.3),
-            inset 0 0 30px rgba(217, 119, 87, 0.1);
-        }
+      @keyframes claude-glass-breathe {
+        0%, 100% { opacity: 0.3; }
+        50% { opacity: 1; }
       }
+      @keyframes claude-glow-breathe {
+        0%, 100% { opacity: 0.25; }
+        50% { opacity: 1; }
+      }
+
     `;
     document.head.appendChild(styleEl);
   }
@@ -49,9 +80,9 @@
   // ============================================
 
   function createGlowBorder(): HTMLElement {
-    const el = document.createElement("div");
-    el.id = "claude-agent-glow-border";
-    el.style.cssText = `
+    const wrapper = document.createElement("div");
+    wrapper.id = "claude-agent-glow-border";
+    wrapper.style.cssText = `
       position: fixed;
       top: 0;
       left: 0;
@@ -61,113 +92,433 @@
       z-index: 2147483646;
       opacity: 0;
       transition: opacity 0.3s ease-in-out;
-      animation: claude-pulse 2s ease-in-out infinite;
-      box-shadow:
-        inset 0 0 10px rgba(217, 119, 87, 0.5),
-        inset 0 0 20px rgba(217, 119, 87, 0.3),
-        inset 0 0 30px rgba(217, 119, 87, 0.1);
     `;
-    return el;
+
+    // Static glow - top
+    const glowTop = document.createElement("div");
+    glowTop.style.cssText = `
+      position: absolute; top: 0; left: 0; right: 0; height: 75px;
+      filter: blur(15px); pointer-events: none;
+      animation: claude-glow-breathe 4.8s ease-in-out infinite;
+      background: linear-gradient(180deg,
+        rgba(230, 140, 85, 0.6) 0%,
+        rgba(240, 170, 90, 0.3) 35%,
+        rgba(255, 195, 120, 0.12) 65%,
+        transparent 100%);
+    `;
+
+    // Static glow - left
+    const glowLeft = document.createElement("div");
+    glowLeft.style.cssText = `
+      position: absolute; top: 0; left: 0; bottom: 0; width: 75px;
+      filter: blur(15px); pointer-events: none;
+      animation: claude-glow-breathe 4.8s ease-in-out infinite;
+      background: linear-gradient(90deg,
+        rgba(230, 140, 85, 0.6) 0%,
+        rgba(240, 170, 90, 0.3) 35%,
+        rgba(255, 195, 120, 0.12) 65%,
+        transparent 100%);
+    `;
+
+    // Static glow - right
+    const glowRight = document.createElement("div");
+    glowRight.style.cssText = `
+      position: absolute; top: 0; right: 0; bottom: 0; width: 75px;
+      filter: blur(15px); pointer-events: none;
+      animation: claude-glow-breathe 4.8s ease-in-out infinite;
+      background: linear-gradient(270deg,
+        rgba(230, 140, 85, 0.6) 0%,
+        rgba(240, 170, 90, 0.3) 35%,
+        rgba(255, 195, 120, 0.12) 65%,
+        transparent 100%);
+    `;
+
+    // Glass border with breathing animation
+    const glassBorder = document.createElement("div");
+    glassBorder.style.cssText = `
+      position: absolute; inset: 0; pointer-events: none;
+      box-shadow:
+        inset 0 0 10px rgba(230, 140, 85, 0.7),
+        inset 0 0 30px rgba(240, 170, 90, 0.25),
+        inset 0 0 70px rgba(255, 195, 120, 0.1);
+      animation: claude-glass-breathe 4.8s ease-in-out infinite;
+    `;
+
+    wrapper.appendChild(glowTop);
+    wrapper.appendChild(glowLeft);
+    wrapper.appendChild(glowRight);
+    wrapper.appendChild(glassBorder);
+
+    return wrapper;
+  }
+
+  // ============================================
+  // Water Ripple Canvas
+  // ============================================
+
+  // Simple seeded noise (Perlin-like via value noise interpolation)
+  const noisePermutation: number[] = [];
+  (function initNoise() {
+    for (let i = 0; i < 512; i++) {
+      noisePermutation[i] = Math.random();
+    }
+  })();
+
+  function valueNoise(x: number, y: number): number {
+    const xi = Math.floor(x) & 255;
+    const yi = Math.floor(y) & 255;
+    const xf = x - Math.floor(x);
+    const yf = y - Math.floor(y);
+
+    const smoothX = xf * xf * (3 - 2 * xf);
+    const smoothY = yf * yf * (3 - 2 * yf);
+
+    const tl = noisePermutation[(xi + yi * 13) & 511];
+    const tr = noisePermutation[(xi + 1 + yi * 13) & 511];
+    const bl = noisePermutation[(xi + (yi + 1) * 13) & 511];
+    const br = noisePermutation[(xi + 1 + (yi + 1) * 13) & 511];
+
+    const top = tl + smoothX * (tr - tl);
+    const bottom = bl + smoothX * (br - bl);
+    return top + smoothY * (bottom - top);
+  }
+
+  interface WaveConfig {
+    r: number;
+    g: number;
+    b: number;
+    alpha: number;
+    depth: number;
+    offset: number;
+    t: number;
+  }
+
+  function createWaterRipple(): HTMLElement {
+    const container = document.createElement("div");
+    container.id = "claude-water-ripple-container";
+    container.style.cssText = `
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 100px;
+      pointer-events: none;
+      z-index: 2147483646;
+      opacity: 0;
+      transition: opacity 0.3s ease-in-out;
+    `;
+
+    const canvas = document.createElement("canvas");
+    canvas.id = "claude-water-ripple-canvas";
+    canvas.style.cssText = `
+      width: 100%;
+      height: 100%;
+      display: block;
+      filter: blur(1px);
+    `;
+    container.appendChild(canvas);
+
+    const colors: [number, number, number][] = [
+      [230, 140, 85],
+      [235, 160, 90],
+      [240, 175, 95],
+      [245, 185, 100],
+      [250, 195, 110],
+    ];
+
+    const waves: WaveConfig[] = colors.map(([r, g, b], i) => ({
+      r,
+      g,
+      b,
+      alpha: (0.343 - i * 0.039),
+      depth: i,
+      offset: 100 + Math.random() * 100,
+      t: 0,
+    }));
+
+    function resizeCanvas() {
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = container.clientWidth * dpr;
+      canvas.height = container.clientHeight * dpr;
+      const ctx = canvas.getContext("2d");
+      if (ctx) ctx.scale(dpr, dpr);
+    }
+
+    waterRippleResizeHandler = resizeCanvas;
+
+    function drawWave(ctx: CanvasRenderingContext2D, w: WaveConfig, width: number, height: number) {
+      ctx.fillStyle = `rgba(${w.r}, ${w.g}, ${w.b}, ${w.alpha})`;
+      ctx.beginPath();
+
+      const step = 25;
+      let started = false;
+      for (let x = 0; x <= width + step; x += step) {
+        const xoff = x / width * 3;
+        const noiseVal = valueNoise(xoff + w.offset, w.t + w.offset);
+        const yoff = noiseVal * 80;
+        const y = height - yoff - w.depth * 12;
+        if (!started) {
+          ctx.moveTo(x, y);
+          started = true;
+        } else {
+          ctx.lineTo(x, y);
+        }
+      }
+
+      ctx.lineTo(width, height);
+      ctx.lineTo(0, height);
+      ctx.closePath();
+      ctx.fill();
+
+      w.t += 0.005;
+    }
+
+    function animate() {
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+
+      if (width === 0 || height === 0) {
+        waterRippleAnimationId = null;
+        return;
+      }
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (const w of waves) {
+        drawWave(ctx, w, width, height);
+      }
+
+      waterRippleAnimationId = requestAnimationFrame(animate);
+    }
+
+    waterRippleAnimateFunc = animate;
+
+    // Initialize after append
+    requestAnimationFrame(() => {
+      resizeCanvas();
+      animate();
+    });
+
+    window.addEventListener("resize", resizeCanvas);
+
+    return container;
+  }
+
+  // ============================================
+  // Blocking Overlay (prevents user interaction)
+  // ============================================
+
+  function createBlockingOverlay(): HTMLElement {
+    const overlay = document.createElement("div");
+    overlay.id = "claude-agent-blocking-overlay";
+    overlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 2147483645;
+      background: rgba(0, 0, 0, 0.08);
+      cursor: not-allowed;
+      opacity: 0;
+      transition: opacity 0.3s ease-in-out;
+    `;
+    return overlay;
   }
 
   // ============================================
   // Stop Button
   // ============================================
 
-  function createStopButton(): HTMLButtonElement {
-    const button = document.createElement("button");
-    button.id = "claude-agent-stop-button";
-    button.innerHTML = `
-      <svg width="16" height="16" viewBox="0 0 256 256" fill="currentColor" style="margin-right: 12px; vertical-align: middle;">
-        <path d="M128,20A108,108,0,1,0,236,128,108.12,108.12,0,0,0,128,20Zm0,192a84,84,0,1,1,84-84A84.09,84.09,0,0,1,128,212Zm40-112v56a12,12,0,0,1-12,12H100a12,12,0,0,1-12-12V100a12,12,0,0,1,12-12h56A12,12,0,0,1,168,100Z"></path>
-      </svg>
-      <span style="vertical-align: middle;">Stop SuperDuck</span>
-    `;
-    button.style.cssText = `
-      position: relative;
-      transform: translateY(100px);
-      padding: 12px 16px;
-      background: #FAF9F5;
-      color: #141413;
-      border: 0.5px solid rgba(31, 30, 29, 0.4);
-      border-radius: 12px;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
+  function createStopContainer(): HTMLElement {
+    const container = document.createElement("div");
+    container.id = "claude-agent-stop-container";
+
+    // ========== Parent: flex row, space-between ==========
+    container.style.cssText = `
+      position: fixed;
+      bottom: 116px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      display: flex !important;
+      flex-direction: row !important;
+      flex-wrap: nowrap !important;
+      justify-content: space-between !important;
+      align-items: center !important;
+      gap: 16px !important;
+      padding: 10px 16px 10px 20px !important;
+      white-space: nowrap !important;
+      background: linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.72) 0%,
+        rgba(255, 255, 255, 0.48) 50%,
+        rgba(255, 255, 255, 0.56) 100%
+      );
+      backdrop-filter: blur(24px) saturate(1.8);
+      -webkit-backdrop-filter: blur(24px) saturate(1.8);
+      border: 1px solid rgba(255, 255, 255, 0.55);
+      border-top-color: rgba(255, 255, 255, 0.8);
+      border-left-color: rgba(255, 255, 255, 0.65);
+      border-radius: 40px;
       box-shadow:
-        0 40px 80px rgba(217, 119, 87, 0.24),
-        0 4px 14px rgba(217, 119, 87, 0.24);
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      opacity: 0;
-      user-select: none;
+        0 12px 40px rgba(0, 0, 0, 0.06),
+        0 2px 6px rgba(0, 0, 0, 0.03),
+        inset 0 1px 1px rgba(255, 255, 255, 0.9),
+        inset 0 -1px 2px rgba(0, 0, 0, 0.03);
       pointer-events: auto;
+      z-index: 2147483647;
+      opacity: 0;
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      user-select: none;
       white-space: nowrap;
-      margin: 0 auto;
     `;
 
-    // Event listeners
-    button.addEventListener("mouseenter", () => {
-      if (isAgentActive) {
-        button.style.background = "#F5F4F0";
-        button.style.boxShadow =
-          "0 40px 80px rgba(217, 119, 87, 0.24), 0 4px 14px rgba(217, 119, 87, 0.24)";
-      }
+    const defaultBoxShadow = `
+      0 12px 40px rgba(0, 0, 0, 0.06),
+      0 2px 6px rgba(0, 0, 0, 0.03),
+      inset 0 1px 1px rgba(255, 255, 255, 0.9),
+      inset 0 -1px 2px rgba(0, 0, 0, 0.03)
+    `;
+    const hoverBoxShadow = `
+      0 0 12px rgba(230, 160, 90, 0.5),
+      0 0 28px rgba(230, 140, 85, 0.3),
+      0 0 48px rgba(255, 180, 120, 0.2),
+      0 12px 40px rgba(0, 0, 0, 0.06),
+      inset 0 1px 1px rgba(255, 255, 255, 0.9),
+      inset 0 -1px 2px rgba(0, 0, 0, 0.03)
+    `;
+
+    container.addEventListener("mouseenter", () => {
+      container.style.boxShadow = hoverBoxShadow;
+      container.style.borderColor = "rgba(230, 160, 90, 0.4)";
     });
 
-    button.addEventListener("mouseleave", () => {
-      if (isAgentActive) {
-        button.style.background = "#FAF9F5";
-        button.style.boxShadow =
-          "0 40px 80px rgba(217, 119, 87, 0.24), 0 4px 14px rgba(217, 119, 87, 0.24)";
-      }
+    container.addEventListener("mouseleave", () => {
+      container.style.boxShadow = defaultBoxShadow;
+      container.style.borderColor = "rgba(255, 255, 255, 0.55)";
     });
 
-    button.addEventListener("click", async () => {
+    // ========== Child A (left group): emoji + text + dots ==========
+    const leftGroup = document.createElement("div");
+    leftGroup.style.cssText = `
+      display: flex !important;
+      flex-direction: row !important;
+      flex-wrap: nowrap !important;
+      align-items: center !important;
+      gap: 6px !important;
+      flex-shrink: 0 !important;
+      white-space: nowrap !important;
+    `;
+
+    const duckMessages = [
+      t('agent_status_working', '鸭鸭正在努力操作中'),
+      t('agent_status_helping', '嘎嘎嘎～鸭鸭正在帮你干活'),
+      t('agent_status_rushing', '超级鸭鸭冲冲冲'),
+      t('agent_status_busy', '鸭鸭正在认真搞事情'),
+      t('agent_status_outputting', '鸭鸭正在疯狂输出'),
+      t('agent_status_takeover', '嘎！鸭鸭接管了浏览器'),
+      t('agent_status_full_power', '鸭力全开中'),
+      t('agent_status_showing_off', '超级鸭正在大展身手'),
+      t('agent_status_dont_move', '别动！鸭鸭在忙'),
+      t('agent_status_working_duck', '鸭鸭化身打工鸭'),
+      t('agent_status_managed', '当前页面由鸭鸭托管中'),
+      t('agent_status_online', '嘎嘎特工已上线'),
+    ];
+
+    const emojiEl = document.createElement("span");
+    emojiEl.textContent = "🦆";
+    emojiEl.style.cssText = `font-size: 16px; line-height: 1; flex-shrink: 0;`;
+
+    const statusText = document.createElement("span");
+    statusText.textContent = duckMessages[Math.floor(Math.random() * duckMessages.length)];
+    statusText.style.cssText = `
+      color: #1a1a1a;
+      font-size: 13px;
+      font-weight: 500;
+      flex-shrink: 0;
+    `;
+
+    // Animated dots: fixed-width container to prevent layout shift
+    const dotsEl = document.createElement("span");
+    dotsEl.style.cssText = `
+      display: inline-block;
+      width: 1.5em;
+      text-align: left;
+      color: #1a1a1a;
+      font-size: 13px;
+      font-weight: 500;
+      flex-shrink: 0;
+    `;
+    dotsEl.textContent = ".";
+
+    let dotCount = 1;
+    ellipsisInterval = setInterval(() => {
+      dotCount = (dotCount % 3) + 1;
+      dotsEl.textContent = ".".repeat(dotCount);
+    }, 500);
+
+    leftGroup.appendChild(emojiEl);
+    leftGroup.appendChild(statusText);
+    leftGroup.appendChild(dotsEl);
+
+    // ========== Child B (right group): button ==========
+    const takeOverBtn = document.createElement("button");
+    takeOverBtn.id = "claude-agent-stop-button";
+    takeOverBtn.textContent = t('agent_take_over_button', '我来接手');
+    takeOverBtn.style.cssText = `
+      padding: 6px 16px;
+      background: #2c2c2c;
+      color: #FAF9F5;
+      border: none;
+      border-radius: 20px;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      text-align: center;
+      transition: background 0.2s, box-shadow 0.2s;
+      pointer-events: auto;
+      flex-shrink: 0 !important;
+      white-space: nowrap !important;
+    `;
+
+    takeOverBtn.addEventListener("mouseenter", () => {
+      takeOverBtn.style.background = "#3a3a3a";
+      takeOverBtn.style.boxShadow = "0 2px 8px rgba(0, 0, 0, 0.15)";
+    });
+
+    takeOverBtn.addEventListener("mouseleave", () => {
+      takeOverBtn.style.background = "#2c2c2c";
+      takeOverBtn.style.boxShadow = "none";
+    });
+
+    takeOverBtn.addEventListener("click", async () => {
       try {
-        // Disable button to prevent multiple clicks
-        button.style.pointerEvents = "none";
-        button.style.opacity = "0.5";
+        takeOverBtn.style.pointerEvents = "none";
+        takeOverBtn.style.opacity = "0.5";
 
         await chrome.runtime.sendMessage({
           type: "STOP_AGENT",
           fromTabId: "CURRENT_TAB",
         });
 
-        // Re-enable button after a short delay
         setTimeout(() => {
-          button.style.pointerEvents = "auto";
-          button.style.opacity = "1";
+          takeOverBtn.style.pointerEvents = "auto";
+          takeOverBtn.style.opacity = "1";
         }, 1000);
       } catch (error) {
         console.error("Failed to stop agent:", error);
-        // Re-enable button on error
-        button.style.pointerEvents = "auto";
-        button.style.opacity = "1";
+        takeOverBtn.style.pointerEvents = "auto";
+        takeOverBtn.style.opacity = "1";
       }
     });
 
-    return button;
-  }
-
-  function createStopContainer(): HTMLElement {
-    const container = document.createElement("div");
-    container.id = "claude-agent-stop-container";
-    container.style.cssText = `
-      position: fixed;
-      bottom: 16px;
-      left: 50%;
-      transform: translateX(-50%);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      pointer-events: none;
-      z-index: 2147483647;
-    `;
-    container.appendChild(createStopButton());
+    // Two children only: leftGroup + takeOverBtn
+    container.appendChild(leftGroup);
+    container.appendChild(takeOverBtn);
     return container;
   }
 
@@ -286,9 +637,14 @@
   /**
    * Show agent indicators (glow border and stop button)
    */
-  function showAgentIndicators(): void {
+  async function showAgentIndicators(): Promise<void> {
     console.log('[Agent Indicator] showAgentIndicators called, isMcpEnabled:', isMcpEnabled, 'isAgentActive:', isAgentActive);
+
     isAgentActive = true;
+
+    await loadI18n();
+
+    if (!isAgentActive) return;
 
     // Inject animation styles
     injectAnimationStyles();
@@ -301,11 +657,27 @@
       document.body.appendChild(glowBorderEl);
     }
 
+    // Create/show water ripple
+    if (waterRippleContainerEl) {
+      waterRippleContainerEl.style.display = "";
+    } else {
+      waterRippleContainerEl = createWaterRipple();
+      document.body.appendChild(waterRippleContainerEl);
+    }
+
+    // Create/show blocking overlay
+    if (blockingOverlayEl) {
+      blockingOverlayEl.style.display = "";
+    } else {
+      blockingOverlayEl = createBlockingOverlay();
+      document.body.appendChild(blockingOverlayEl);
+    }
+
     // Create/show stop button (only if MCP is enabled)
     if (isMcpEnabled) {
       console.log('[Agent Indicator] Creating/showing stop button');
       if (stopContainerEl) {
-        stopContainerEl.style.display = "";
+        stopContainerEl.style.setProperty("display", "flex", "important");
       } else {
         stopContainerEl = createStopContainer();
         document.body.appendChild(stopContainerEl);
@@ -319,15 +691,15 @@
       if (glowBorderEl) {
         glowBorderEl.style.opacity = "1";
       }
+      if (waterRippleContainerEl) {
+        waterRippleContainerEl.style.opacity = "1";
+      }
+      if (blockingOverlayEl) {
+        blockingOverlayEl.style.opacity = "1";
+      }
       if (stopContainerEl) {
-        const stopButton =
-          stopContainerEl.querySelector<HTMLButtonElement>(
-            "#claude-agent-stop-button",
-          );
-        if (stopButton) {
-          stopButton.style.transform = "translateY(0)";
-          stopButton.style.opacity = "1";
-        }
+        stopContainerEl.style.opacity = "1";
+        stopContainerEl.style.transform = "translateX(-50%) translateY(0)";
       }
     });
   }
@@ -344,15 +716,15 @@
     if (glowBorderEl) {
       glowBorderEl.style.opacity = "0";
     }
+    if (waterRippleContainerEl) {
+      waterRippleContainerEl.style.opacity = "0";
+    }
+    if (blockingOverlayEl) {
+      blockingOverlayEl.style.opacity = "0";
+    }
     if (stopContainerEl) {
-      const stopButton =
-        stopContainerEl.querySelector<HTMLButtonElement>(
-          "#claude-agent-stop-button",
-        );
-      if (stopButton) {
-        stopButton.style.transform = "translateY(100px)";
-        stopButton.style.opacity = "0";
-      }
+      stopContainerEl.style.opacity = "0";
+      stopContainerEl.style.transform = "translateX(-50%) translateY(100px)";
     }
 
     // Remove after animation
@@ -362,7 +734,28 @@
           glowBorderEl.parentNode.removeChild(glowBorderEl);
           glowBorderEl = null;
         }
+        if (waterRippleContainerEl && waterRippleContainerEl.parentNode) {
+          if (waterRippleAnimationId) {
+            cancelAnimationFrame(waterRippleAnimationId);
+            waterRippleAnimationId = null;
+          }
+          if (waterRippleResizeHandler) {
+            window.removeEventListener("resize", waterRippleResizeHandler);
+            waterRippleResizeHandler = null;
+          }
+          waterRippleAnimateFunc = null;
+          waterRippleContainerEl.parentNode.removeChild(waterRippleContainerEl);
+          waterRippleContainerEl = null;
+        }
+        if (blockingOverlayEl && blockingOverlayEl.parentNode) {
+          blockingOverlayEl.parentNode.removeChild(blockingOverlayEl);
+          blockingOverlayEl = null;
+        }
         if (stopContainerEl && stopContainerEl.parentNode) {
+          if (ellipsisInterval) {
+            clearInterval(ellipsisInterval);
+            ellipsisInterval = null;
+          }
           stopContainerEl.parentNode.removeChild(stopContainerEl);
           stopContainerEl = null;
         }
@@ -452,14 +845,15 @@
 
   chrome.runtime.onMessage.addListener(
     (message: RuntimeMessage, sender, sendResponse: (response: MessageResponse) => void) => {
-      switch (message.type) {
-        case "SHOW_AGENT_INDICATORS":
-          console.log('[Agent Indicator] SHOW_AGENT_INDICATORS received, isMcp:', message.isMcp, 'current isMcpEnabled:', isMcpEnabled);
-          isMcpEnabled = isMcpEnabled || message.isMcp === true;
-          console.log('[Agent Indicator] After update, isMcpEnabled:', isMcpEnabled);
-          showAgentIndicators();
-          sendResponse({ success: true });
-          break;
+      (async () => {
+        switch (message.type) {
+          case "SHOW_AGENT_INDICATORS":
+            console.log('[Agent Indicator] SHOW_AGENT_INDICATORS received, isMcp:', message.isMcp, 'current isMcpEnabled:', isMcpEnabled);
+            isMcpEnabled = isMcpEnabled || message.isMcp === true;
+            console.log('[Agent Indicator] After update, isMcpEnabled:', isMcpEnabled);
+            await showAgentIndicators();
+            sendResponse({ success: true });
+            break;
 
         case "HIDE_AGENT_INDICATORS":
           hideAgentIndicators();
@@ -470,14 +864,29 @@
           isHiddenForToolUse = isAgentActive;
           wasStaticActiveBeforeToolUse = isStaticIndicatorActive;
 
+          if (waterRippleAnimationId) {
+            cancelAnimationFrame(waterRippleAnimationId);
+            waterRippleAnimationId = null;
+          }
+          if (ellipsisInterval) {
+            clearInterval(ellipsisInterval);
+            ellipsisInterval = null;
+          }
+
           if (glowBorderEl) {
-            glowBorderEl.style.display = "none";
+            glowBorderEl.style.visibility = "hidden";
+          }
+          if (waterRippleContainerEl) {
+            waterRippleContainerEl.style.visibility = "hidden";
+          }
+          if (blockingOverlayEl) {
+            blockingOverlayEl.style.visibility = "hidden";
           }
           if (stopContainerEl) {
-            stopContainerEl.style.display = "none";
+            stopContainerEl.style.visibility = "hidden";
           }
           if (staticIndicatorEl && isStaticIndicatorActive) {
-            staticIndicatorEl.style.display = "none";
+            staticIndicatorEl.style.visibility = "hidden";
           }
 
           sendResponse({ success: true });
@@ -486,14 +895,33 @@
         case "SHOW_AFTER_TOOL_USE":
           if (isHiddenForToolUse) {
             if (glowBorderEl) {
-              glowBorderEl.style.display = "";
+              glowBorderEl.style.visibility = "visible";
+            }
+            if (waterRippleContainerEl) {
+              waterRippleContainerEl.style.visibility = "visible";
+              if (!waterRippleAnimationId && waterRippleAnimateFunc) {
+                waterRippleAnimationId = requestAnimationFrame(waterRippleAnimateFunc);
+              }
+            }
+            if (blockingOverlayEl) {
+              blockingOverlayEl.style.visibility = "visible";
             }
             if (stopContainerEl) {
-              stopContainerEl.style.display = "";
+              stopContainerEl.style.visibility = "visible";
+              if (!ellipsisInterval) {
+                const dotsEl = stopContainerEl.querySelector("span:last-of-type");
+                if (dotsEl) {
+                  let dotCount = 1;
+                  ellipsisInterval = setInterval(() => {
+                    dotCount = (dotCount % 3) + 1;
+                    dotsEl.textContent = ".".repeat(dotCount);
+                  }, 500);
+                }
+              }
             }
           }
           if (wasStaticActiveBeforeToolUse && staticIndicatorEl) {
-            staticIndicatorEl.style.display = "";
+            staticIndicatorEl.style.visibility = "visible";
           }
 
           isHiddenForToolUse = false;
@@ -516,8 +944,8 @@
           sendResponse({ success: false });
           break;
       }
+      })();
 
-      // Return true to indicate async response (though we're responding synchronously here)
       return true;
     },
   );
@@ -540,16 +968,24 @@
    * This helps recover from CDP-related state issues
    */
   setInterval(() => {
+    if (isHiddenForToolUse) return;
+
     // If agent is active but stop button is hidden, restore it
-    if (isAgentActive && stopContainerEl && stopContainerEl.style.display === "none") {
+    if (isAgentActive && stopContainerEl && stopContainerEl.style.visibility === "hidden") {
       console.warn("[SuperDuck Agent] Recovering hidden stop button");
-      stopContainerEl.style.display = "";
+      stopContainerEl.style.visibility = "visible";
     }
 
     // If agent is active but glow border is hidden, restore it
-    if (isAgentActive && glowBorderEl && glowBorderEl.style.display === "none") {
+    if (isAgentActive && glowBorderEl && glowBorderEl.style.visibility === "hidden") {
       console.warn("[SuperDuck Agent] Recovering hidden glow border");
-      glowBorderEl.style.display = "";
+      glowBorderEl.style.visibility = "visible";
+    }
+
+    // If agent is active but water ripple is hidden, restore it
+    if (isAgentActive && waterRippleContainerEl && waterRippleContainerEl.style.visibility === "hidden") {
+      console.warn("[SuperDuck Agent] Recovering hidden water ripple");
+      waterRippleContainerEl.style.visibility = "visible";
     }
   }, 2000); // Check every 2 seconds
 })();
