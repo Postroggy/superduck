@@ -90,7 +90,13 @@ import {
   cdpDebugger
 } from '../mcpPermissions';
 import { Anthropic } from '../mcpServersStore';
-import { parseModelTag, getBaseModel } from './sessionPool';
+import {
+  generateConversationTitle as generateConversationTitleFunction,
+  generateQuote,
+  generateDailySummary,
+  parseModelTag,
+  getBaseModel
+} from './sessionPool';
 import { useAnalytics, getModelsConfig, AnalyticsContext } from '../components/SchedulingFields';
 import { mapModelName, loadModelMapping, MODEL_MAPPING_KEYS, getMappedModelName } from '../utils/modelMapping';
 import { EmptyState } from './EmptyState';
@@ -7889,42 +7895,21 @@ export function SidepanelApp() {
     async (userMessage: any) => {
       if (typeof query.tabId !== 'number') return;
       try {
-        const messageText =
-          typeof userMessage.content === 'string'
-            ? userMessage.content
-            : Array.isArray(userMessage.content)
-              ? userMessage.content
-                  .filter((b: any) => b.type === 'text')
-                  .map((b: any) => b.text)
-                  .join('\n')
-              : '';
-        if (!messageText.trim()) return;
-        const response = await createAnthropicMessage({
-          messages: [
-            {
-              role: 'user',
-              content: `Generate a very short title (3-5 words max) for this conversation based on the user's first message:\n\n"${messageText.slice(0, 300)}"\n\nRespond with ONLY the title, no quotes or punctuation.`
-            }
-          ],
-          max_tokens: 32,
-          model: 'claude-haiku-4-5-20251001'
-        });
-        if (response?.content) {
-          const title = response.content
-            .filter((b: any) => b.type === 'text')
-            .map((b: any) => b.text)
-            .join('')
-            .trim();
-          if (title) {
-            await tabGroupManager.initialize();
-            await tabGroupManager.updateGroupTitle(query.tabId, title, true);
-          }
+        const title = await generateConversationTitleFunction(
+          userMessage,
+          (params) => createAnthropicMessage(params),
+          intl.locale as SupportedLocale
+        );
+
+        if (title) {
+          await tabGroupManager.initialize();
+          await tabGroupManager.updateGroupTitle(query.tabId, title, true);
         }
       } catch {
         // silently fail title generation
       }
     },
-    [createAnthropicMessage, query.tabId]
+    [createAnthropicMessage, query.tabId, intl.locale]
   );
 
   const sendPrompt = useCallback(
@@ -10745,9 +10730,11 @@ export function SidepanelApp() {
               onToggleSpeech={toggleSpeechRecording}
               onRemoveStep={removeStep}
               onUpdateStep={updateStep}
-              onSave={(steps, summary, commandName) => {
-                // Save workflow summary and stop recording
-                setPromptToSave({ prompt: summary, command: commandName });
+              onSave={(steps, summary, workflowTitle) => {
+                // Save the generated prompt. Let the shortcut modal generate its own command name
+                // instead of reusing the recording title or page title.
+                void workflowTitle;
+                setPromptToSave({ prompt: summary });
                 stopRecording();
               }}
               createMessage={createAnthropicMessage}
@@ -10895,7 +10882,11 @@ export function SidepanelApp() {
           generateName={async (prompt) => {
             try {
               const { generateShortcutName } = await import('./sessionPool');
-              return await generateShortcutName(prompt, (params) => createAnthropicMessage(params));
+              return await generateShortcutName(
+                prompt,
+                (params) => createAnthropicMessage(params),
+                intl.locale as SupportedLocale
+              );
             } catch (error) {
               return '';
             }

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useIntl } from "react-intl";
 import { AnimatePresence, motion } from "framer-motion";
 import { DEFAULT_MODEL } from '../constants/models';
+import { PROMPT_TEMPLATES, WORKFLOW_INPUT_PREFIX, type SupportedLocale } from "./prompts";
 import {
   apiClient,
   getStorageValue,
@@ -867,7 +868,8 @@ function parseTaggedValue(text: string, tag: string): string {
 
 export async function generateConversationTitle(
   message: { content: string | Array<{ type: string; text?: string }> },
-  invoke: ModelInvoker
+  invoke: ModelInvoker,
+  locale: SupportedLocale = "en-US"
 ): Promise<string> {
   try {
     const inputText =
@@ -882,20 +884,13 @@ export async function generateConversationTitle(
 
     if (!inputText.trim()) return "";
 
-    const prompt = `<conversation>\n\n${inputText}\n\n</conversation>\n\nThink about it, then suggest a title based on the first message, putting it between <title> tags.`;
-
+    const templates = PROMPT_TEMPLATES[locale].conversationTitle;
     const result = await invoke({
       maxTokens: 128,
       messages: [
-        { role: "user", content: prompt },
-        {
-          role: "assistant",
-          content:
-            "Here is a clear, concise title for this browser automation conversation:\n\n<title>",
-        },
+        { role: "user", content: templates.user(inputText) },
       ],
-      system:
-        "Act as an accurate and concise title generator for browser automation conversations. Generate a <title> based on the first message in the conversation.",
+      system: templates.system,
       modelClass: "small_fast",
     });
 
@@ -905,30 +900,38 @@ export async function generateConversationTitle(
   }
 }
 
-export async function generateShortcutName(prompt: string, invoke: ModelInvoker): Promise<string> {
+export async function generateShortcutName(
+  prompt: string,
+  invoke: ModelInvoker,
+  locale: SupportedLocale = "en-US"
+): Promise<string> {
   try {
     if (!prompt.trim()) return "";
 
+    const templates = PROMPT_TEMPLATES[locale].shortcutName;
     const result = await invoke({
       maxTokens: 64,
       messages: [
         {
           role: "user",
-          content: `<prompt>\n${prompt}\n</prompt>\n\nThink about the main action in this prompt, then suggest a short command name, putting it between <name> tags.`,
+          content: templates.user(prompt),
         },
         {
           role: "assistant",
-          content: "Here is a concise command name for this shortcut:\n\n<name>",
+          content: templates.assistant,
         },
       ],
-      system:
-        "Act as a concise command name generator for browser automation shortcuts. Use lowercase kebab-case and keep the command short.",
+      system: templates.system,
       modelClass: "small_fast",
     });
 
-    return parseTaggedValue(readTextBlocks(result), "name")
-      .toLowerCase()
-      .replace(/[^a-z0-9-]/g, "");
+    const name = parseTaggedValue(readTextBlocks(result), "name");
+    if (locale === "zh-CN") {
+      // Keep Chinese characters, letters, numbers, and hyphens
+      return name.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9-]/g, "");
+    }
+    // For English, use lowercase kebab-case
+    return name.toLowerCase().replace(/[^a-z0-9-]/g, "");
   } catch {
     return "";
   }
@@ -958,7 +961,8 @@ export async function generateQuote(invoke: ModelInvoker): Promise<string> {
 
 export async function generateDailySummary(
   titles: string[],
-  invoke: ModelInvoker
+  invoke: ModelInvoker,
+  locale: SupportedLocale = "en-US"
 ): Promise<string> {
   try {
     if (titles.length === 0) return "";
@@ -967,16 +971,18 @@ export async function generateDailySummary(
       .map((normalized) => titles.find((title) => title.toLowerCase() === normalized))
       .filter((title): title is string => Boolean(title));
 
+    const titleList = deduped.map((title, index) => `${index + 1}. ${title}`).join("\n");
+    const templates = PROMPT_TEMPLATES[locale].dailySummary;
+
     const result = await invoke({
       maxTokens: 200,
       messages: [
         {
           role: "user",
-          content: `Here are the conversation titles from today:\n\n${deduped.map((title, index) => `${index + 1}. ${title}`).join("\n")}\n\nTransform these titles into a narrative daily summary (1-2 sentences) in first person as SuperDuck. Rewrite into past tense actions with natural flow. If completely meaningless, return \"SKIP\".`,
+          content: templates.user(titleList),
         },
       ],
-      system:
-        "Transform conversation titles into a concise first-person daily summary with natural narrative flow.",
+      system: templates.system,
       modelClass: "small_fast",
     });
 
@@ -1026,7 +1032,8 @@ export function detectImageMediaType(base64: string):
 export async function generateWorkflowStepDescription(
   step: WorkflowStepDescriptionInput,
   userActionText: string,
-  invoke: ModelInvoker
+  invoke: ModelInvoker,
+  locale: SupportedLocale = "en-US"
 ): Promise<string> {
   try {
     const classes = step.attributes.class || "";
@@ -1053,11 +1060,12 @@ export async function generateWorkflowStepDescription(
       )
       .join(", ");
 
+    const templates = PROMPT_TEMPLATES[locale].stepDescription;
     const narration = step.speechTranscript
-      ? `\n\nUSER NARRATION:\n\"${step.speechTranscript}\"\n\nUse this narration as the primary intent signal.`
+      ? templates.fragments.narration(step.speechTranscript)
       : "";
 
-    const prompt = `<element_clicked>
+    const elementPrompt = `<element_clicked>
 HTML Element: ${step.tagName.toUpperCase()}
 Visible Text: "${step.text || ""}"${narration}
 
@@ -1086,9 +1094,7 @@ Generate an action instruction starting with "Click on" (or "Type"/"Select" when
       ? [
           {
             type: "text",
-            text:
-              `${prompt}\n\nIMPORTANT: Look at the screenshot with the blue highlight box. ` +
-              "Describe what the user is clicking based on what is visible.",
+            text: templates.user(elementPrompt),
           },
           {
             type: "image",
@@ -1099,7 +1105,7 @@ Generate an action instruction starting with "Click on" (or "Type"/"Select" when
             },
           },
         ]
-      : prompt;
+      : elementPrompt;
 
     const result = await invoke({
       maxTokens: 64,
@@ -1107,11 +1113,10 @@ Generate an action instruction starting with "Click on" (or "Type"/"Select" when
         { role: "user", content: userContent },
         {
           role: "assistant",
-          content: "Here is the action instruction:\n\n<description>",
+          content: templates.assistant,
         },
       ],
-      system:
-        "Generate concise, screenshot-grounded action instructions for browser automation. Avoid HTML tag names in the final instruction.",
+      system: templates.system,
       modelClass: "small_fast",
     });
 
@@ -1127,12 +1132,16 @@ export interface RecordedWorkflowStep {
   screenshot?: string;
 }
 
-function buildReusablePrompt(parsed: {
-  inputs: Array<{ name: string; description: string }>;
-  prompt: string;
-}): string {
+function buildReusablePrompt(
+  parsed: {
+    inputs: Array<{ name: string; description: string }>;
+    prompt: string;
+  },
+  locale: SupportedLocale = "en-US"
+): string {
   if (parsed.inputs.length === 0) return parsed.prompt;
-  return `Before running this workflow, please provide the following information:\n${parsed.inputs
+  const prefix = WORKFLOW_INPUT_PREFIX[locale];
+  return `${prefix}\n${parsed.inputs
     .map((item) => `- ${item.name}: ${item.description}`)
     .join("\n")}\n\n${parsed.prompt}`;
 }
@@ -1140,7 +1149,8 @@ function buildReusablePrompt(parsed: {
 export async function generateWorkflowSummary(
   steps: RecordedWorkflowStep[],
   invoke: ModelInvoker,
-  includeHighlyDetailedFallback = false
+  includeHighlyDetailedFallback = false,
+  locale: SupportedLocale = "en-US"
 ): Promise<string> {
   try {
     if (!steps || steps.length === 0) return "";
@@ -1151,18 +1161,21 @@ export async function generateWorkflowSummary(
       .filter((value): value is string => Boolean(value))
       .join(" ");
 
+    const templates = PROMPT_TEMPLATES[locale].workflowSummary;
     const narrationSection = spokenNarration
-      ? `\n\nUSER SPOKEN NARRATION:\n\"${spokenNarration}\"\n\nUse this as the primary signal for intent.`
+      ? templates.fragments.narration(spokenNarration)
       : "";
+
+    const detailHint = includeHighlyDetailedFallback
+      ? templates.fragments.detailHint
+      : templates.fragments.contextHint;
+
+    const finalUserText = templates.user(stepList, narrationSection, detailHint);
 
     const userContent: any[] = [
       {
         type: "text",
-        text: `Here is a sequence of browser automation steps that were just recorded:\n\n${stepList}${narrationSection}${
-          includeHighlyDetailedFallback
-            ? "\n\nScreenshots are available now but will not be saved. Include enough visual detail to make the workflow reproducible without screenshots."
-            : "\n\nScreenshots are available for context."
-        }\n\nGenerate a reusable prompt that captures the task intent and goal.`,
+        text: finalUserText,
       },
     ];
 
@@ -1184,11 +1197,10 @@ export async function generateWorkflowSummary(
         { role: "user", content: userContent },
         {
           role: "assistant",
-          content: "I will analyze this workflow and create a reusable prompt.\n\n<inputs>",
+          content: templates.assistant,
         },
       ],
-      system:
-        "You are analyzing a recorded browser automation workflow. Capture semantic intent, extract dynamic inputs, and return structured <inputs> and <prompt> tags.",
+      system: templates.system,
       model: DEFAULT_MODEL,
     });
 
@@ -1208,7 +1220,7 @@ export async function generateWorkflowSummary(
       .filter((match): match is RegExpMatchArray => Boolean(match))
       .map((match) => ({ name: match[1].trim(), description: match[2].trim() }));
 
-    return buildReusablePrompt({ inputs, prompt: promptBlock });
+    return buildReusablePrompt({ inputs, prompt: promptBlock }, locale);
   } catch {
     return "";
   }

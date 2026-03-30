@@ -1254,8 +1254,37 @@ const TextInput = forwardRef<HTMLInputElement, any>(
       }
     }, []);
 
+    const isComposing = useRef(false);
+    const [localValue, setLocalValue] = useState(value);
+
+    useEffect(() => {
+      if (!isComposing.current) {
+        setLocalValue(value);
+      }
+    }, [value]);
+
     const { defaultValue: _dv, step: _step, ...filteredRest } = rest;
     const isSimple = type !== "currency" && !(prepend || append);
+
+    const handleCompositionStart = () => {
+      isComposing.current = true;
+    };
+
+    const handleCompositionEnd = (e: React.CompositionEvent<HTMLInputElement>) => {
+      isComposing.current = false;
+      const newValue = e.currentTarget.value;
+      setLocalValue(newValue);
+      onValueChange?.(newValue);
+    };
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const newValue = e.target.value;
+      setLocalValue(newValue);
+      onChange?.(e);
+      if (!isComposing.current) {
+        onValueChange?.(newValue);
+      }
+    };
 
     return (
       <>
@@ -1272,11 +1301,10 @@ const TextInput = forwardRef<HTMLInputElement, any>(
               type={type}
               className="w-full placeholder:text-text-500 m-0 bg-transparent p-0 hide-focus-ring disabled:cursor-not-allowed disabled:opacity-50"
               ref={useComposedRefs(ref, innerRef)}
-              value={value}
-              onChange={(e) => {
-                onChange?.(e);
-                onValueChange?.(e.target.value);
-              }}
+              value={localValue}
+              onChange={handleChange}
+              onCompositionStart={handleCompositionStart}
+              onCompositionEnd={handleCompositionEnd}
               {...rest}
             />
             {append && (
@@ -1300,11 +1328,10 @@ const TextInput = forwardRef<HTMLInputElement, any>(
             type={type}
             className={inputClass}
             ref={useComposedRefs(ref, innerRef)}
-            value={value}
-            onChange={(e) => {
-              onChange?.(e);
-              onValueChange?.(e.target.value);
-            }}
+            value={localValue}
+            onChange={handleChange}
+            onCompositionStart={handleCompositionStart}
+            onCompositionEnd={handleCompositionEnd}
             {...rest}
           />
         )}
@@ -1358,13 +1385,42 @@ const TextArea = forwardRef<HTMLTextAreaElement, any>(
     const isArrayPlaceholder = Array.isArray(placeholder);
     const placeholderText = isArrayPlaceholder ? "" : placeholder;
 
+    const isComposing = useRef(false);
+    const [localValue, setLocalValue] = useState(value);
+
+    useEffect(() => {
+      if (!isComposing.current) {
+        setLocalValue(value);
+      }
+    }, [value]);
+
     useEffect(() => {
       const el = innerRef.current;
       if (el && !fullHeight) {
         el.style.height = "auto";
         el.style.height = `${el.scrollHeight}px`;
       }
-    }, [value, fullHeight]);
+    }, [localValue, fullHeight]);
+
+    const handleCompositionStart = () => {
+      isComposing.current = true;
+    };
+
+    const handleCompositionEnd = (e: React.CompositionEvent<HTMLTextAreaElement>) => {
+      isComposing.current = false;
+      const newValue = e.currentTarget.value;
+      setLocalValue(newValue);
+      onValueChange?.(newValue);
+    };
+
+    const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      const newValue = e.target.value;
+      setLocalValue(newValue);
+      onChange?.(e);
+      if (!isComposing.current) {
+        onValueChange?.(newValue);
+      }
+    };
 
     return (
       <div className={cn(fullHeight && "h-full flex flex-col")}>
@@ -1373,7 +1429,7 @@ const TextArea = forwardRef<HTMLTextAreaElement, any>(
           {isArrayPlaceholder && (
             <PlaceholderRotator
               placeholders={placeholder as string[]}
-              isShown={!value}
+              isShown={!localValue}
               className="text-text-500 font-base"
             />
           )}
@@ -1381,7 +1437,7 @@ const TextArea = forwardRef<HTMLTextAreaElement, any>(
             id={generatedId}
             ref={useComposedRefs(ref, innerRef)}
             rows={minRows || rows}
-            value={value}
+            value={localValue}
             placeholder={placeholderText}
             className={cn(
               "text-text-100 w-full bg-bg-000 border border-border-300 hover:border-border-200 rounded-lg p-3 transition-colors can-focus resize-none placeholder:text-text-500 disabled:cursor-not-allowed disabled:opacity-50",
@@ -1390,10 +1446,9 @@ const TextArea = forwardRef<HTMLTextAreaElement, any>(
               customScrollbar && "custom-scrollbar",
               className,
             )}
-            onChange={(e) => {
-              onChange?.(e);
-              onValueChange?.(e.target.value);
-            }}
+            onChange={handleChange}
+            onCompositionStart={handleCompositionStart}
+            onCompositionEnd={handleCompositionEnd}
             {...rest}
           />
         </div>

@@ -393,10 +393,12 @@ export function CreateShortcutModal({
                 label={intl.formatMessage({ defaultMessage: 'Name', id: 'name' })}
                 type="text"
                 value={commandName}
-                onChange={(e) => {
-                  const sanitized = e.target.value
+                onValueChange={(val) => {
+                  // Allow Chinese characters, letters, numbers, hyphens, and underscores
+                  // Replace spaces with hyphens
+                  const sanitized = val
                     .replace(/\s/g, '-')
-                    .replace(/[^a-zA-Z0-9-_]/g, '');
+                    .replace(/[^\u4e00-\u9fa5a-zA-Z0-9-_]/g, '');
                   setCommandName(sanitized);
                   if (errorMessage) setErrorMessage('');
                 }}
