@@ -282,8 +282,8 @@ class TabEventManager {
 
 export const getTabEventManager = (): TabEventManager => TabEventManager.getInstance();
 
-const TAB_GROUP_TITLE = '🦆 SuperDuck';
-const MCP_TAB_GROUP_TITLE = '🦆 SuperDuck (MCP)';
+const TAB_GROUP_TITLE = '🦆SuperDuck';
+const MCP_TAB_GROUP_TITLE = '🦆SuperDuck (MCP)';
 
 // =============================================================================
 // Section 5: TabGroupManager
@@ -1446,7 +1446,7 @@ class TabGroupManager {
           let messageType: string;
           switch (previousState) {
             case 'pulsing':
-              messageType = 'SHOW_AGENT_INDICATORS';
+              messageType = 'SHOW_AFTER_TOOL_USE';
               break;
             case 'static':
               messageType = 'SHOW_STATIC_INDICATOR';

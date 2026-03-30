@@ -6215,7 +6215,7 @@ function StreamingTextBlock({
     <div className="flex items-start group">
       <div className="max-w-4xl claude-response w-full break-words">
         <div className="font-claude-response text-sm leading-[1.65rem] text-text-100 break-words">
-          <div className={`standard-markdown ${STANDARD_MARKDOWN_GRID_CLASS}`}>
+          <div className={`standard-markdown streaming-markdown ${STANDARD_MARKDOWN_GRID_CLASS}`}>
             <ReactMarkdown
               remarkPlugins={remarkPlugins}
               rehypePlugins={rehypePlugins}
@@ -6224,9 +6224,6 @@ function StreamingTextBlock({
               {processedText}
             </ReactMarkdown>
           </div>
-          {streamingText && (
-            <span className="inline-block w-1.5 h-4 ml-1 align-middle bg-text-100 animate-pulse" />
-          )}
         </div>
       </div>
     </div>
@@ -7153,7 +7150,8 @@ export function SidepanelApp() {
     stopRecording,
     togglePause,
     toggleSpeechRecording,
-    removeStep
+    removeStep,
+    updateStep
   } = useWorkflowRecording({
     tabId: query.tabId || 0,
     onComplete: (steps) => {
@@ -10746,9 +10744,10 @@ export function SidepanelApp() {
               onTogglePause={togglePause}
               onToggleSpeech={toggleSpeechRecording}
               onRemoveStep={removeStep}
-              onSave={(steps, summary) => {
+              onUpdateStep={updateStep}
+              onSave={(steps, summary, commandName) => {
                 // Save workflow summary and stop recording
-                setPromptToSave({ prompt: summary });
+                setPromptToSave({ prompt: summary, command: commandName });
                 stopRecording();
               }}
               createMessage={createAnthropicMessage}

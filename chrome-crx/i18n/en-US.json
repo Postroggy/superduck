@@ -818,5 +818,18 @@
   "blocked_page_content": "The content on this page isn't available when Claude is active for safety reasons.",
   "page_blocked_title": "Page Blocked",
   "not_logged_in": "Not logged in",
-  "schedule_task": "Schedule task"
+  "schedule_task": "Schedule task",
+  "agent_status_working": "Duck is working hard",
+  "agent_status_helping": "Quack quack~ Duck is helping you",
+  "agent_status_rushing": "SuperDuck is rushing",
+  "agent_status_busy": "Duck is busy doing things",
+  "agent_status_outputting": "Duck is outputting like crazy",
+  "agent_status_takeover": "Quack! Duck took over the browser",
+  "agent_status_full_power": "Duck power at full capacity",
+  "agent_status_showing_off": "SuperDuck is showing off",
+  "agent_status_dont_move": "Don't move! Duck is busy",
+  "agent_status_working_duck": "Duck turned into working duck",
+  "agent_status_managed": "This page is managed by Duck",
+  "agent_status_online": "Quack agent is online",
+  "agent_take_over_button": "Take over"
 }

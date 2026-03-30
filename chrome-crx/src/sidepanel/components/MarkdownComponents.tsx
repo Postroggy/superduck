@@ -294,7 +294,7 @@ function CodeBlock({ className, children }: { className?: string; children: stri
   );
 
   return (
-    <div className="relative group/copy bg-bg-000/50 border-0.5 border-border-400 rounded-lg">
+    <div className="code-block-root relative group/copy bg-bg-000/50 border-0.5 border-border-400 rounded-lg">
       {/* Copy button + language label (sticky, appears on hover) */}
       <div className="sticky opacity-0 group-hover/copy:opacity-100 top-2 py-2 h-12 w-0 float-right">
         <div className="absolute right-0 h-8 px-2 items-center inline-flex z-10">

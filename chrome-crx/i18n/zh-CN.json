@@ -818,5 +818,18 @@
   "blocked_page_content": "出于安全原因，Claude 处于活动状态时此页面的内容不可用。",
   "page_blocked_title": "页面已屏蔽",
   "not_logged_in": "未登录",
-  "schedule_task": "计划任务"
+  "schedule_task": "计划任务",
+  "agent_status_working": "鸭鸭正在努力操作中",
+  "agent_status_helping": "嘎嘎嘎～鸭鸭正在帮你干活",
+  "agent_status_rushing": "超级鸭鸭冲冲冲",
+  "agent_status_busy": "鸭鸭正在认真搞事情",
+  "agent_status_outputting": "鸭鸭正在疯狂输出",
+  "agent_status_takeover": "嘎！鸭鸭接管了浏览器",
+  "agent_status_full_power": "鸭力全开中",
+  "agent_status_showing_off": "超级鸭正在大展身手",
+  "agent_status_dont_move": "别动！鸭鸭在忙",
+  "agent_status_working_duck": "鸭鸭化身打工鸭",
+  "agent_status_managed": "当前页面由鸭鸭托管中",
+  "agent_status_online": "嘎嘎特工已上线",
+  "agent_take_over_button": "我来接手"
 }

@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { FormattedMessage } from 'react-intl';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Trash2, Mic } from 'lucide-react';
-import { Button } from '../components/SchedulingFields';
+import { Button, TextArea } from '../components/SchedulingFields';
 import { ScreenshotPreview } from './ScreenshotPreview';
 
 export interface WorkflowStep {
@@ -27,6 +27,7 @@ interface WorkflowStepsListProps {
   steps: WorkflowStep[];
   isVisible: boolean;
   onRemoveStep?: (index: number) => void;
+  onUpdateStep?: (index: number, updates: Partial<WorkflowStep>) => void;
   onClose?: () => void;
   fullScreen?: boolean;
   currentInterimTranscript?: string;
@@ -37,6 +38,7 @@ export function WorkflowStepsList({
   steps,
   isVisible,
   onRemoveStep,
+  onUpdateStep,
   onClose,
   fullScreen = false,
   currentInterimTranscript = '',
@@ -45,7 +47,11 @@ export function WorkflowStepsList({
   const containerRef = useRef<HTMLDivElement>(null);
   const lastStepRef = useRef<HTMLDivElement>(null);
   const interimRef = useRef<HTMLDivElement>(null);
-  const [expandedTranscripts, setExpandedTranscripts] = useState<Set<number>>(new Set());
+  const [editingDescriptionIndex, setEditingDescriptionIndex] = useState<number | null>(null);
+  const [descriptionDraft, setDescriptionDraft] = useState('');
+  const [editingTranscriptIndex, setEditingTranscriptIndex] = useState<number | null>(null);
+  const [transcriptDraft, setTranscriptDraft] = useState('');
+  const skipTranscriptCommitRef = useRef(false);
 
   // Auto-scroll to latest step or interim transcript
   useEffect(() => {
@@ -61,6 +67,20 @@ export function WorkflowStepsList({
       });
     }
   }, [steps.length, currentInterimTranscript]);
+
+  useEffect(() => {
+    if (editingDescriptionIndex !== null && !steps[editingDescriptionIndex]) {
+      setEditingDescriptionIndex(null);
+      setDescriptionDraft('');
+    }
+  }, [steps, editingDescriptionIndex]);
+
+  useEffect(() => {
+    if (editingTranscriptIndex !== null && !steps[editingTranscriptIndex]?.speechTranscript) {
+      setEditingTranscriptIndex(null);
+      setTranscriptDraft('');
+    }
+  }, [steps, editingTranscriptIndex]);
 
   if (!isVisible) return null;
 
@@ -154,23 +174,75 @@ export function WorkflowStepsList({
                   <div className="rounded-2xl overflow-hidden transition-all hover:bg-bg-300">
                     {/* Step header */}
                     <div className="flex items-start justify-between px-3 py-3">
-                      <div className="flex items-start gap-3">
+                      <div className="flex min-w-0 flex-1 items-start gap-3">
                         {/* Step number */}
                         <span className="flex-shrink-0 flex items-center justify-center w-6 h-6 font-small-bold text-text-100 bg-bg-500 rounded-full">
                           {index + 1}
                         </span>
 
                         {/* Step description */}
-                        <div className="flex-1 pt-0.5">
-                          <p className="text-text-100 font-base flex items-center gap-2">
-                            {step.isEnhancing ? (
-                              <span className="inline-block bg-gradient-to-r from-text-400 via-text-200 to-text-400 bg-clip-text text-transparent animate-shimmertext bg-[length:400%_100%]">
-                                <FormattedMessage defaultMessage="Loading..." id="loading" />
-                              </span>
-                            ) : (
-                              step.description
-                            )}
-                          </p>
+                        <div className="min-w-0 flex-1 pt-0.5">
+                          {editingDescriptionIndex === index ? (
+                            <div className="w-full rounded-md bg-bg-200 px-1">
+                              <input
+                                type="text"
+                                value={descriptionDraft}
+                                autoFocus
+                                onChange={(event) => setDescriptionDraft(event.target.value)}
+                                onBlur={() => {
+                                  const nextDescription = descriptionDraft.trim();
+                                  if (nextDescription) {
+                                    onUpdateStep?.(index, { description: nextDescription });
+                                  }
+                                  setEditingDescriptionIndex(null);
+                                  setDescriptionDraft('');
+                                }}
+                                onKeyDown={(event) => {
+                                  if (event.key === 'Enter') {
+                                    event.preventDefault();
+                                    const nextDescription = descriptionDraft.trim();
+                                    if (nextDescription) {
+                                      onUpdateStep?.(index, { description: nextDescription });
+                                    }
+                                    setEditingDescriptionIndex(null);
+                                    setDescriptionDraft('');
+                                  }
+
+                                  if (event.key === 'Escape') {
+                                    event.preventDefault();
+                                    setEditingDescriptionIndex(null);
+                                    setDescriptionDraft('');
+                                  }
+                                }}
+                                className="block w-full min-w-0 appearance-none border-0 bg-transparent px-0.5 py-0.5 text-text-100 font-base leading-6 outline-none ring-0 focus:border-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
+                                style={{
+                                  boxShadow: 'none',
+                                  outline: 'none',
+                                  WebkitAppearance: 'none',
+                                  appearance: 'none',
+                                }}
+                              />
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (step.isEnhancing || !onUpdateStep) return;
+                                setEditingDescriptionIndex(index);
+                                setDescriptionDraft(step.description);
+                              }}
+                              className="block w-full truncate text-left text-text-100 font-base leading-6 rounded-md -ml-1 px-1 py-0.5 transition-colors hover:bg-bg-300/70"
+                              title={step.description}
+                            >
+                              {step.isEnhancing ? (
+                                <span className="inline-block bg-gradient-to-r from-text-400 via-text-200 to-text-400 bg-clip-text text-transparent animate-shimmertext bg-[length:400%_100%]">
+                                  <FormattedMessage defaultMessage="Loading..." id="loading" />
+                                </span>
+                              ) : (
+                                step.description
+                              )}
+                            </button>
+                          )}
                           {step.tabId && (
                             <p className="text-text-400 font-small text-xs mt-0.5">
                               <FormattedMessage
@@ -214,56 +286,82 @@ export function WorkflowStepsList({
                     {/* Speech transcript */}
                     {step.speechTranscript && (
                       <div className="px-3 pb-3">
-                        <button
-                          onClick={() => {
-                            setExpandedTranscripts((prev) => {
-                              const next = new Set(prev);
-                              if (next.has(index)) {
-                                next.delete(index);
-                              } else {
-                                next.add(index);
-                              }
-                              return next;
-                            });
-                          }}
-                          className="w-full flex items-center gap-2 px-3 py-2 bg-bg-200 hover:bg-bg-300 rounded-lg transition-colors text-left"
-                        >
-                          <Mic size={12} className="text-text-300 flex-shrink-0" />
-                          <span className="text-text-200 font-base-sm flex-1">
-                            {expandedTranscripts.has(index) ? (
-                              <span className="italic">
-                                <FormattedMessage
-                                  defaultMessage='"{transcript}"'
-                                  id="label"
-                                  values={{ transcript: step.speechTranscript }}
+                        {editingTranscriptIndex === index ? (
+                          <div className="relative w-full rounded-lg bg-bg-200 px-3 py-2">
+                            <div className="flex items-start gap-2">
+                              <Mic size={12} className="text-text-300 mt-1.5 flex-shrink-0" />
+                              <div className="min-w-0 flex-1">
+                                <TextArea
+                                  value={transcriptDraft}
+                                  onValueChange={setTranscriptDraft}
+                                  rows={1}
+                                  autoFocus
+                                  className="!min-h-0 !overflow-hidden !resize-none !border-transparent !bg-transparent !px-0 !py-0.5 !text-sm !leading-5 shadow-none hover:!border-transparent focus:!border-transparent"
+                                  onBlur={() => {
+                                    if (skipTranscriptCommitRef.current) {
+                                      skipTranscriptCommitRef.current = false;
+                                      return;
+                                    }
+
+                                    const nextTranscript = transcriptDraft.trim();
+                                    if (nextTranscript) {
+                                      onUpdateStep?.(index, { speechTranscript: nextTranscript });
+                                    }
+                                    setEditingTranscriptIndex(null);
+                                    setTranscriptDraft('');
+                                  }}
+                                  onKeyDown={(event) => {
+                                    if (event.key === 'Enter' && !event.shiftKey) {
+                                      event.preventDefault();
+                                      const nextTranscript = transcriptDraft.trim();
+                                      if (!nextTranscript) return;
+                                      onUpdateStep?.(index, { speechTranscript: nextTranscript });
+                                      setEditingTranscriptIndex(null);
+                                      setTranscriptDraft('');
+                                    }
+
+                                    if (event.key === 'Escape') {
+                                      event.preventDefault();
+                                      skipTranscriptCommitRef.current = true;
+                                      setEditingTranscriptIndex(null);
+                                      setTranscriptDraft('');
+                                    }
+                                  }}
+                                  style={{
+                                    boxShadow: 'none',
+                                    outline: 'none',
+                                  }}
                                 />
-                              </span>
-                            ) : (
-                              <>
-                                <span className="italic">
-                                  <FormattedMessage
-                                    defaultMessage='"{transcript}"'
-                                    id="label"
-                                    values={{
-                                      transcript:
-                                        step.speechTranscript.length > 50
-                                          ? `${step.speechTranscript.substring(0, 50)}...`
-                                          : step.speechTranscript,
-                                    }}
-                                  />
-                                </span>
-                                {step.speechTranscript.length > 50 && (
-                                  <span className="text-text-400 ml-1">
-                                    <FormattedMessage
-                                      defaultMessage="(click to expand)"
-                                      id="click_to_expand"
-                                    />
-                                  </span>
-                                )}
-                              </>
-                            )}
-                          </span>
-                        </button>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!onUpdateStep) return;
+                              setEditingTranscriptIndex(index);
+                              setTranscriptDraft(step.speechTranscript || '');
+                            }}
+                            className="w-full flex items-start gap-2 px-3 py-2 bg-bg-200 hover:bg-bg-300 rounded-lg transition-colors text-left"
+                          >
+                            <span className="mt-0.5">
+                              <Mic size={12} className="text-text-300 flex-shrink-0" />
+                            </span>
+                            <span className="block flex-1 truncate text-text-200 font-base-sm italic leading-5">
+                              <FormattedMessage
+                                defaultMessage='"{transcript}"'
+                                id="label"
+                                values={{
+                                  transcript:
+                                    step.speechTranscript.length > 80
+                                      ? `${step.speechTranscript.substring(0, 80)}...`
+                                      : step.speechTranscript,
+                                }}
+                              />
+                            </span>
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
