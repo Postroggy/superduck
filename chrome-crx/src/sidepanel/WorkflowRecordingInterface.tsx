@@ -85,11 +85,19 @@ export function WorkflowRecordingInterface({
     }
   }, [isEditingTitle]);
 
-  // Favicon URL
-  const faviconUrl = useMemo(
-    () => (domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=32` : ''),
-    [domain]
-  );
+  // Get high-quality favicon from active tab
+  const [faviconUrl, setFaviconUrl] = useState('');
+
+  useEffect(() => {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      const tab = tabs[0];
+      if (tab?.favIconUrl && !tab.favIconUrl.startsWith('chrome://')) {
+        setFaviconUrl(tab.favIconUrl);
+      } else if (domain) {
+        setFaviconUrl(`https://www.google.com/s2/favicons?domain=${domain}&sz=64`);
+      }
+    });
+  }, [domain]);
 
   const commitWorkflowTitle = useCallback(() => {
     if (skipTitleCommitRef.current) {

@@ -2352,7 +2352,7 @@ function Favicon({ url, size = 16 }: { url: string; size?: number }) {
   const faviconUrl = useMemo(() => {
     try {
       const hostname = new URL(url).hostname;
-      return `https://www.google.com/s2/favicons?domain=${hostname}&sz=${size * 2}`;
+      return `https://www.google.com/s2/favicons?domain=${hostname}&sz=64`;
     } catch {
       return null;
     }
