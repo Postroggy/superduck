@@ -51,6 +51,8 @@
   let staticIndicatorHeartbeatInterval: ReturnType<typeof setInterval> | null = null;
   let ellipsisInterval: ReturnType<typeof setInterval> | null = null;
   let isMcpEnabled = false;
+  let savedOverflowHtml = "";
+  let savedOverflowBody = "";
 
   // ============================================
   // Styles
@@ -324,7 +326,14 @@
       cursor: not-allowed;
       opacity: 0;
       transition: opacity 0.3s ease-in-out;
+      overscroll-behavior: none;
+      touch-action: none;
     `;
+
+    // Prevent scroll events from passing through the overlay
+    overlay.addEventListener("wheel", (e) => e.preventDefault(), { passive: false });
+    overlay.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
+
     return overlay;
   }
 
@@ -673,6 +682,12 @@
       document.body.appendChild(blockingOverlayEl);
     }
 
+    // Disable scrollbar by hiding overflow
+    savedOverflowHtml = document.documentElement.style.overflow;
+    savedOverflowBody = document.body.style.overflow;
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+
     // Create/show stop button (only if MCP is enabled)
     if (isMcpEnabled) {
       console.log('[Agent Indicator] Creating/showing stop button');
@@ -722,6 +737,11 @@
     if (blockingOverlayEl) {
       blockingOverlayEl.style.opacity = "0";
     }
+
+    // Restore scrollbar
+    document.documentElement.style.overflow = savedOverflowHtml;
+    document.body.style.overflow = savedOverflowBody;
+
     if (stopContainerEl) {
       stopContainerEl.style.opacity = "0";
       stopContainerEl.style.transform = "translateX(-50%) translateY(100px)";
