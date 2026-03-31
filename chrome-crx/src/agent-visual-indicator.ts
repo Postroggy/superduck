@@ -51,6 +51,8 @@
   let staticIndicatorHeartbeatInterval: ReturnType<typeof setInterval> | null = null;
   let ellipsisInterval: ReturnType<typeof setInterval> | null = null;
   let isMcpEnabled = false;
+  let savedOverflowHtml = "";
+  let savedOverflowBody = "";
 
   // ============================================
   // Styles
@@ -324,7 +326,14 @@
       cursor: not-allowed;
       opacity: 0;
       transition: opacity 0.3s ease-in-out;
+      overscroll-behavior: none;
+      touch-action: none;
     `;
+
+    // Prevent scroll events from passing through the overlay
+    overlay.addEventListener("wheel", (e) => e.preventDefault(), { passive: false });
+    overlay.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
+
     return overlay;
   }
 
@@ -673,6 +682,12 @@
       document.body.appendChild(blockingOverlayEl);
     }
 
+    // Disable scrollbar by hiding overflow
+    savedOverflowHtml = document.documentElement.style.overflow;
+    savedOverflowBody = document.body.style.overflow;
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+
     // Create/show stop button (only if MCP is enabled)
     if (isMcpEnabled) {
       console.log('[Agent Indicator] Creating/showing stop button');
@@ -722,6 +737,11 @@
     if (blockingOverlayEl) {
       blockingOverlayEl.style.opacity = "0";
     }
+
+    // Restore scrollbar
+    document.documentElement.style.overflow = savedOverflowHtml;
+    document.body.style.overflow = savedOverflowBody;
+
     if (stopContainerEl) {
       stopContainerEl.style.opacity = "0";
       stopContainerEl.style.transform = "translateX(-50%) translateY(100px)";
@@ -770,6 +790,9 @@
     isStaticIndicatorActive = true;
 
     if (staticIndicatorEl) {
+      if (!staticIndicatorEl.parentNode) {
+        document.body.appendChild(staticIndicatorEl);
+      }
       staticIndicatorEl.style.display = "";
     } else {
       staticIndicatorEl = createStaticIndicator();
@@ -873,55 +896,66 @@
             ellipsisInterval = null;
           }
 
-          if (glowBorderEl) {
-            glowBorderEl.style.visibility = "hidden";
-          }
-          if (waterRippleContainerEl) {
-            waterRippleContainerEl.style.visibility = "hidden";
-          }
-          if (blockingOverlayEl) {
-            blockingOverlayEl.style.visibility = "hidden";
-          }
-          if (stopContainerEl) {
-            stopContainerEl.style.visibility = "hidden";
-          }
-          if (staticIndicatorEl && isStaticIndicatorActive) {
-            staticIndicatorEl.style.visibility = "hidden";
+          // Remove elements from DOM entirely to guarantee they cannot
+          // appear in any screenshot method (CDP or captureVisibleTab).
+          // Element references are preserved in module variables for re-insertion.
+          if (glowBorderEl?.parentNode) glowBorderEl.parentNode.removeChild(glowBorderEl);
+          if (waterRippleContainerEl?.parentNode) waterRippleContainerEl.parentNode.removeChild(waterRippleContainerEl);
+          if (blockingOverlayEl?.parentNode) blockingOverlayEl.parentNode.removeChild(blockingOverlayEl);
+          if (stopContainerEl?.parentNode) stopContainerEl.parentNode.removeChild(stopContainerEl);
+          if (staticIndicatorEl?.parentNode && isStaticIndicatorActive) staticIndicatorEl.parentNode.removeChild(staticIndicatorEl);
+
+          const respondOnce = (() => {
+            let hasResponded = false;
+            return () => {
+              if (hasResponded) return;
+              hasResponded = true;
+              sendResponse({ success: true });
+            };
+          })();
+
+          // For background tabs, rAF may be heavily throttled or paused.
+          // Return immediately to avoid blocking tool calls on non-active tabs.
+          if (document.visibilityState !== "visible") {
+            respondOnce();
+            break;
           }
 
-          sendResponse({ success: true });
+          // For visible tabs, wait for compositor commit to keep screenshots clean.
+          void document.body.offsetWidth;
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              setTimeout(respondOnce, 50);
+            });
+          });
+          // Fallback in case tab visibility changes during the rAF chain.
+          setTimeout(respondOnce, 200);
           break;
 
         case "SHOW_AFTER_TOOL_USE":
           if (isHiddenForToolUse) {
-            if (glowBorderEl) {
-              glowBorderEl.style.visibility = "visible";
+            // Re-insert elements into DOM (references preserved in module variables)
+            if (glowBorderEl && !glowBorderEl.parentNode) document.body.appendChild(glowBorderEl);
+            if (waterRippleContainerEl && !waterRippleContainerEl.parentNode) document.body.appendChild(waterRippleContainerEl);
+            if (blockingOverlayEl && !blockingOverlayEl.parentNode) document.body.appendChild(blockingOverlayEl);
+            if (stopContainerEl && !stopContainerEl.parentNode) document.body.appendChild(stopContainerEl);
+
+            if (waterRippleContainerEl && !waterRippleAnimationId && waterRippleAnimateFunc) {
+              waterRippleAnimationId = requestAnimationFrame(waterRippleAnimateFunc);
             }
-            if (waterRippleContainerEl) {
-              waterRippleContainerEl.style.visibility = "visible";
-              if (!waterRippleAnimationId && waterRippleAnimateFunc) {
-                waterRippleAnimationId = requestAnimationFrame(waterRippleAnimateFunc);
-              }
-            }
-            if (blockingOverlayEl) {
-              blockingOverlayEl.style.visibility = "visible";
-            }
-            if (stopContainerEl) {
-              stopContainerEl.style.visibility = "visible";
-              if (!ellipsisInterval) {
-                const dotsEl = stopContainerEl.querySelector("span:last-of-type");
-                if (dotsEl) {
-                  let dotCount = 1;
-                  ellipsisInterval = setInterval(() => {
-                    dotCount = (dotCount % 3) + 1;
-                    dotsEl.textContent = ".".repeat(dotCount);
-                  }, 500);
-                }
+            if (stopContainerEl && !ellipsisInterval) {
+              const dotsEl = stopContainerEl.querySelector("span:last-of-type");
+              if (dotsEl) {
+                let dotCount = 1;
+                ellipsisInterval = setInterval(() => {
+                  dotCount = (dotCount % 3) + 1;
+                  dotsEl.textContent = ".".repeat(dotCount);
+                }, 500);
               }
             }
           }
-          if (wasStaticActiveBeforeToolUse && staticIndicatorEl) {
-            staticIndicatorEl.style.visibility = "visible";
+          if (wasStaticActiveBeforeToolUse && staticIndicatorEl && !staticIndicatorEl.parentNode) {
+            document.body.appendChild(staticIndicatorEl);
           }
 
           isHiddenForToolUse = false;
@@ -968,24 +1002,26 @@
    * This helps recover from CDP-related state issues
    */
   setInterval(() => {
+    // Don't recover if intentionally hidden for tool use (e.g., screenshot)
     if (isHiddenForToolUse) return;
+    if (!isAgentActive) return;
 
-    // If agent is active but stop button is hidden, restore it
-    if (isAgentActive && stopContainerEl && stopContainerEl.style.visibility === "hidden") {
-      console.warn("[SuperDuck Agent] Recovering hidden stop button");
-      stopContainerEl.style.visibility = "visible";
+    // Recover elements that got detached from DOM
+    if (stopContainerEl && !stopContainerEl.parentNode) {
+      console.warn("[SuperDuck Agent] Recovering detached stop button");
+      document.body.appendChild(stopContainerEl);
     }
-
-    // If agent is active but glow border is hidden, restore it
-    if (isAgentActive && glowBorderEl && glowBorderEl.style.visibility === "hidden") {
-      console.warn("[SuperDuck Agent] Recovering hidden glow border");
-      glowBorderEl.style.visibility = "visible";
+    if (glowBorderEl && !glowBorderEl.parentNode) {
+      console.warn("[SuperDuck Agent] Recovering detached glow border");
+      document.body.appendChild(glowBorderEl);
     }
-
-    // If agent is active but water ripple is hidden, restore it
-    if (isAgentActive && waterRippleContainerEl && waterRippleContainerEl.style.visibility === "hidden") {
-      console.warn("[SuperDuck Agent] Recovering hidden water ripple");
-      waterRippleContainerEl.style.visibility = "visible";
+    if (waterRippleContainerEl && !waterRippleContainerEl.parentNode) {
+      console.warn("[SuperDuck Agent] Recovering detached water ripple");
+      document.body.appendChild(waterRippleContainerEl);
+    }
+    if (blockingOverlayEl && !blockingOverlayEl.parentNode) {
+      console.warn("[SuperDuck Agent] Recovering detached blocking overlay");
+      document.body.appendChild(blockingOverlayEl);
     }
   }, 2000); // Check every 2 seconds
 })();

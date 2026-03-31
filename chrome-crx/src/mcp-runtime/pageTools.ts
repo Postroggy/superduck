@@ -260,7 +260,7 @@ const javascriptTool: ToolDefinition = {
 const navigateTool: ToolDefinition = {
   name: 'navigate',
   description:
-    "Navigate to a URL, or go forward/back in browser history. If you don't have a valid tab ID, use tabs_context first to get available tabs.",
+    "Navigate to a URL in an existing tab, or go forward/back in browser history. PREFERRED: Always use this tool to navigate to URLs instead of creating new tabs. This keeps all operations in the current tab. If you don't have a valid tab ID, use tabs_context first to get available tabs.",
   parameters: {
     url: {
       type: 'string',
@@ -387,7 +387,7 @@ const navigateTool: ToolDefinition = {
   toAnthropicSchema: async () => ({
     name: 'navigate',
     description:
-      "Navigate to a URL, or go forward/back in browser history. If you don't have a valid tab ID, use tabs_context first to get available tabs.",
+      "Navigate to a URL in an existing tab, or go forward/back in browser history. PREFERRED: Always use this tool to navigate to URLs instead of creating new tabs. This keeps all operations in the current tab. If you don't have a valid tab ID, use tabs_context first to get available tabs.",
     input_schema: {
       type: 'object',
       properties: {
@@ -792,7 +792,6 @@ const getPageTextTool: ToolDefinition = {
     }
 
     await tabGroupManager.hideIndicatorForToolUse(effectiveTabId);
-    await new Promise((resolve) => setTimeout(resolve, 50));
 
     try {
       const scriptResult = await chrome.scripting.executeScript({
@@ -1003,7 +1002,6 @@ const readPageTool: ToolDefinition = {
     }
 
     await tabGroupManager.hideIndicatorForToolUse(effectiveTabId);
-    await new Promise((resolve) => setTimeout(resolve, 50));
 
     try {
       const scriptResult = await chrome.scripting.executeScript({
@@ -1220,7 +1218,7 @@ const tabsContextTool: ToolDefinition = {
 
 const tabsCreateTool: ToolDefinition = {
   name: 'tabs_create',
-  description: 'Creates a new empty tab in the current tab group',
+  description: 'Creates a new empty tab in the current tab group. IMPORTANT: Only use this when the user explicitly asks to open a new tab, or when you need to keep multiple pages open at the same time. For simple navigation tasks, reuse existing tabs with the navigate tool instead.',
   parameters: {},
   execute: async (input: any, context: ToolContext): Promise<ToolResult> => {
     try {
@@ -1252,7 +1250,7 @@ const tabsCreateTool: ToolDefinition = {
   },
   toAnthropicSchema: async () => ({
     name: 'tabs_create',
-    description: 'Creates a new empty tab in the current tab group',
+    description: 'Creates a new empty tab in the current tab group. IMPORTANT: Only use this when the user explicitly asks to open a new tab, or when you need to keep multiple pages open at the same time. For simple navigation tasks, reuse existing tabs with the navigate tool instead.',
     input_schema: { type: 'object', properties: {}, required: [] }
   })
 };

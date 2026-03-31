@@ -1,5 +1,6 @@
 import React from 'react';
 import { ClaudeIcon } from '@/components/SchedulingFields';
+import cursorAiSvg from '../assets/IconCursorAi.svg?raw';
 
 type IconProps = React.ComponentProps<typeof ClaudeIcon>;
 
@@ -316,19 +317,34 @@ export const TabsIcon: React.FC<IconProps> = (props) => (
 );
 
 /** Cursor click with sparkle rays — bundle's Hs icon, used for "Teach Claude" button */
-export const CursorClickIcon: React.FC<IconProps> = (props) => (
-  <ClaudeIcon {...props}>
-    <path
-      d="M10.8139 17.5841L7.08902 8.12868C6.76198 7.29851 7.60347 6.48813 8.42074 6.84621L17.6697 10.8985C18.6008 11.3065 18.4 12.6821 17.3912 12.8069L14.3103 13.1881C13.8869 13.2405 13.5433 13.5557 13.4548 13.973L12.7225 17.4251C12.5168 18.3949 11.1772 18.5065 10.8139 17.5841Z"
-      stroke="currentColor"
-      fill="none"
-      strokeWidth="1"
+export const CursorClickIcon: React.FC<IconProps> = (props) => {
+  const { size = 20, vectorSizeOverride, className, alt } = props;
+  const vectorSizeMap: Record<number, number> = { 12: 16, 14: 16, 16: 20, 20: 20, 24: 24, 28: 28, 32: 32 };
+  const vectorSize = vectorSizeOverride || vectorSizeMap[size] || size;
+  const svgWithStyle = cursorAiSvg.replace(
+    /<svg/,
+    `<svg style="width: ${vectorSize}px; height: ${vectorSize}px; display: block; flex-shrink: 0; color: currentColor;"`
+  );
+  const svg = (
+    <span
+      aria-label={alt}
+      aria-hidden={!alt}
+      className={className}
+      dangerouslySetInnerHTML={{ __html: svgWithStyle }}
     />
-    <path d="M5 5L3 3" stroke="currentColor" strokeLinecap="round" />
-    <path d="M8.36609 3.82843L8.36609 1.63391" stroke="currentColor" strokeLinecap="round" />
-    <path d="M3.82843 8.4624H1.5376" stroke="currentColor" strokeLinecap="round" />
-  </ClaudeIcon>
-);
+  );
+
+  if (vectorSizeOverride) return svg;
+
+  return (
+    <span
+      className={className}
+      style={{ width: size, height: size, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+    >
+      {svg}
+    </span>
+  );
+};
 
 /** Plain cursor — bundle's Vs icon */
 export const CursorIcon: React.FC<IconProps> = (props) => (

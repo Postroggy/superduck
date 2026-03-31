@@ -1,28 +1,224 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { FormattedMessage, useIntl } from 'react-intl';
-import { Workflow, Calendar, Slash, Pencil } from 'lucide-react';
-
-interface SavedPrompt {
-  id: string;
-  command: string;
-  prompt: string;
-  url?: string;
-  usageCount: number;
-  createdAt: number;
-}
-
-interface SpecialCommand {
-  command: string;
-  description: string;
-}
+import React, { useState, useEffect, useMemo, useRef, useLayoutEffect, useCallback } from 'react';
+import { useIntl } from 'react-intl';
+import { useVirtualizer } from '@tanstack/react-virtual';
+import { Pencil, ChevronRight } from 'lucide-react';
+import compactBroomSvg from '../assets/IconBroomSparkle.svg?raw';
+import runShortcutSvg from '../assets/IconRunShortcut.svg?raw';
+import calendarSparkleSvg from '../assets/IconCalenderSparkle.svg?raw';
+import cursorAiSvg from '../assets/IconCursorAi.svg?raw';
+import settingsSliderSvg from '../assets/IconSettingsSliderHor.svg?raw';
+import { SavedPromptsService, type SavedPrompt } from '../SavedPromptsService';
+import { getSpecialCommands, type SpecialCommand } from './sessionPool';
+import { isChineseLocale } from '../utils/locale';
 
 interface ShortcutsMenuProps {
   searchTerm: string;
-  onSelect: (command: string) => void;
+  onSelect: (command: string, label?: string) => void;
   onEditShortcut?: (shortcut: SavedPrompt) => void;
   onRecordWorkflow: () => void;
   onScheduleTask: () => void;
   onClose: () => void;
+}
+
+interface SecondaryMenuItem {
+  key: string;
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+}
+
+interface CommandMenuItem {
+  key: string;
+  commandId: string;
+  icon: React.ReactNode;
+  label: string;
+  description?: string;
+  onClick: () => void;
+  onEdit?: (shortcut: SavedPrompt) => void;
+  shortcut?: SavedPrompt;
+  searchTokens: string[];
+}
+
+const COMMAND_ROW_ESTIMATE_PX = 46;
+const SUBMENU_MAX_WIDTH = 280;
+const SUBMENU_GAP = 10;
+const VIEWPORT_PAD = 12;
+const SUBMENU_ROW_ESTIMATE_PX = 46;
+const SUBMENU_MAX_HEIGHT_PX = 460;
+const SUBMENU_DIVIDER_ESTIMATE_PX = 8;
+const SUBMENU_INNER_PAD_PX = 6;
+
+/** 更扁平的面板质感：轻阴影 + 细边框 */
+const PALETTE_SURFACE =
+  'rounded-[12px] border border-border-300/55 bg-bg-000 shadow-[0_1px_4px_hsl(var(--always-black)/2.6%)]';
+
+function SlashIcon() {
+  return (
+    <span
+      aria-hidden="true"
+      className="select-none -translate-y-px text-[15px] font-normal leading-none text-text-300"
+    >
+      /
+    </span>
+  );
+}
+
+function InlineSvgIcon({
+  svg,
+  className = 'inline-flex h-[15px] w-[15px] text-text-300'
+}: {
+  svg: string;
+  className?: string;
+}) {
+  // Keep SVG presentation generic so caller-provided className controls size/color.
+  const svgWithStyle = svg.replace(
+    /<svg/,
+    `<svg style="width: 15px; height: 15px; color: currentColor; display: block; flex-shrink: 0;"`
+  );
+
+  return (
+    <span
+      aria-hidden="true"
+      className={`inline-flex items-center justify-center ${className}`}
+      dangerouslySetInnerHTML={{ __html: svgWithStyle }}
+    />
+  );
+}
+
+function SpecialCommandIcon({ command }: { command: string }) {
+  if (command === 'compact') {
+    return (
+      <InlineSvgIcon
+        svg={compactBroomSvg}
+        className="inline-flex h-[13px] w-[13px] text-text-300"
+      />
+    );
+  }
+
+  return <SlashIcon />;
+}
+
+function MenuIconBox({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center text-text-300">
+      {children}
+    </div>
+  );
+}
+
+function CommandRow({
+  label,
+  description,
+  icon,
+  selected,
+  onClick,
+  onMouseEnter,
+  onEdit,
+  editAriaLabel,
+  rowRef
+}: {
+  label: React.ReactNode;
+  description?: React.ReactNode;
+  icon: React.ReactNode;
+  selected?: boolean;
+  onClick: () => void;
+  onMouseEnter?: () => void;
+  onEdit?: () => void;
+  editAriaLabel?: string;
+  rowRef?: React.Ref<HTMLDivElement>;
+}) {
+  return (
+    <div
+      ref={rowRef}
+      data-palette-row="command"
+      onMouseEnter={onMouseEnter}
+      className={`group flex items-center gap-1 rounded-[10px] transition-[background-color,box-shadow] duration-150 ${
+        selected
+          ? 'bg-bg-200 shadow-[0_0_0_1px_hsla(var(--border-200)/0.25),0_2px_6px_hsl(var(--always-black)/4%)]'
+          : 'hover:bg-bg-200/60 hover:shadow-[0_1px_3px_hsl(var(--always-black)/2.5%)]'
+      }`}
+    >
+      <button
+        type="button"
+        tabIndex={-1}
+        onClick={onClick}
+        className="flex min-w-0 flex-1 items-center gap-2 rounded-[10px] px-2 py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-200/35 focus-visible:ring-offset-0"
+      >
+        <MenuIconBox>{icon}</MenuIconBox>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[12px] font-normal text-text-100">{label}</div>
+          {description ? (
+            <div className="mt-0.5 truncate text-[10px] font-normal text-text-300/95">{description}</div>
+          ) : null}
+        </div>
+      </button>
+
+      {onEdit ? (
+        <button
+          type="button"
+          tabIndex={-1}
+          onClick={onEdit}
+          aria-label={editAriaLabel}
+          title={editAriaLabel}
+          className={`mr-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-text-400 transition-all hover:bg-bg-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-200/60 ${
+            selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+          }`}
+        >
+          <Pencil size={11} />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function SecondaryMenuRow({
+  id,
+  label,
+  icon,
+  selected,
+  onClick,
+  onMouseEnter,
+  trailing,
+  ariaHaspopup,
+  ariaExpanded,
+  rowRef
+}: {
+  id?: string;
+  label: React.ReactNode;
+  icon: React.ReactNode;
+  selected?: boolean;
+  onClick: () => void;
+  onMouseEnter?: () => void;
+  trailing?: React.ReactNode;
+  ariaHaspopup?: 'menu';
+  ariaExpanded?: boolean;
+  rowRef?: React.Ref<HTMLButtonElement>;
+}) {
+  return (
+    <button
+      id={id}
+      ref={rowRef}
+      type="button"
+      tabIndex={-1}
+      onClick={onClick}
+      onMouseEnter={onMouseEnter}
+      aria-haspopup={ariaHaspopup}
+      aria-expanded={ariaExpanded}
+      className={`group flex w-full items-center gap-2 rounded-[10px] px-2 py-1.5 text-left transition-[background-color,box-shadow] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-200/35 focus-visible:ring-offset-0 ${
+        selected
+          ? 'bg-bg-200 shadow-[0_0_0_1px_hsla(var(--border-200)/0.25),0_2px_6px_hsl(var(--always-black)/4%)]'
+          : 'hover:bg-bg-200/60 hover:shadow-[0_1px_3px_hsl(var(--always-black)/2.5%)]'
+      }`}
+    >
+      <MenuIconBox>{icon}</MenuIconBox>
+      <div className="min-w-0 flex-1 truncate text-[12px] font-normal text-text-100">{label}</div>
+      {trailing ? (
+        <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-text-400 transition-colors group-hover:text-text-300">
+          {trailing}
+        </div>
+      ) : null}
+    </button>
+  );
 }
 
 export function ShortcutsMenu({
@@ -37,24 +233,64 @@ export function ShortcutsMenu({
   const [shortcuts, setShortcuts] = useState<SavedPrompt[]>([]);
   const [specialCommands, setSpecialCommands] = useState<SpecialCommand[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [isManageMenuOpen, setIsManageMenuOpen] = useState(false);
+  const [submenuSide, setSubmenuSide] = useState<'left' | 'right'>('right');
+  const [submenuVerticalDirection, setSubmenuVerticalDirection] = useState<'down' | 'up'>('down');
+  const [submenuMaxWidth, setSubmenuMaxWidth] = useState(SUBMENU_MAX_WIDTH);
+  const [submenuTopOffset, setSubmenuTopOffset] = useState(0);
+  const [submenuMaxHeight, setSubmenuMaxHeight] = useState(SUBMENU_MAX_HEIGHT_PX);
 
+  const paletteRef = useRef<HTMLDivElement>(null);
+  const submenuAnchorRef = useRef<HTMLDivElement>(null);
+  const commandScrollRef = useRef<HTMLDivElement>(null);
+  const manageRowRef = useRef<HTMLDivElement>(null);
+  const submenuRowRefs = useRef<(HTMLElement | null)[]>([]);
+  const submenuContentRef = useRef<HTMLDivElement>(null);
+
+  const pointerInteraction = useRef(false);
+  const isZh = isChineseLocale(intl.locale);
   const untitledLabel = intl.formatMessage({ defaultMessage: 'untitled', id: 'untitled' });
+  const trimmedSearchTerm = searchTerm.trim();
+  const normalizedSearchTerm = trimmedSearchTerm.toLowerCase();
+  const isSearching = normalizedSearchTerm.length > 0;
+  const getEditShortcutAriaLabel = useCallback(
+    (shortcutName: string) =>
+      intl.formatMessage({
+        defaultMessage: isZh
+          ? `编辑快捷方式 ${shortcutName}`
+          : `Edit shortcut ${shortcutName}`,
+        id: 'edit_shortcut_named'
+      }),
+    [intl, isZh]
+  );
+  const getCommandRowEditProps = useCallback(
+    (item: CommandMenuItem) => {
+      if (!item.shortcut || !item.onEdit) {
+        return { onEdit: undefined, editAriaLabel: undefined };
+      }
 
-  // Load shortcuts and special commands
+      const shortcutName = item.shortcut.command || untitledLabel;
+      return {
+        onEdit: () => item.onEdit?.(item.shortcut as SavedPrompt),
+        editAriaLabel: getEditShortcutAriaLabel(shortcutName)
+      };
+    },
+    [getEditShortcutAriaLabel, untitledLabel]
+  );
+
   useEffect(() => {
     (async () => {
       try {
-        const { SavedPromptsService } = await import('../SavedPromptsService');
-        const { getSpecialCommands } = await import('./sessionPool');
-
         const allPrompts = await SavedPromptsService.getAllPrompts();
-
-        // Sort by usage count and creation date
         const sorted = allPrompts.sort((a, b) => {
-          if (a.usageCount !== b.usageCount) {
-            return b.usageCount - a.usageCount;
+          const usageA = a.usageCount ?? 0;
+          const usageB = b.usageCount ?? 0;
+
+          if (usageA !== usageB) {
+            return usageB - usageA;
           }
-          return b.createdAt - a.createdAt;
+
+          return (b.createdAt ?? 0) - (a.createdAt ?? 0);
         });
 
         setShortcuts(sorted);
@@ -65,238 +301,622 @@ export function ShortcutsMenu({
     })();
   }, [intl]);
 
-  // Filter shortcuts and special commands based on search term
-  const filteredSpecialCommands = specialCommands.filter((cmd) => {
-    if (!searchTerm) return true;
-    const term = searchTerm.toLowerCase();
-    return cmd.command.toLowerCase().includes(term) || cmd.description.toLowerCase().includes(term);
-  });
+  const specialCommandItems = useMemo<CommandMenuItem[]>(
+    () =>
+      specialCommands.map((cmd) => ({
+        key: `special-${cmd.command}`,
+        commandId: cmd.command,
+        icon: <SpecialCommandIcon command={cmd.command} />,
+        label: `/${cmd.label}`,
+        description: cmd.description,
+        onClick: () => onSelect(cmd.command, cmd.label),
+        searchTokens: [cmd.command, cmd.label, cmd.description, ...cmd.aliases].filter(Boolean)
+      })),
+    [specialCommands, onSelect]
+  );
 
-  const filteredShortcuts = shortcuts.filter((shortcut) => {
-    if (!searchTerm) return true;
-    const term = searchTerm.toLowerCase();
-    return (
-      shortcut.command?.toLowerCase().includes(term) ||
-      shortcut.prompt?.toLowerCase().includes(term)
+  const shortcutCommandItems = useMemo<CommandMenuItem[]>(
+    () =>
+      shortcuts.map((shortcut) => {
+        const commandLabel = shortcut.command || untitledLabel;
+
+        return {
+          key: `shortcut-${shortcut.id}`,
+          commandId: shortcut.command || '',
+          icon: <InlineSvgIcon svg={runShortcutSvg} className="inline-flex h-[15px] w-[15px] text-text-400" />,
+          label: `/${commandLabel}`,
+          onClick: () => {
+            if (shortcut.command) {
+              onSelect(shortcut.command, commandLabel);
+            }
+          },
+          onEdit: onEditShortcut,
+          shortcut,
+          searchTokens: [shortcut.command || '', shortcut.prompt || ''].filter(Boolean)
+        };
+      }),
+    [onEditShortcut, onSelect, shortcuts, untitledLabel]
+  );
+
+  const allCommandItems = useMemo(() => {
+    const allItems = [...specialCommandItems, ...shortcutCommandItems];
+
+    if (!normalizedSearchTerm) return allItems;
+
+    return allItems.filter((item) =>
+      item.searchTokens.some((token) => token.toLowerCase().includes(normalizedSearchTerm))
     );
+  }, [normalizedSearchTerm, shortcutCommandItems, specialCommandItems]);
+
+  const mainCommandItems = useMemo(
+    () =>
+      isSearching ? allCommandItems : allCommandItems.filter((item) => item.commandId === 'compact'),
+    [allCommandItems, isSearching]
+  );
+
+  const managedCommandItems = useMemo(
+    () => (isSearching ? [] : allCommandItems.filter((item) => item.commandId !== 'compact')),
+    [allCommandItems, isSearching]
+  );
+
+  const secondaryItems = useMemo<SecondaryMenuItem[]>(
+    () => [
+      {
+        key: 'record-workflow',
+        icon: <InlineSvgIcon svg={cursorAiSvg} className="inline-flex h-[15px] w-[15px] text-text-300" />,
+        label: intl.formatMessage({ defaultMessage: 'Record workflow', id: 'record_workflow' }),
+        onClick: onRecordWorkflow
+      },
+      {
+        key: 'schedule-task',
+        icon: <InlineSvgIcon svg={calendarSparkleSvg} className="inline-flex h-[15px] w-[15px] text-text-300" />,
+        label: intl.formatMessage({ defaultMessage: 'Schedule task', id: 'schedule_task' }),
+        onClick: onScheduleTask
+      }
+    ],
+    [intl, onRecordWorkflow, onScheduleTask]
+  );
+
+  const manageLabel = intl.formatMessage({
+    defaultMessage: isZh ? '管理快捷方式' : 'Manage shortcuts',
+    id: 'manage_shortcuts_palette'
+  });
+  const noCommandsLabel = intl.formatMessage({
+    defaultMessage: isZh
+      ? `没有匹配“${trimmedSearchTerm}”的命令`
+      : `No commands found for '${trimmedSearchTerm}'`,
+    id: 'no_commands_found_for'
   });
 
-  const totalItems = filteredSpecialCommands.length + filteredShortcuts.length + 2; // +2 for actions
+  const manageTriggerIndex = mainCommandItems.length;
+  const firstManageActionIndex = manageTriggerIndex + 1;
+  const submenuLogicalItems = useMemo(
+    () => [
+      ...secondaryItems.map((item, index) => ({
+        type: 'secondary' as const,
+        item,
+        logicalIndex: index
+      })),
+      ...managedCommandItems.map((item, index) => ({
+        type: 'managed' as const,
+        item,
+        logicalIndex: secondaryItems.length + index
+      }))
+    ],
+    [managedCommandItems, secondaryItems]
+  );
+  const submenuItemsCount = submenuLogicalItems.length;
+  const submenuVisualItems = useMemo(
+    () =>
+      submenuVerticalDirection === 'down'
+        ? submenuLogicalItems
+        : [...submenuLogicalItems].reverse(),
+    [submenuLogicalItems, submenuVerticalDirection]
+  );
+  const lastManageActionIndex = firstManageActionIndex + submenuItemsCount - 1;
+  const closeManageMenuAndResetSelection = useCallback(() => {
+    setIsManageMenuOpen(false);
+    setSelectedIndex(manageTriggerIndex);
+  }, [manageTriggerIndex]);
 
-  // Handle keyboard navigation
+  const rowVirtualizer = useVirtualizer({
+    count: mainCommandItems.length,
+    getScrollElement: () => commandScrollRef.current,
+    estimateSize: () => COMMAND_ROW_ESTIMATE_PX,
+    overscan: 12
+  });
+
+  const updateSubmenuLayout = useCallback(() => {
+    const anchor = submenuAnchorRef.current;
+    const palette = paletteRef.current;
+    if (!anchor) return;
+
+    const rect = anchor.getBoundingClientRect();
+    const vw = typeof window !== 'undefined' ? window.innerWidth : SUBMENU_MAX_WIDTH;
+
+    const paletteRect = palette?.getBoundingClientRect();
+    const clipRight = paletteRect?.right ?? vw;
+    const clipLeft = paletteRect?.left ?? 0;
+    const effectiveRight = Math.min(vw, clipRight) - VIEWPORT_PAD;
+    const effectiveLeft = Math.max(0, clipLeft) + VIEWPORT_PAD;
+
+    const roomRight = effectiveRight - rect.right - SUBMENU_GAP;
+    const roomLeft = rect.left - effectiveLeft - SUBMENU_GAP;
+
+    const preferRight = roomRight >= SUBMENU_MAX_WIDTH + SUBMENU_GAP || roomRight >= roomLeft;
+    setSubmenuSide(preferRight ? 'right' : 'left');
+
+    const cap = preferRight
+      ? Math.max(160, Math.min(SUBMENU_MAX_WIDTH, roomRight))
+      : Math.max(160, Math.min(SUBMENU_MAX_WIDTH, roomLeft));
+    setSubmenuMaxWidth(cap);
+
+    const estimatedRows = submenuItemsCount;
+    const hasDivider = managedCommandItems.length > 0 && secondaryItems.length > 0;
+    const estimatedHeight = Math.min(
+      SUBMENU_MAX_HEIGHT_PX,
+      estimatedRows * SUBMENU_ROW_ESTIMATE_PX +
+        (hasDivider ? SUBMENU_DIVIDER_ESTIMATE_PX : 0) +
+        SUBMENU_INNER_PAD_PX * 2
+    );
+    const actualHeight = submenuContentRef.current?.scrollHeight ?? estimatedHeight;
+    const desiredHeight = Math.min(SUBMENU_MAX_HEIGHT_PX, Math.max(actualHeight, estimatedHeight));
+
+    const maxAllowedBottom = window.innerHeight - VIEWPORT_PAD;
+    const maxAllowedTop = VIEWPORT_PAD;
+    const roomBelow = Math.max(0, maxAllowedBottom - rect.top);
+    const roomAbove = Math.max(0, rect.bottom - maxAllowedTop);
+    const preferDown = roomBelow >= desiredHeight;
+    const direction: 'down' | 'up' = preferDown ? 'down' : 'up';
+    setSubmenuVerticalDirection(direction);
+
+    const directionalRoom = direction === 'down' ? roomBelow : roomAbove;
+    const nextMaxHeight = Math.max(
+      120,
+      Math.min(SUBMENU_MAX_HEIGHT_PX, directionalRoom)
+    );
+    const renderHeight = Math.min(desiredHeight, nextMaxHeight);
+
+    let nextOffset = direction === 'down' ? 0 : rect.height - renderHeight;
+    let nextTop = rect.top + nextOffset;
+    let nextBottom = nextTop + renderHeight;
+
+    if (nextTop < maxAllowedTop) {
+      nextOffset += maxAllowedTop - nextTop;
+      nextTop = rect.top + nextOffset;
+      nextBottom = nextTop + renderHeight;
+    }
+    if (nextBottom > maxAllowedBottom) {
+      nextOffset -= nextBottom - maxAllowedBottom;
+    }
+
+    setSubmenuTopOffset(nextOffset);
+    setSubmenuMaxHeight(nextMaxHeight);
+
+    requestAnimationFrame(() => {
+      const firstLogicalRow = submenuRowRefs.current[0];
+      if (!firstLogicalRow?.isConnected) return;
+
+      const anchorRect = anchor.getBoundingClientRect();
+      const firstRowRect = firstLogicalRow.getBoundingClientRect();
+      const delta = anchorRect.top - firstRowRect.top;
+
+      if (Math.abs(delta) >= 1) {
+        setSubmenuTopOffset((prev) => prev + delta);
+      }
+    });
+  }, [managedCommandItems.length, secondaryItems.length, submenuItemsCount]);
+
+  useEffect(() => {
+    if (!isManageMenuOpen) return;
+
+    const handleScroll = (event: Event) => {
+      const target = event.target;
+      if (target instanceof Node && paletteRef.current?.contains(target)) {
+        return;
+      }
+      updateSubmenuLayout();
+    };
+
+    window.addEventListener('resize', updateSubmenuLayout);
+    window.addEventListener('scroll', handleScroll, true);
+
+    return () => {
+      window.removeEventListener('resize', updateSubmenuLayout);
+      window.removeEventListener('scroll', handleScroll, true);
+    };
+  }, [isManageMenuOpen, updateSubmenuLayout]);
+
+  useLayoutEffect(() => {
+    if (!isManageMenuOpen) return;
+    updateSubmenuLayout();
+  }, [isManageMenuOpen, updateSubmenuLayout]);
+
+  useLayoutEffect(() => {
+    if (pointerInteraction.current) return;
+    if (selectedIndex < 0 || selectedIndex >= mainCommandItems.length) return;
+    rowVirtualizer.scrollToIndex(selectedIndex, { align: 'auto' });
+  }, [selectedIndex, mainCommandItems.length, rowVirtualizer, searchTerm]);
+
+  useLayoutEffect(() => {
+    if (pointerInteraction.current) return;
+    if (selectedIndex === manageTriggerIndex) {
+      manageRowRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    } else if (selectedIndex >= firstManageActionIndex && selectedIndex <= lastManageActionIndex) {
+      const i = selectedIndex - firstManageActionIndex;
+      submenuRowRefs.current[i]?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
+  }, [
+    firstManageActionIndex,
+    lastManageActionIndex,
+    manageTriggerIndex,
+    selectedIndex,
+    isManageMenuOpen
+  ]);
+
+  useEffect(() => {
+    pointerInteraction.current = false;
+    setIsManageMenuOpen(false);
+    setSelectedIndex(mainCommandItems.length > 0 ? 0 : manageTriggerIndex);
+  }, [
+    mainCommandItems.length,
+    manageTriggerIndex,
+    isSearching,
+    searchTerm
+  ]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setSelectedIndex((prev) => Math.min(prev + 1, totalItems - 1));
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setSelectedIndex((prev) => Math.max(prev - 1, 0));
-      } else if (e.key === 'Enter') {
-        e.preventDefault();
-        const specialCommandsCount = filteredSpecialCommands.length;
-        const shortcutsCount = filteredShortcuts.length;
+      if (e.isComposing || e.key === 'Process') return;
 
-        if (selectedIndex < specialCommandsCount) {
-          // Select special command
-          const selected = filteredSpecialCommands[selectedIndex];
-          onSelect(selected.command);
-        } else if (selectedIndex < specialCommandsCount + shortcutsCount) {
-          // Select shortcut
-          const selected = filteredShortcuts[selectedIndex - specialCommandsCount];
-          onSelect(selected.command);
-        } else if (selectedIndex === specialCommandsCount + shortcutsCount) {
-          // Record workflow
-          onRecordWorkflow();
-        } else if (selectedIndex === specialCommandsCount + shortcutsCount + 1) {
-          // Schedule task
-          onScheduleTask();
+      const key = e.key;
+      const nMainCommands = mainCommandItems.length;
+
+      if (key === 'ArrowLeft' && !isManageMenuOpen) return;
+      if (key === 'ArrowRight' && selectedIndex !== manageTriggerIndex) return;
+
+      const paletteKeys = new Set([
+        'ArrowDown',
+        'ArrowUp',
+        'Enter',
+        'Escape',
+        'ArrowLeft',
+        'ArrowRight'
+      ]);
+      if (!paletteKeys.has(key)) return;
+
+      pointerInteraction.current = false;
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (key === 'Escape') {
+        if (isManageMenuOpen && selectedIndex >= firstManageActionIndex) {
+          // 在二级菜单中：返回"管理快捷方式"
+          setIsManageMenuOpen(false);
+          setSelectedIndex(manageTriggerIndex);
+          return;
         }
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
+        // 关闭整个菜单
         onClose();
+        return;
+      }
+
+      if (key === 'ArrowLeft') {
+        // 只有在二级菜单中才能返回
+        if (isManageMenuOpen && selectedIndex >= firstManageActionIndex) {
+          setIsManageMenuOpen(false);
+          setSelectedIndex(manageTriggerIndex);
+        }
+        return;
+      }
+
+      if (key === 'ArrowRight') {
+        // 只有在"管理快捷方式"上才能进入二级菜单
+        if (selectedIndex === manageTriggerIndex && submenuItemsCount > 0) {
+          setIsManageMenuOpen(true);
+          setSelectedIndex(firstManageActionIndex);
+        }
+        return;
+      }
+
+      if (key === 'ArrowDown') {
+        if (isManageMenuOpen && selectedIndex >= firstManageActionIndex && submenuItemsCount > 0) {
+          // 焦点在二级菜单中：循环移动
+          // 注意：当 submenuVerticalDirection === 'up' 时，视觉顺序是反的
+          const isReversed = submenuVerticalDirection === 'up';
+
+          if (isReversed) {
+            // 视觉向下 = 逻辑索引减小
+            if (selectedIndex > firstManageActionIndex) {
+              setSelectedIndex((p) => p - 1);
+            } else {
+              // 循环到最后一项
+              setSelectedIndex(lastManageActionIndex);
+            }
+          } else {
+            // 视觉向下 = 逻辑索引增加
+            if (selectedIndex < lastManageActionIndex) {
+              setSelectedIndex((p) => p + 1);
+            } else {
+              // 循环到第一项
+              setSelectedIndex(firstManageActionIndex);
+            }
+          }
+          return;
+        }
+        // 焦点在一级菜单中：向下移动
+        const nextIndex = selectedIndex < manageTriggerIndex ? selectedIndex + 1 : manageTriggerIndex;
+        setSelectedIndex(nextIndex);
+
+        // 如果移动到"管理快捷方式"，自动展示二级菜单
+        if (nextIndex === manageTriggerIndex && submenuItemsCount > 0) {
+          setIsManageMenuOpen(true);
+        }
+        return;
+      }
+
+      if (key === 'ArrowUp') {
+        if (isManageMenuOpen && selectedIndex >= firstManageActionIndex && submenuItemsCount > 0) {
+          // 焦点在二级菜单中：循环移动
+          // 注意：当 submenuVerticalDirection === 'up' 时，视觉顺序是反的
+          const isReversed = submenuVerticalDirection === 'up';
+
+          if (isReversed) {
+            // 视觉向上 = 逻辑索引增加
+            if (selectedIndex < lastManageActionIndex) {
+              setSelectedIndex((p) => p + 1);
+            } else {
+              // 循环到第一项
+              setSelectedIndex(firstManageActionIndex);
+            }
+          } else {
+            // 视觉向上 = 逻辑索引减小
+            if (selectedIndex > firstManageActionIndex) {
+              setSelectedIndex((p) => p - 1);
+            } else {
+              // 循环到最后一项
+              setSelectedIndex(lastManageActionIndex);
+            }
+          }
+          return;
+        }
+        // 焦点在一级菜单中：向上移动
+        const nextIndex = selectedIndex > 0 ? selectedIndex - 1 : 0;
+        setSelectedIndex(nextIndex);
+
+        // 如果离开"管理快捷方式"，关闭二级菜单
+        if (selectedIndex === manageTriggerIndex && nextIndex !== manageTriggerIndex) {
+          setIsManageMenuOpen(false);
+        }
+        // 如果移动到"管理快捷方式"，自动展示二级菜单
+        if (nextIndex === manageTriggerIndex && submenuItemsCount > 0) {
+          setIsManageMenuOpen(true);
+        }
+        return;
+      }
+
+      if (key === 'Enter') {
+        if (selectedIndex >= 0 && selectedIndex < nMainCommands) {
+          mainCommandItems[selectedIndex]?.onClick();
+          return;
+        }
+
+        if (selectedIndex === manageTriggerIndex) {
+          setIsManageMenuOpen(true);
+          if (submenuItemsCount > 0) {
+            setSelectedIndex(firstManageActionIndex);
+          }
+          return;
+        }
+
+        const submenuOffset = selectedIndex - firstManageActionIndex;
+        if (submenuOffset >= 0 && submenuOffset < submenuLogicalItems.length) {
+          const submenuItem = submenuLogicalItems[submenuOffset];
+          submenuItem?.item.onClick();
+        }
       }
     };
 
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
+    document.addEventListener('keydown', handleKeyDown, true);
+    return () => document.removeEventListener('keydown', handleKeyDown, true);
   }, [
+    mainCommandItems,
+    firstManageActionIndex,
+    isManageMenuOpen,
+    lastManageActionIndex,
+    manageTriggerIndex,
+    managedCommandItems,
+    onClose,
+    secondaryItems,
     selectedIndex,
-    filteredSpecialCommands,
-    filteredShortcuts,
-    totalItems,
-    onSelect,
-    onRecordWorkflow,
-    onScheduleTask,
-    onClose
+    submenuItemsCount,
+    submenuLogicalItems,
+    submenuVerticalDirection
   ]);
 
-  // Reset selected index when search term changes
-  useEffect(() => {
-    setSelectedIndex(0);
-  }, [searchTerm]);
-
-  if (filteredSpecialCommands.length === 0 && filteredShortcuts.length === 0 && !searchTerm) {
-    return null;
-  }
+  const scrollChrome =
+    'u-hidden-scrollbar min-h-[46px] flex-1 overflow-y-auto overflow-x-hidden pb-1';
 
   return (
-    <div className="absolute bottom-full left-0 right-0 mb-2 bg-bg-000 border border-border-300 rounded-xl shadow-xl max-h-[400px] overflow-y-auto z-50">
-      {/* Header */}
-      <div className="px-4 py-3 border-b border-border-300">
-        <h3 className="text-sm font-medium text-text-200">
-          <FormattedMessage defaultMessage="Shortcuts" id="shortcuts" />
-        </h3>
-      </div>
-
-      {/* Special commands */}
-      {filteredSpecialCommands.length > 0 && (
-        <div className="py-2">
-          {filteredSpecialCommands.map((cmd, index) => (
-            <button
-              key={cmd.command}
-              onClick={() => onSelect(cmd.command)}
-              onMouseEnter={() => setSelectedIndex(index)}
-              className={`w-full px-4 py-2 text-left hover:bg-bg-200 transition-colors ${
-                selectedIndex === index ? 'bg-bg-200' : ''
-              }`}
+    <div
+      ref={paletteRef}
+      className={`absolute bottom-full left-0 z-50 mb-2.5 w-[min(18rem,calc(100vw-2.5rem))] max-w-full overflow-visible ${PALETTE_SURFACE}`}
+    >
+      <div
+        role="menu"
+        aria-label={intl.formatMessage({
+            defaultMessage: isZh ? '命令面板' : 'Command palette',
+          id: 'command_palette'
+        })}
+        className="flex max-h-[min(26rem,calc(100vh-8rem))] flex-col p-1.5"
+      >
+        <div ref={commandScrollRef} className={`${scrollChrome} rounded-[10px]`}>
+          {mainCommandItems.length > 0 ? (
+            <div
+              className="flex flex-col gap-1"
+              style={{
+                height: `${rowVirtualizer.getTotalSize()}px`,
+                position: 'relative',
+                width: '100%'
+              }}
             >
-              <div className="flex items-center gap-3">
-                <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-bg-300 flex items-center justify-center">
-                  <Slash size={16} className="text-text-300" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-text-100 truncate">/{cmd.command}</div>
-                  <div className="text-xs text-text-300 truncate">{cmd.description}</div>
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
-      )}
+              {rowVirtualizer.getVirtualItems().map((vi) => {
+                const item = mainCommandItems[vi.index];
+                const { onEdit, editAriaLabel } = getCommandRowEditProps(item);
 
-      {/* Separator between special commands and shortcuts */}
-      {filteredSpecialCommands.length > 0 && filteredShortcuts.length > 0 && (
-        <div className="border-t border-border-300" />
-      )}
-
-      {/* Shortcuts list */}
-      {filteredShortcuts.length > 0 && (
-        <div className="py-2">
-          {filteredShortcuts.map((shortcut, index) => {
-            const itemIndex = filteredSpecialCommands.length + index;
-            return (
-              <div
-                key={shortcut.id}
-                onMouseEnter={() => setSelectedIndex(itemIndex)}
-                className={`group flex items-center gap-1 px-2.5 py-2 rounded-lg transition-colors hover:bg-bg-200 ${
-                  selectedIndex === itemIndex ? 'bg-bg-200' : ''
-                }`}
-              >
-                <button
-                  onClick={() => onSelect(shortcut.command)}
-                  className={`flex-1 min-w-0 text-left flex items-center gap-2 hover:text-text-000 ${
-                    selectedIndex === itemIndex ? 'text-text-000' : 'text-text-300'
-                  }`}
-                >
-                  <div className="w-5 h-5 flex items-center justify-center flex-shrink-0">
-                    <span className="text-text-500/50 font-mono text-sm">/</span>
-                  </div>
-                  <span className="flex-1 truncate text-sm">
-                    {shortcut.command || untitledLabel}
-                  </span>
-                </button>
-                {onEditShortcut && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onEditShortcut(shortcut);
-                    }}
-                    className={`p-1 rounded transition-all hover:bg-bg-300 ${
-                      selectedIndex === itemIndex
-                        ? 'opacity-100'
-                        : 'opacity-0 group-hover:opacity-100'
-                    }`}
-                    aria-label={intl.formatMessage(
-                      { defaultMessage: 'Edit {name}', id: 'edit' },
-                      { name: shortcut.command || untitledLabel }
-                    )}
+                return (
+                  <div
+                    key={item.key}
+                    id={`palette-cmd-${item.key}`}
+                    className="absolute left-0 top-0 w-full"
+                    style={{ transform: `translateY(${vi.start}px)` }}
                   >
-                    <Pencil size={12} className="text-text-400" />
-                  </button>
-                )}
-              </div>
-            );
-          })}
+                    <CommandRow
+                      icon={item.icon}
+                      label={item.label}
+                      description={item.description}
+                      selected={selectedIndex === vi.index}
+                      onClick={item.onClick}
+                      onMouseEnter={() => {
+                        pointerInteraction.current = true;
+                        setSelectedIndex(vi.index);
+                      }}
+                      onEdit={onEdit}
+                      editAriaLabel={editAriaLabel}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="rounded-[10px] px-2 py-2 text-[11px] text-text-300">
+              {managedCommandItems.length > 0
+                ? intl.formatMessage({
+                    defaultMessage: isZh
+                      ? '命令已收纳到“管理快捷方式”'
+                      : 'Commands are inside Manage shortcuts',
+                    id: 'commands_inside_manage_shortcuts'
+                  })
+                : noCommandsLabel}
+            </div>
+          )}
         </div>
-      )}
 
-      {/* Separator */}
-      {(filteredSpecialCommands.length > 0 || filteredShortcuts.length > 0) && (
-        <div className="border-t border-border-300" />
-      )}
+        <div className="mx-1 h-px rounded-full bg-border-300/40" />
 
-      {/* Actions */}
-      <div className="py-2">
-        <button
-          onClick={onRecordWorkflow}
-          onMouseEnter={() =>
-            setSelectedIndex(filteredSpecialCommands.length + filteredShortcuts.length)
-          }
-          className={`w-full px-4 py-2 text-left hover:bg-bg-200 transition-colors ${
-            selectedIndex === filteredSpecialCommands.length + filteredShortcuts.length
-              ? 'bg-bg-200'
-              : ''
-          }`}
+        <div
+          ref={submenuAnchorRef}
+          className="relative mt-0.5"
+          onMouseEnter={() => {
+            setSelectedIndex(manageTriggerIndex);
+            setIsManageMenuOpen(true);
+          }}
+          onMouseLeave={closeManageMenuAndResetSelection}
         >
-          <div className="flex items-center gap-3">
-            <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-bg-300 flex items-center justify-center">
-              <Workflow size={16} className="text-text-300" />
-            </div>
-            <div className="flex-1">
-              <div className="text-sm font-medium text-text-100">
-                <FormattedMessage defaultMessage="Record workflow" id="record_workflow" />
-              </div>
-            </div>
-          </div>
-        </button>
-
-        <button
-          onClick={onScheduleTask}
-          onMouseEnter={() =>
-            setSelectedIndex(filteredSpecialCommands.length + filteredShortcuts.length + 1)
-          }
-          className={`w-full px-4 py-2 text-left hover:bg-bg-200 transition-colors ${
-            selectedIndex === filteredSpecialCommands.length + filteredShortcuts.length + 1
-              ? 'bg-bg-200'
-              : ''
-          }`}
-        >
-          <div className="flex items-center gap-3">
-            <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-bg-300 flex items-center justify-center">
-              <Calendar size={16} className="text-text-300" />
-            </div>
-            <div className="flex-1">
-              <div className="text-sm font-medium text-text-100">
-                <FormattedMessage defaultMessage="Schedule task" id="schedule_task" />
-              </div>
-            </div>
-          </div>
-        </button>
-      </div>
-
-      {/* Empty state */}
-      {filteredSpecialCommands.length === 0 && filteredShortcuts.length === 0 && searchTerm && (
-        <div className="px-4 py-8 text-center">
-          <p className="text-sm text-text-300">
-            <FormattedMessage
-              defaultMessage="No shortcuts found for '{searchTerm}'"
-              id="no_shortcuts_found_for"
-              values={{ searchTerm }}
+          <div ref={manageRowRef}>
+            <SecondaryMenuRow
+              id="palette-manage"
+              icon={<InlineSvgIcon svg={settingsSliderSvg} className="inline-flex h-[15px] w-[15px] text-text-300" />}
+              label={manageLabel}
+              selected={
+                selectedIndex === manageTriggerIndex || selectedIndex >= firstManageActionIndex
+              }
+              onClick={() => {
+                setIsManageMenuOpen(true);
+                if (submenuItemsCount > 0) {
+                  setSelectedIndex(firstManageActionIndex);
+                }
+              }}
+              onMouseEnter={() => {
+                pointerInteraction.current = true;
+                setSelectedIndex(manageTriggerIndex);
+              }}
+              trailing={
+                <ChevronRight
+                  size={13}
+                  className={`transition-transform ${submenuSide === 'left' ? 'rotate-180' : ''}`}
+                />
+              }
+              ariaHaspopup="menu"
+              ariaExpanded={isManageMenuOpen}
             />
-          </p>
+          </div>
+
+          {isManageMenuOpen ? (
+            <div
+              role="menu"
+              aria-label={manageLabel}
+              className={`absolute top-0 z-10 overflow-hidden ${PALETTE_SURFACE} ${
+                submenuSide === 'right' ? 'left-full ml-2' : 'right-full mr-2'
+              }`}
+              style={{
+                top: `${submenuTopOffset}px`,
+                width: 'min(100%, max-content)',
+                maxWidth: `min(${Math.max(submenuMaxWidth, 240)}px, calc(100vw - ${VIEWPORT_PAD * 2}px))`
+              }}
+              onMouseLeave={closeManageMenuAndResetSelection}
+            >
+              <div
+                ref={submenuContentRef}
+                className={`p-1.5 u-hidden-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden rounded-[10px]`}
+                style={{ maxHeight: `${submenuMaxHeight}px` }}
+              >
+                <div className="flex flex-col gap-1">
+                  {submenuVisualItems.map((submenuItem, visualIndex) => {
+                    const prev = visualIndex > 0 ? submenuVisualItems[visualIndex - 1] : null;
+                    const showDivider = !!prev && prev.type !== submenuItem.type;
+                    const menuIndex = firstManageActionIndex + submenuItem.logicalIndex;
+
+                    return (
+                      <React.Fragment key={`submenu-${submenuItem.item.key}`}>
+                        {showDivider ? <div className="mx-1 my-1 border-t border-border-300/70" /> : null}
+                        {submenuItem.type === 'managed' ? (() => {
+                          const item = submenuItem.item;
+                          const { onEdit, editAriaLabel } = getCommandRowEditProps(item);
+
+                          return (
+                            <CommandRow
+                              rowRef={(el) => {
+                                submenuRowRefs.current[submenuItem.logicalIndex] = el;
+                              }}
+                              icon={item.icon}
+                              label={item.label}
+                              description={item.description}
+                              selected={selectedIndex === menuIndex}
+                              onClick={item.onClick}
+                              onMouseEnter={() => {
+                                pointerInteraction.current = true;
+                                setSelectedIndex(menuIndex);
+                              }}
+                              onEdit={onEdit}
+                              editAriaLabel={editAriaLabel}
+                            />
+                          );
+                        })() : (
+                          <SecondaryMenuRow
+                            id={`palette-sub-${submenuItem.item.key}`}
+                            rowRef={(el) => {
+                              submenuRowRefs.current[submenuItem.logicalIndex] = el;
+                            }}
+                            icon={submenuItem.item.icon}
+                            label={submenuItem.item.label}
+                            selected={selectedIndex === menuIndex}
+                            onClick={submenuItem.item.onClick}
+                            onMouseEnter={() => {
+                              pointerInteraction.current = true;
+                              setSelectedIndex(menuIndex);
+                            }}
+                          />
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          ) : null}
         </div>
-      )}
+      </div>
     </div>
   );
 }

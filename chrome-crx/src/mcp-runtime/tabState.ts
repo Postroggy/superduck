@@ -1449,7 +1449,7 @@ class TabGroupManager {
               messageType = 'SHOW_AFTER_TOOL_USE';
               break;
             case 'static':
-              messageType = 'SHOW_STATIC_INDICATOR';
+              messageType = 'SHOW_AFTER_TOOL_USE';
               break;
             case 'none':
               return;

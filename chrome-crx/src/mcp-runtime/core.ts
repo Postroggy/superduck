@@ -567,7 +567,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 const tabsContextMcpTool: ToolDefinition = {
   name: 'tabs_context_mcp',
   description:
-    'Get context information about the current MCP tab group. Returns all tab IDs inside the group if it exists. CRITICAL: You must get the context at least once before using other browser automation tools so you know what tabs exist. Each new conversation should create its own new tab (using tabs_create) rather than reusing existing tabs, unless the user explicitly asks to use an existing tab.',
+    'Get context information about the current MCP tab group. Returns all tab IDs inside the group if it exists. CRITICAL: You must get the context at least once before using other browser automation tools so you know what tabs exist. IMPORTANT: Always reuse existing tabs for navigation. Only create a new tab (using tabs_create_mcp) when the user explicitly requests opening a new tab or when you need to keep multiple pages open simultaneously.',
   parameters: {
     createIfEmpty: {
       type: 'boolean',
@@ -601,7 +601,7 @@ const tabsContextMcpTool: ToolDefinition = {
   toAnthropicSchema: async () => ({
     name: 'tabs_context_mcp',
     description:
-      'Get context information about the current MCP tab group. Returns all tab IDs inside the group if it exists. CRITICAL: You must get the context at least once before using other browser automation tools so you know what tabs exist. Each new conversation should create its own new tab (using tabs_create) rather than reusing existing tabs, unless the user explicitly asks to use an existing tab.',
+      'Get context information about the current MCP tab group. Returns all tab IDs inside the group if it exists. CRITICAL: You must get the context at least once before using other browser automation tools so you know what tabs exist. IMPORTANT: Always reuse existing tabs for navigation. Only create a new tab (using tabs_create_mcp) when the user explicitly requests opening a new tab or when you need to keep multiple pages open simultaneously.',
     input_schema: {
       type: 'object',
       properties: {
@@ -618,7 +618,7 @@ const tabsContextMcpTool: ToolDefinition = {
 
 const tabsCreateMcpTool: ToolDefinition = {
   name: 'tabs_create_mcp',
-  description: 'Creates a new empty tab in the MCP tab group.',
+  description: 'Creates a new empty tab in the MCP tab group. IMPORTANT: Only use this when the user explicitly asks to open a new tab, or when you need to keep multiple pages open at the same time. For simple navigation tasks, reuse existing tabs with the navigate tool instead.',
   parameters: {},
   execute: async () => {
     try {
@@ -663,7 +663,7 @@ const tabsCreateMcpTool: ToolDefinition = {
   },
   toAnthropicSchema: async () => ({
     name: 'tabs_create_mcp',
-    description: 'Creates a new empty tab in the MCP tab group.',
+    description: 'Creates a new empty tab in the MCP tab group. IMPORTANT: Only use this when the user explicitly asks to open a new tab, or when you need to keep multiple pages open at the same time. For simple navigation tasks, reuse existing tabs with the navigate tool instead.',
     input_schema: { type: 'object', properties: {}, required: [] }
   })
 };

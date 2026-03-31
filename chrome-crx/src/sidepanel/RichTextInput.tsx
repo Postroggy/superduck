@@ -50,13 +50,15 @@ const ShortcutChip = Node.create({
   },
 
   renderHTML({ HTMLAttributes }) {
+    const displayLabel =
+      HTMLAttributes['data-label'] || HTMLAttributes.label || HTMLAttributes['data-command'];
     return [
       'span',
       mergeAttributes(HTMLAttributes, {
         'data-type': 'shortcut-chip',
         class: 'shortcut-chip'
       }),
-      `/${HTMLAttributes['data-command']}`
+      `/${displayLabel}`
     ];
   },
 
@@ -67,7 +69,7 @@ const ShortcutChip = Node.create({
       dom.setAttribute('data-command', node.attrs.command);
       dom.setAttribute('data-label', node.attrs.label || node.attrs.command);
       dom.className = 'shortcut-chip';
-      dom.textContent = `/${node.attrs.command}`;
+      dom.textContent = `/${node.attrs.label || node.attrs.command}`;
       return { dom };
     };
   }

@@ -94,6 +94,8 @@ import {
   generateConversationTitle as generateConversationTitleFunction,
   generateQuote,
   generateDailySummary,
+  generateShortcutName,
+  resolveSpecialCommand,
   parseModelTag,
   getBaseModel
 } from './sessionPool';
@@ -8077,9 +8079,13 @@ export function SidepanelApp() {
       }
 
       // --- System command interception (matching compiled zs/Rs) ---
-      // Check for /compact and /share BEFORE entering the normal message flow.
-      const systemCommand =
-        trimmed === '/compact' ? 'compact' : trimmed === '/share' ? 'share' : null;
+      // Check special slash commands BEFORE entering the normal message flow.
+      const slashCommand = trimmed.startsWith('/') ? trimmed.slice(1) : '';
+      const matchedSpecialCommand =
+        slashCommand && !slashCommand.includes(' ')
+          ? resolveSpecialCommand(slashCommand, intl)
+          : undefined;
+      const systemCommand = matchedSpecialCommand?.command ?? (trimmed === '/share' ? 'share' : null);
 
       if (systemCommand === 'compact') {
         // Manual compaction: compact conversation and return without sending a message
@@ -8629,6 +8635,7 @@ export function SidepanelApp() {
       sendCompletionNotification,
       systemPrompt,
       toolSchemas,
+      intl,
       updateLastAssistantMessage,
       flushStreamingText
     ]
@@ -10525,7 +10532,7 @@ export function SidepanelApp() {
                                 <div ref={commandMenuRef}>
                                   <ShortcutsMenu
                                     searchTerm={commandSearchTerm}
-                                    onSelect={async (command) => {
+                                    onSelect={async (command, label) => {
                                       // Close menu first to prevent reopening
                                       setShowCommandMenu(false);
                                       setCommandSearchTerm('');
@@ -10559,7 +10566,7 @@ export function SidepanelApp() {
                                       inputRef.current?.clear();
                                       inputRef.current?.insertShortcut(
                                         command,
-                                        savedPrompt?.name || command
+                                        savedPrompt?.name || label || command
                                       );
                                       inputRef.current?.focus();
                                     }}
@@ -11044,7 +11051,6 @@ export function SidepanelApp() {
           onDelete={() => setPromptToEdit(null)}
           generateName={async (prompt) => {
             try {
-              const { generateShortcutName } = await import('./sessionPool');
               return await generateShortcutName(
                 prompt,
                 (params) => createAnthropicMessage(params),

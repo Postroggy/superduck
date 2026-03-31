@@ -4,7 +4,7 @@ import { useSpeechRecognition } from './useSpeechRecognition';
 import { useScreenCapture } from './useScreenCapture';
 import { useTabStatusListener } from './useTabStatusListener';
 import { elementSelectorInjector, isValidUrl } from './elementSelectorInjector';
-import type { ModelInvoker } from './sessionPool';
+import { generateWorkflowStepDescription, type ModelInvoker } from './sessionPool';
 
 // Extend Window interface for Speech Recognition
 declare global {
@@ -622,7 +622,6 @@ export const useWorkflowRecording = ({
             chrome.tabs.get(eventTabId).then(async (tab) => {
               const pageTitle = tab.title || '';
               try {
-                const { generateWorkflowStepDescription } = await import('./sessionPool');
                 const enhancedDescription = await generateWorkflowStepDescription(
                   {
                     tagName: event.element.tagName,
