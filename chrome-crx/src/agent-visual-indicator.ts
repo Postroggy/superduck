@@ -53,6 +53,27 @@
   let isMcpEnabled = false;
   let savedOverflowHtml = "";
   let savedOverflowBody = "";
+  let isPageScrollLocked = false;
+
+  function lockPageScroll(): void {
+    if (isPageScrollLocked) return;
+
+    savedOverflowHtml = document.documentElement.style.overflow;
+    savedOverflowBody = document.body.style.overflow;
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+    isPageScrollLocked = true;
+  }
+
+  function unlockPageScroll(): void {
+    if (!isPageScrollLocked) return;
+
+    document.documentElement.style.overflow = savedOverflowHtml;
+    document.body.style.overflow = savedOverflowBody;
+    savedOverflowHtml = "";
+    savedOverflowBody = "";
+    isPageScrollLocked = false;
+  }
 
   // ============================================
   // Styles
@@ -682,11 +703,7 @@
       document.body.appendChild(blockingOverlayEl);
     }
 
-    // Disable scrollbar by hiding overflow
-    savedOverflowHtml = document.documentElement.style.overflow;
-    savedOverflowBody = document.body.style.overflow;
-    document.documentElement.style.overflow = "hidden";
-    document.body.style.overflow = "hidden";
+    lockPageScroll();
 
     // Create/show stop button (only if MCP is enabled)
     if (isMcpEnabled) {
@@ -738,9 +755,7 @@
       blockingOverlayEl.style.opacity = "0";
     }
 
-    // Restore scrollbar
-    document.documentElement.style.overflow = savedOverflowHtml;
-    document.body.style.overflow = savedOverflowBody;
+    unlockPageScroll();
 
     if (stopContainerEl) {
       stopContainerEl.style.opacity = "0";
