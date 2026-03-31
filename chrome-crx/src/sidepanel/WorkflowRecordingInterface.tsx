@@ -153,7 +153,10 @@ export function WorkflowRecordingInterface({
     if (currentInterimTranscript && currentInterimTranscript.trim()) {
       const narrationStep: WorkflowStep = {
         action: 'narration',
-        description: `Note: "${currentInterimTranscript}"`,
+        description: intl.formatMessage(
+          { id: 'workflow_note', defaultMessage: 'Note: "{text}"' },
+          { text: currentInterimTranscript }
+        ),
         speechTranscript: currentInterimTranscript,
         timestamp: Date.now(),
         url: ''
