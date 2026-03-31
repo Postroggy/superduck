@@ -90,7 +90,13 @@ import {
   cdpDebugger
 } from '../mcpPermissions';
 import { Anthropic } from '../mcpServersStore';
-import { parseModelTag, getBaseModel } from './sessionPool';
+import {
+  generateConversationTitle as generateConversationTitleFunction,
+  generateQuote,
+  generateDailySummary,
+  parseModelTag,
+  getBaseModel
+} from './sessionPool';
 import { useAnalytics, getModelsConfig, AnalyticsContext } from '../components/SchedulingFields';
 import { mapModelName, loadModelMapping, MODEL_MAPPING_KEYS, getMappedModelName } from '../utils/modelMapping';
 import { EmptyState } from './EmptyState';
@@ -1716,6 +1722,7 @@ const TimelineGroup = React.memo(function TimelineGroup({
   autoCollapse?: boolean;
   isTurnComplete?: boolean;
 }) {
+  const intl = useIntlSafe();
   const [showCollapsed, setShowCollapsed] = useState(false);
   const items = React.Children.toArray(children);
   const count = items.length;
@@ -1764,8 +1771,8 @@ const TimelineGroup = React.memo(function TimelineGroup({
                     className="px-3 py-2 w-full text-left text-sm text-text-300"
                   >
                     {showCollapsed
-                      ? 'Hide steps'
-                      : `${collapsedCount} step${collapsedCount === 1 ? '' : 's'}`}
+                      ? intl.formatMessage({ id: 'hide_steps', defaultMessage: 'Hide steps' })
+                      : formatStepCountLabel(intl.formatMessage.bind(intl), collapsedCount)}
                   </button>
                 }
               />
@@ -1824,6 +1831,80 @@ function ShimmerText({ children }: { children: React.ReactNode }) {
   );
 }
 
+type FormatMessageLike = (
+  descriptor: { id: string; defaultMessage: string },
+  values?: Record<string, any>
+) => string;
+
+function formatWithFallback(
+  formatMessage: FormatMessageLike | undefined,
+  descriptor: { id: string; defaultMessage: string },
+  values?: Record<string, any>
+): string {
+  if (formatMessage) {
+    return formatMessage(descriptor, values);
+  }
+
+  return descriptor.defaultMessage.replace(/\{(\w+)\}/g, (_, key) => String(values?.[key] ?? ''));
+}
+
+function formatStepCountLabel(
+  formatMessage: FormatMessageLike | undefined,
+  count: number
+): string {
+  if (!formatMessage) {
+    return `${count} step${count === 1 ? '' : 's'}`;
+  }
+
+  return formatMessage(
+    {
+      id: 'tool_step_count',
+      defaultMessage: '{count, plural, one {# step} other {# steps}}'
+    },
+    { count }
+  );
+}
+
+function stripTrailingEllipsis(text: string): string {
+  return text.replace(/\s*(?:\.\.\.|…)\s*$/, '');
+}
+
+function ThinkingDots() {
+  return (
+    <span className="ml-1 inline-flex items-end align-middle text-[1.05em] leading-none" aria-hidden="true">
+      {[0, 1, 2].map((index) => (
+        <motion.span
+          key={index}
+          className="inline-block min-w-[0.18em] text-current"
+          initial={{ opacity: 0.28, y: 0 }}
+          animate={{
+            opacity: [0.28, 1, 0.28],
+            y: [0, -1.5, 0]
+          }}
+          transition={{
+            duration: 0.95,
+            repeat: Infinity,
+            ease: 'easeInOut',
+            delay: index * 0.14
+          }}
+        >
+          .
+        </motion.span>
+      ))}
+    </span>
+  );
+}
+
+function getStatusSummaryLanguageInstruction(locale: SupportedLocale): string {
+  switch (locale) {
+    case 'zh-CN':
+      return 'Return the status in Simplified Chinese.';
+    case 'en-US':
+    default:
+      return 'Return the status in English.';
+  }
+}
+
 /** Get display name for a tool — bundle's name resolution logic (title-case fallback) */
 function getToolDisplayName(toolName: string): string {
   // Extract base name from MCP-style names like mcp__uuid__toolName
@@ -1847,148 +1928,169 @@ function getToolDisplayInfo(
   toolName: string,
   input?: any,
   toolResult?: any,
-  formatMessage?: (descriptor: { id: string; defaultMessage: string }) => string
+  formatMessage?: FormatMessageLike
 ): { text: string; icon: string } {
   const parts = toolName.split('__');
   const baseName = parts.length >= 3 ? parts[2] : toolName;
   const o = input ?? {};
+  const t = (id: string, defaultMessage: string, values?: Record<string, any>) =>
+    formatWithFallback(formatMessage, { id, defaultMessage }, values);
 
   // Computer tool — 13 action-specific displays
   if (baseName === 'computer') {
     const action = o.action;
     switch (action) {
       case 'screenshot':
-        return { text: 'Take screenshot', icon: 'camera' };
+        return { text: t('take_screenshot', 'Take screenshot'), icon: 'camera' };
       case 'left_click':
-        return { text: 'Click', icon: 'click' };
+        return { text: t('click', 'Click'), icon: 'click' };
       case 'right_click':
-        return { text: 'Right-click', icon: 'click' };
+        return { text: t('right_click', 'Right-click'), icon: 'click' };
       case 'double_click':
-        return { text: 'Double-click', icon: 'click' };
+        return { text: t('double_click', 'Double-click'), icon: 'click' };
       case 'triple_click':
-        return { text: 'Triple-click', icon: 'click' };
+        return { text: t('tripleclick', 'Triple-click'), icon: 'click' };
       case 'type': {
         const text = o.text;
         if (text) {
           const preview = text.length > 30 ? `${text.slice(0, 30)}...` : text;
-          return { text: `Type: "${preview}"`, icon: 'keyboard' };
+          return { text: t('type', 'Type: "{text}"', { text: preview }), icon: 'keyboard' };
         }
-        return { text: 'Type text', icon: 'keyboard' };
+        return { text: t('type_text', 'Type text'), icon: 'keyboard' };
       }
       case 'wait': {
         const duration = o.duration;
         if (duration) {
           return {
-            text: `Wait ${duration} ${duration === 1 ? 'second' : 'seconds'}`,
+            text: t('wait_duration', 'Wait {duration} seconds', { duration }),
             icon: 'timer'
           };
         }
-        return { text: 'Wait', icon: 'timer' };
+        return { text: t('wait', 'Wait'), icon: 'timer' };
       }
       case 'scroll': {
         const dir = o.scroll_direction;
-        if (dir === 'up') return { text: 'Scroll up', icon: 'scroll-up' };
-        if (dir === 'left') return { text: 'Scroll left', icon: 'scroll-left' };
-        if (dir === 'right') return { text: 'Scroll right', icon: 'scroll-right' };
-        return { text: 'Scroll down', icon: 'scroll-down' };
+        if (dir === 'up') return { text: t('scroll_up', 'Scroll up'), icon: 'scroll-up' };
+        if (dir === 'left') return { text: t('scroll_left', 'Scroll left'), icon: 'scroll-left' };
+        if (dir === 'right')
+          return { text: t('scroll_right', 'Scroll right'), icon: 'scroll-right' };
+        return { text: t('scroll_down', 'Scroll down'), icon: 'scroll-down' };
       }
       case 'key': {
         const keys = o.text;
         return {
-          text: keys ? `Press key: ${keys}` : 'Press key',
+          text: keys
+            ? t('press_key', 'Press key: {keys}', { keys })
+            : t('press_key_label', 'Press key'),
           icon: 'keyboard'
         };
       }
       case 'left_click_drag':
-        return { text: 'Drag', icon: 'drag' };
+        return { text: t('drag', 'Drag'), icon: 'drag' };
       case 'zoom':
-        return { text: 'Zoom', icon: 'zoom' };
+        return { text: t('zoom', 'Zoom'), icon: 'zoom' };
       case 'hover':
-        return { text: 'Hover', icon: 'computer' };
+        return { text: t('hover', 'Hover'), icon: 'computer' };
       case 'scroll_to':
-        return { text: 'Scroll to element', icon: 'scroll-down' };
+        return { text: t('scroll_to_element', 'Scroll to element'), icon: 'scroll-down' };
       default:
-        return { text: `Computer action: ${action || 'Unknown'}`, icon: 'computer' };
+        return {
+          text: t('computer_action_unknown', 'Computer action: {action}', {
+            action: action || 'Unknown'
+          }),
+          icon: 'computer'
+        };
     }
   }
 
   // Browser & other tools
   switch (baseName) {
     case 'screenshot':
-      return { text: 'Take screenshot', icon: 'camera' };
+      return { text: t('take_screenshot', 'Take screenshot'), icon: 'camera' };
     case 'read_page': {
       const filter = o.filter;
-      const base = 'Read page';
-      return { text: filter ? `${base} (${filter})` : base, icon: 'eye' };
+      if (filter === 'interactive') {
+        return { text: t('read_page_interactive', 'Read page (interactive)'), icon: 'eye' };
+      }
+      if (filter === 'all') {
+        return { text: t('read_page_all', 'Read page (all)'), icon: 'eye' };
+      }
+      return { text: t('read_page', 'Read page'), icon: 'eye' };
     }
     case 'find': {
       const query = o.query;
       if (query) {
         const preview = query.length > 30 ? `${query.slice(0, 30)}...` : query;
-        return { text: `Find: "${preview}"`, icon: 'search' };
+        return { text: t('find', 'Find: "{query}"', { query: preview }), icon: 'search' };
       }
-      return { text: 'Find element', icon: 'search' };
+      return { text: t('find_element', 'Find element'), icon: 'search' };
     }
     case 'get_page_text':
-      return { text: 'Extract page text', icon: 'eye' };
+      return { text: t('extract_page_text', 'Extract page text'), icon: 'eye' };
     case 'form_input': {
       const value = o.value;
       if (value) {
         const preview = String(value).length > 20 ? `${String(value).slice(0, 20)}...` : value;
-        return { text: `Set input to "${preview}"`, icon: 'form' };
+        return {
+          text: t('set_input_to', 'Set input to "{value}"', { value: preview }),
+          icon: 'form'
+        };
       }
-      return { text: 'Set form value', icon: 'form' };
+      return { text: t('set_form_value', 'Set form value'), icon: 'form' };
     }
     case 'click': {
       const target = o.text;
       if (target) {
         const preview = target.length > 30 ? `${target.slice(0, 30)}...` : target;
-        return { text: `Click: "${preview}"`, icon: 'click' };
+        return {
+          text: t('click_with_target', 'Click: "{target}"', { target: preview }),
+          icon: 'click'
+        };
       }
-      return { text: 'Click', icon: 'click' };
+      return { text: t('click', 'Click'), icon: 'click' };
     }
     case 'navigate': {
       const url = o.url;
       const preview = url ? (url.length > 30 ? `${url.slice(0, 30)}...` : url) : '';
-      return { text: `Navigate to ${preview}`, icon: 'navigate' };
+      return { text: t('navigate_to', 'Navigate to {url}', { url: preview }), icon: 'navigate' };
     }
     case 'type': {
       const text = o.text;
       if (text) {
         const preview = text.length > 30 ? `${text.slice(0, 30)}...` : text;
-        return { text: `Type: "${preview}"`, icon: 'keyboard' };
+        return { text: t('type', 'Type: "{text}"', { text: preview }), icon: 'keyboard' };
       }
-      return { text: 'Type text', icon: 'keyboard' };
+      return { text: t('type_text', 'Type text'), icon: 'keyboard' };
     }
     case 'wait': {
       const duration = o.duration;
       if (duration) {
         return {
-          text: `Wait ${duration} ${duration === 1 ? 'second' : 'seconds'}`,
+          text: t('wait_duration', 'Wait {duration} seconds', { duration }),
           icon: 'timer'
         };
       }
-      return { text: 'Wait', icon: 'timer' };
+      return { text: t('wait', 'Wait'), icon: 'timer' };
     }
     case 'tabs_create':
-      return { text: 'Create new tab', icon: 'tabs' };
+      return { text: t('create_new_tab', 'Create new tab'), icon: 'tabs' };
     case 'tabs_context':
     case 'tabs_context_mcp':
-      return { text: 'Get tabs', icon: 'tabs' };
+      return { text: t('get_tabs', 'Get tabs'), icon: 'tabs' };
     case 'upload_image':
-      return { text: 'Upload image', icon: 'upload' };
+      return { text: t('upload_image', 'Upload image'), icon: 'upload' };
     case 'javascript_tool':
     case 'execute_js':
     case 'execute_javascript':
-      return { text: 'Execute JavaScript', icon: 'code' };
+      return { text: t('execute_javascript', 'Execute JavaScript'), icon: 'code' };
     case 'read_console_messages':
-      return { text: 'Read console messages', icon: 'console' };
+      return { text: t('read_console_messages', 'Read console messages'), icon: 'console' };
     case 'read_network_requests':
-      return { text: 'Read network requests', icon: 'network' };
+      return { text: t('read_network_requests', 'Read network requests'), icon: 'network' };
     case 'resize_window':
-      return { text: 'Resize window', icon: 'resize' };
+      return { text: t('resize_window', 'Resize window'), icon: 'resize' };
     case 'gif_creator':
-      return { text: 'Create GIF', icon: 'gif' };
+      return { text: t('create_gif', 'Create GIF'), icon: 'gif' };
     case 'update_plan': {
       // Check tool result to determine approved/rejected/pending
       const resultText = Array.isArray(toolResult?.content)
@@ -2000,35 +2102,33 @@ function getToolDisplayInfo(
           ? toolResult.content
           : '';
       if (resultText.includes('rejected') || resultText.includes('Permission denied')) {
-        return { icon: 'plan', text: 'Plan rejected' };
+        return { icon: 'plan', text: t('plan_rejected', 'Plan rejected') };
       }
       if (resultText.includes('approved your plan') || resultText.includes('User has approved')) {
-        return { icon: 'plan', text: 'Created a plan' };
+        return { icon: 'plan', text: t('created_a_plan', 'Created a plan') };
       }
-      return {
-        icon: 'plan',
-        text: formatMessage
-          ? formatMessage({ id: 'ask_before_acting', defaultMessage: 'Ask before acting' })
-          : 'Ask before acting'
-      };
+      return { icon: 'plan', text: t('ask_before_acting', 'Ask before acting') };
     }
     case 'WebSearch':
-      return { text: 'Web search', icon: 'web-search' };
+      return { text: t('web_search', 'Web search'), icon: 'web-search' };
     case 'WebFetch': {
       const url = o.url;
       if (url) {
         try {
           const hostname = new URL(url).hostname;
-          return { text: `Fetch from ${hostname}`, icon: 'web-fetch' };
+          return {
+            text: t('fetching_from', 'Fetching from {hostname}', { hostname }),
+            icon: 'web-fetch'
+          };
         } catch {
           const preview = url.length > 30 ? `${url.slice(0, 30)}...` : url;
-          return { text: `Fetch ${preview}`, icon: 'web-fetch' };
+          return { text: t('fetch', 'Fetch {url}', { url: preview }), icon: 'web-fetch' };
         }
       }
-      return { text: 'Web fetch', icon: 'web-fetch' };
+      return { text: t('web_fetch', 'Web fetch'), icon: 'web-fetch' };
     }
     case 'switch_browser':
-      return { text: 'Switching browser', icon: 'shuffle' };
+      return { text: t('switching_browser', 'Switching browser'), icon: 'shuffle' };
     default: {
       const displayName = getToolDisplayName(toolName);
       return { text: displayName, icon: 'computer' };
@@ -2346,7 +2446,7 @@ function Favicon({ url, size = 16 }: { url: string; size?: number }) {
   const faviconUrl = useMemo(() => {
     try {
       const hostname = new URL(url).hostname;
-      return `https://www.google.com/s2/favicons?domain=${hostname}&sz=${size * 2}`;
+      return `https://www.google.com/s2/favicons?domain=${hostname}&sz=64`;
     } catch {
       return null;
     }
@@ -2504,6 +2604,7 @@ const WebSearchToolCell = React.memo(function WebSearchToolCell({
   isStreaming?: boolean;
   onResultClick?: (url: string) => void;
 }) {
+  const intl = useIntlSafe();
   const results = useMemo(() => parseSearchResults(toolResult), [toolResult]);
   const count = results.length;
   let query = '';
@@ -2517,9 +2618,19 @@ const WebSearchToolCell = React.memo(function WebSearchToolCell({
     query = input?.query || '';
   }
   const isComplete = count > 0 || !isStreaming;
-  const displayText = isComplete ? query : 'Searching the web';
+  const displayText = isComplete
+    ? query
+    : intl.formatMessage({ id: 'searching_the_web', defaultMessage: 'Searching the web' });
   const secondaryText =
-    isComplete && count > 0 ? `${count} ${count === 1 ? 'result' : 'results'}` : undefined;
+    isComplete && count > 0
+      ? intl.formatMessage(
+          {
+            id: 'search_result_count',
+            defaultMessage: '{count, plural, one {# result} other {# results}}'
+          },
+          { count }
+        )
+      : undefined;
 
   return (
     <ToolUseRow
@@ -2582,6 +2693,7 @@ const WebFetchToolCell = React.memo(function WebFetchToolCell({
   isStreaming?: boolean;
   onUrlClick?: (url: string) => void;
 }) {
+  const intl = useIntlSafe();
   const url = String(input?.url || '');
   const hostname = useMemo(() => {
     try {
@@ -2621,7 +2733,7 @@ const WebFetchToolCell = React.memo(function WebFetchToolCell({
     if (isError) {
       displayText = (
         <>
-          <span>Failed to fetch</span>{' '}
+          <span>{intl.formatMessage({ id: 'failed_to_fetch', defaultMessage: 'Failed to fetch' })}</span>{' '}
           <span className="text-text-400">{pageInfo?.title || url}</span>
         </>
       );
@@ -2630,7 +2742,12 @@ const WebFetchToolCell = React.memo(function WebFetchToolCell({
       secondaryTextValue = hostname || undefined;
     }
   } else {
-    displayText = hostname ? `Fetching from ${hostname}` : 'Fetching page';
+    displayText = hostname
+      ? intl.formatMessage(
+          { id: 'fetching_from', defaultMessage: 'Fetching from {hostname}' },
+          { hostname }
+        )
+      : intl.formatMessage({ id: 'fetching_page', defaultMessage: 'Fetching page' });
   }
 
   const handleClick = useCallback(() => {
@@ -4893,6 +5010,7 @@ const UpdatePlanCell = React.memo(function UpdatePlanCell({
   isLastItemInGroup?: boolean;
   isStreaming?: boolean;
 }) {
+  const intl = useIntlSafe();
   const [showModal, setShowModal] = useState(false);
 
   // Get or create the modal portal element
@@ -4938,10 +5056,14 @@ const UpdatePlanCell = React.memo(function UpdatePlanCell({
     setShowModal(false);
   }, []);
 
-  let statusText = 'Plan';
-  if (planStatus === 'creating') statusText = 'Creating plan...';
-  else if (planStatus === 'approved') statusText = 'Created a plan';
-  else if (planStatus === 'rejected') statusText = 'Plan rejected';
+  let statusText = intl.formatMessage({ id: 'plan', defaultMessage: 'Plan' });
+  if (planStatus === 'creating') {
+    statusText = intl.formatMessage({ id: 'creating_plan', defaultMessage: 'Creating plan...' });
+  } else if (planStatus === 'approved') {
+    statusText = intl.formatMessage({ id: 'created_a_plan', defaultMessage: 'Created a plan' });
+  } else if (planStatus === 'rejected') {
+    statusText = intl.formatMessage({ id: 'plan_rejected', defaultMessage: 'Plan rejected' });
+  }
 
   return (
     <>
@@ -5085,6 +5207,7 @@ function ScrollToBottomButton({
   isStreaming?: boolean;
   scrollThreshold?: number;
 }) {
+  const intl = useIntlSafe();
   const [showButton, setShowButton] = useState(false);
 
   const handleClick = useCallback(() => {
@@ -5120,7 +5243,10 @@ function ScrollToBottomButton({
     <div className="flex justify-center pb-2">
       <button
         onClick={handleClick}
-        aria-label="Scroll to bottom"
+        aria-label={intl.formatMessage({
+          id: 'scroll_to_bottom',
+          defaultMessage: 'Scroll to bottom'
+        })}
         className={`size-9 inline-flex items-center justify-center border-0.5 overflow-hidden !rounded-full p-1 shadow-md hover:shadow-lg bg-bg-000/80 hover:bg-bg-000 backdrop-blur transition-opacity duration-200 ${
           isStreaming ? 'border-accent-brand/30' : 'border-border-300'
         } ${showButton ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
@@ -5302,39 +5428,49 @@ function ModelFallbackCard({
   onRetry: (model: string) => void;
   onSendFeedback: () => void;
 }) {
+  const intl = useIntlSafe();
   return (
     <div
       className="bg-bg-000 rounded-2xl border-[0.5px] border-border-300 px-4 py-4"
       style={{ boxShadow: '0 4px 20px 0 rgba(0, 0, 0, 0.04)' }}
     >
       <h3 className="font-ui text-[16px] font-medium leading-[140%] text-text-100 mb-2">
-        Chat paused
+        {intl.formatMessage({ id: 'chat_paused', defaultMessage: 'Chat paused' })}
       </h3>
       <p className="font-base text-text-100 mb-0">
-        {currentModelName}&apos;s safety filters flagged this chat. Due to its advanced
-        capabilities, {currentModelName} has additional safety measures that occasionally pause
-        normal, safe chats. We&apos;re working to improve this. Continue your chat with{' '}
-        {fallbackDisplayName},{' '}
-        <button
-          onClick={onSendFeedback}
-          className="inline-link hover:opacity-70 transition-opacity"
-        >
-          send feedback
-        </button>
-        , or{' '}
-        <button
-          onClick={() => chrome.tabs.create({ url: learnMoreUrl })}
-          className="inline-link hover:opacity-70 transition-opacity"
-        >
-          learn more
-        </button>
-        .
+        <MemoizedFormattedMessage
+          id="s_safety_filters_flagged_this_chat_due_to"
+          defaultMessage="{currentModelName}'s safety filters flagged this chat. Due to its advanced capabilities, {currentModelName} has additional safety measures that occasionally pause normal, safe chats. We're working to improve this. Continue your chat with {fallbackDisplayName}, {sendFeedbackLink}, or {learnMoreLink}."
+          values={{
+            currentModelName,
+            fallbackDisplayName,
+            sendFeedbackLink: (
+              <button
+                onClick={onSendFeedback}
+                className="inline-link hover:opacity-70 transition-opacity"
+              >
+                {intl.formatMessage({ id: 'send_feedback', defaultMessage: 'send feedback' })}
+              </button>
+            ),
+            learnMoreLink: (
+              <button
+                onClick={() => chrome.tabs.create({ url: learnMoreUrl })}
+                className="inline-link hover:opacity-70 transition-opacity"
+              >
+                {intl.formatMessage({ id: 'learn_more', defaultMessage: 'learn more' })}
+              </button>
+            )
+          }}
+        />
       </p>
       <button
         onClick={() => onRetry(fallbackModelName)}
         className="mt-4 w-full bg-accent-main-100 text-oncolor-100 hover:bg-accent-main-200 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
       >
-        Retry with {fallbackDisplayName}
+        {intl.formatMessage(
+          { id: 'retry_with', defaultMessage: 'Retry with {fallbackDisplayName}' },
+          { fallbackDisplayName }
+        )}
       </button>
     </div>
   );
@@ -5365,6 +5501,7 @@ function ToolUseItem({
   toolDisplayName?: string;
   explicitIcon?: React.ReactNode;
 }) {
+  const intl = useIntlSafe();
   const [resultExpanded, setResultExpanded] = useState(false);
   const [requestExpanded, setRequestExpanded] = useState(false);
   const hasResult = !!toolResult;
@@ -5446,7 +5583,7 @@ function ToolUseItem({
             className="flex items-center transition-colors cursor-pointer text-text-500 hover:text-text-200"
           >
             <Badge color="flat" size="default" className="font-mono !text-inherit">
-              Request
+              {intl.formatMessage({ id: 'request', defaultMessage: 'Request' })}
             </Badge>
           </button>
         )}
@@ -5494,7 +5631,7 @@ function ToolUseItem({
               size="default"
               className={`font-mono ${hasError ? '' : '!text-inherit'}`}
             >
-              Result
+              {intl.formatMessage({ id: 'result', defaultMessage: 'Result' })}
             </Badge>
           </button>
         )}
@@ -5640,6 +5777,7 @@ function ContentBlocksRenderer({
   allMessages: any[];
 }) {
   const [showCollapsed, setShowCollapsed] = useState(false);
+  const intl = useIntlSafe();
 
   // Lift math plugin loading to this level — called once per message instead of per-block
   const { remarkMath, rehypeKatex } = useMathPlugins();
@@ -5688,8 +5826,8 @@ function ContentBlocksRenderer({
                 className={`transition-transform ${showCollapsed ? 'rotate-0' : 'rotate-180'}`}
               />
               {showCollapsed
-                ? 'Hide steps'
-                : `${toolUseCount} step${toolUseCount === 1 ? '' : 's'}`}
+                ? intl.formatMessage({ id: 'hide_steps', defaultMessage: 'Hide steps' })
+                : formatStepCountLabel(intl.formatMessage.bind(intl), toolUseCount)}
             </button>
           </div>
 
@@ -5785,7 +5923,9 @@ function ContentBlocksRenderer({
               size={16}
               className={`transition-transform ${showCollapsed ? 'rotate-0' : 'rotate-180'}`}
             />
-            {showCollapsed ? 'Hide steps' : `${toolUseCount} step${toolUseCount === 1 ? '' : 's'}`}
+            {showCollapsed
+              ? intl.formatMessage({ id: 'hide_steps', defaultMessage: 'Hide steps' })
+              : formatStepCountLabel(intl.formatMessage.bind(intl), toolUseCount)}
           </button>
         </div>
 
@@ -6015,11 +6155,26 @@ const BlockRenderer = React.memo(function BlockRenderer({
       block.name === 'str_replace_editor' ||
       block.name === 'Edit'
     ) {
-      derivedDisplayName = input?.path ? `Editing ${input.path}` : undefined;
+      derivedDisplayName = input?.path
+        ? intlBlock.formatMessage(
+            { id: 'editing', defaultMessage: 'Editing {fileName}' },
+            { fileName: input.path }
+          )
+        : undefined;
     } else if (block.name === 'Read') {
-      derivedDisplayName = input?.file_path || undefined;
+      derivedDisplayName = input?.file_path
+        ? intlBlock.formatMessage(
+            { id: 'reading', defaultMessage: 'Reading {fileName}' },
+            { fileName: input.file_path }
+          )
+        : undefined;
     } else if (block.name === 'Write') {
-      derivedDisplayName = input?.file_path ? `Writing ${input.file_path}` : undefined;
+      derivedDisplayName = input?.file_path
+        ? intlBlock.formatMessage(
+            { id: 'writing_file', defaultMessage: 'Writing {fileName}' },
+            { fileName: input.file_path }
+          )
+        : undefined;
     } else if (block.name === 'Glob' || block.name === 'Grep') {
       derivedDisplayName = input?.pattern || undefined;
     } else if (block.name === 'Task') {
@@ -6059,16 +6214,15 @@ const BlockRenderer = React.memo(function BlockRenderer({
 function AssistantMessageRow({
   blocks,
   isStreaming,
-  currentStatus,
   allMessages
 }: {
   blocks: any[];
   isStreaming: boolean;
-  currentStatus: string;
   allMessages: any[];
 }) {
   const [copied, setCopied] = useState(false);
   const [feedback, setFeedback] = useState<'positive' | 'negative' | null>(null);
+  const intl = useIntlSafe();
 
   // Strip system reminders from text blocks
   const processedBlocks = useMemo(() => {
@@ -6116,21 +6270,17 @@ function AssistantMessageRow({
           allMessages={allMessages}
         />
 
-        {/* Status indicator when streaming but no blocks yet */}
-        {isStreaming && processedBlocks.length === 0 && currentStatus && (
-          <div className="text-sm text-text-300 italic font-claude-response relative inline-block py-2">
-            {currentStatus}
-            <span className="inline-block ml-1 animate-pulse">…</span>
-          </div>
-        )}
-
         {/* Copy + Feedback buttons */}
         {turnIsOver && (finalAnswerText || processedBlocks.length > 0) && (
           <div className="h-7 flex items-center">
             <div className="flex items-center gap-0.5 -ml-1.5 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto">
               {finalAnswerText && (
                 <Tooltip
-                  tooltipContent={copied ? 'Copied' : 'Copy'}
+                  tooltipContent={
+                    copied
+                      ? intl.formatMessage({ id: 'copied', defaultMessage: 'Copied' })
+                      : intl.formatMessage({ id: 'copy', defaultMessage: 'Copy' })
+                  }
                   side="bottom"
                   open={copied || undefined}
                   delayDuration={copied ? 0 : 200}
@@ -6138,26 +6288,47 @@ function AssistantMessageRow({
                   <button
                     onClick={handleCopy}
                     className="p-1.5 rounded-md transition-colors text-text-300 hover:bg-bg-300 hover:text-text-100"
-                    aria-label="Copy message"
+                    aria-label={intl.formatMessage({
+                      id: 'copy_message',
+                      defaultMessage: 'Copy message'
+                    })}
                   >
                     {copied ? <Check size={12} /> : <Copy size={12} />}
                   </button>
                 </Tooltip>
               )}
-              <Tooltip tooltipContent="Give positive feedback" side="bottom">
+              <Tooltip
+                tooltipContent={intl.formatMessage({
+                  id: 'give_positive_feedback',
+                  defaultMessage: 'Give positive feedback'
+                })}
+                side="bottom"
+              >
                 <button
                   onClick={() => setFeedback(feedback === 'positive' ? null : 'positive')}
                   className={`p-1.5 rounded-md transition-colors ${feedback === 'positive' ? 'text-text-100' : 'text-text-300 hover:bg-bg-300 hover:text-text-100'}`}
-                  aria-label="Good response"
+                  aria-label={intl.formatMessage({
+                    id: 'good_response',
+                    defaultMessage: 'Good response'
+                  })}
                 >
                   <ThumbsUp size={12} />
                 </button>
               </Tooltip>
-              <Tooltip tooltipContent="Give negative feedback" side="bottom">
+              <Tooltip
+                tooltipContent={intl.formatMessage({
+                  id: 'give_negative_feedback',
+                  defaultMessage: 'Give negative feedback'
+                })}
+                side="bottom"
+              >
                 <button
                   onClick={() => setFeedback(feedback === 'negative' ? null : 'negative')}
                   className={`p-1.5 rounded-md transition-colors ${feedback === 'negative' ? 'text-text-100' : 'text-text-300 hover:bg-bg-300 hover:text-text-100'}`}
-                  aria-label="Bad response"
+                  aria-label={intl.formatMessage({
+                    id: 'bad_response',
+                    defaultMessage: 'Bad response'
+                  })}
                 >
                   <ThumbsDown size={12} />
                 </button>
@@ -6175,13 +6346,9 @@ type StreamingTextStore = ReturnType<typeof createStreamingTextStore>;
 /** Lightweight component that subscribes to the streaming text store.
  * Only THIS component re-renders on each rAF during streaming — not the entire MessageList. */
 function StreamingTextBlock({
-  store,
-  allMessages,
-  currentStatus
+  store
 }: {
   store: StreamingTextStore;
-  allMessages: any[];
-  currentStatus: string;
 }) {
   const streamingText = useSyncExternalStore(store.subscribe, store.getSnapshot);
   const { remarkMath, rehypeKatex } = useMathPlugins();
@@ -6196,19 +6363,10 @@ function StreamingTextBlock({
     return preprocessMarkdownText(streamingText);
   }, [streamingText]);
 
-  // When no text has arrived yet, show the status indicator
+  // The global footer already renders the active tool/status line.
+  // Avoid duplicating that placeholder inside the message list.
   if (!streamingText) {
-    if (!currentStatus) return null;
-    return (
-      <div className="flex items-start group">
-        <div className="max-w-4xl claude-response w-full break-words">
-          <div className="text-sm text-text-300 italic font-claude-response relative inline-block py-2">
-            {currentStatus}
-            <span className="inline-block ml-1 animate-pulse">…</span>
-          </div>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   return (
@@ -6234,13 +6392,11 @@ const MessageList = React.memo(function MessageList({
   anthropicMessages,
   streamingTextStore,
   isAgentRunning,
-  currentStatus,
   scrollRefs
 }: {
   anthropicMessages: any[];
   streamingTextStore: StreamingTextStore;
   isAgentRunning: boolean;
-  currentStatus: string;
   scrollRefs?: {
     lastAssistantMessage: React.RefObject<HTMLDivElement | null>;
     lastHumanMessage: React.RefObject<HTMLDivElement | null>;
@@ -6376,17 +6532,10 @@ const MessageList = React.memo(function MessageList({
           <AssistantMessageRow
             blocks={group.assistantBlocks}
             isStreaming={isStreamingGroup}
-            currentStatus={currentStatus}
             allMessages={anthropicMessages}
           />
         )}
-        {isStreamingGroup && (
-          <StreamingTextBlock
-            store={streamingTextStore}
-            allMessages={anthropicMessages}
-            currentStatus={currentStatus}
-          />
-        )}
+        {isStreamingGroup && <StreamingTextBlock store={streamingTextStore} />}
       </div>
     );
   };
@@ -6972,6 +7121,12 @@ export function SidepanelApp() {
     useState<NotificationPreference>(undefined);
   const [showNotificationBanner, setShowNotificationBanner] = useState(false);
   const [messageLimit, setMessageLimit] = useState<MessageLimitState>({ type: 'within_limit' });
+
+  // 固定随机启动文案的选择，避免每次渲染都重新计算
+  const randomStartupKey = useMemo(
+    () => `starting_up_${Math.floor(Math.random() * 8) + 1}`,
+    [] // 只在组件挂载时计算一次
+  );
   const [messageLimitDismissed, setMessageLimitDismissed] = useState(false);
   const [skipWarningDismissed, setSkipWarningDismissed] = useState(false);
   const [announcementDismissed, setAnnouncementDismissed] = useState(false);
@@ -7850,11 +8005,14 @@ export function SidepanelApp() {
     async (text: string) => {
       try {
         if (!text || !text.trim()) return;
+        const localeInstruction = getStatusSummaryLanguageInstruction(
+          intl.locale as SupportedLocale
+        );
         const response = await createAnthropicMessage({
           messages: [
             {
               role: 'user',
-              content: `<message>\n${text.slice(0, 500)}\n</message>\n\nBased on this message, generate a 7-word-or-less status describing the high-level task or goal SuperDuck is working on. Put it between <status> tags.`
+              content: `<message>\n${text.slice(0, 500)}\n</message>\n\nBased on this message, generate a 7-word-or-less status describing the high-level task or goal SuperDuck is working on. Put it between <status> tags. ${localeInstruction}`
             },
             {
               role: 'assistant',
@@ -7862,8 +8020,7 @@ export function SidepanelApp() {
             }
           ],
           max_tokens: 128,
-          system:
-            'Generate ultra-concise status updates describing the current high-level task or goal.\nYour status should describe WHAT SuperDuck is trying to accomplish, not the specific action.\n\nREQUIREMENTS:\n- Maximum 7 words\n- Describe the goal/task, not the action\n- Be high-level and task-oriented\n- No punctuation at the end\n\nExamples of GOOD statuses (goal-oriented):\n- Researching company information\n- Looking up flight options\n- Completing checkout process\n- Finding product details\n- Setting up account\n- Analyzing search results\n- Gathering page content\n\nExamples of BAD statuses (too action-specific):\n- Clicking submit button\n- Reading page content\n- Taking screenshot\n- Typing into form field',
+          system: `Generate ultra-concise status updates describing the current high-level task or goal.\nYour status should describe WHAT SuperDuck is trying to accomplish, not the specific action.\n\nREQUIREMENTS:\n- Maximum 7 words\n- Describe the goal/task, not the action\n- Be high-level and task-oriented\n- No punctuation at the end\n- ${localeInstruction}\n\nExamples of GOOD statuses (goal-oriented):\n- Researching company information\n- Looking up flight options\n- Completing checkout process\n- Finding product details\n- Setting up account\n- Analyzing search results\n- Gathering page content\n\nExamples of BAD statuses (too action-specific):\n- Clicking submit button\n- Reading page content\n- Taking screenshot\n- Typing into form field`,
           model: 'claude-haiku-4-5-20251001'
         });
         if (response?.content) {
@@ -7881,7 +8038,7 @@ export function SidepanelApp() {
         // silently fail status generation
       }
     },
-    [createAnthropicMessage]
+    [createAnthropicMessage, intl.locale]
   );
 
   // Generate a conversation title from the first user message (matches original In)
@@ -7889,42 +8046,21 @@ export function SidepanelApp() {
     async (userMessage: any) => {
       if (typeof query.tabId !== 'number') return;
       try {
-        const messageText =
-          typeof userMessage.content === 'string'
-            ? userMessage.content
-            : Array.isArray(userMessage.content)
-              ? userMessage.content
-                  .filter((b: any) => b.type === 'text')
-                  .map((b: any) => b.text)
-                  .join('\n')
-              : '';
-        if (!messageText.trim()) return;
-        const response = await createAnthropicMessage({
-          messages: [
-            {
-              role: 'user',
-              content: `Generate a very short title (3-5 words max) for this conversation based on the user's first message:\n\n"${messageText.slice(0, 300)}"\n\nRespond with ONLY the title, no quotes or punctuation.`
-            }
-          ],
-          max_tokens: 32,
-          model: 'claude-haiku-4-5-20251001'
-        });
-        if (response?.content) {
-          const title = response.content
-            .filter((b: any) => b.type === 'text')
-            .map((b: any) => b.text)
-            .join('')
-            .trim();
-          if (title) {
-            await tabGroupManager.initialize();
-            await tabGroupManager.updateGroupTitle(query.tabId, title, true);
-          }
+        const title = await generateConversationTitleFunction(
+          userMessage,
+          (params) => createAnthropicMessage(params),
+          intl.locale as SupportedLocale
+        );
+
+        if (title) {
+          await tabGroupManager.initialize();
+          await tabGroupManager.updateGroupTitle(query.tabId, title, true);
         }
       } catch {
         // silently fail title generation
       }
     },
-    [createAnthropicMessage, query.tabId]
+    [createAnthropicMessage, query.tabId, intl.locale]
   );
 
   const sendPrompt = useCallback(
@@ -10110,7 +10246,6 @@ export function SidepanelApp() {
                   anthropicMessages={effectiveAnthropicMessages}
                   streamingTextStore={streamingTextStoreRef.current}
                   isAgentRunning={effectiveIsAgentRunning}
-                  currentStatus={effectiveCurrentStatus}
                   scrollRefs={messageListScrollRefs}
                 />
               )}
@@ -10129,10 +10264,23 @@ export function SidepanelApp() {
                       className="[&_svg]:!fill-[#D97757]"
                     />
                     <div className="text-sm text-text-300 italic font-claude-response relative inline-block">
-                      {effectiveIsCompacting
-                        ? 'Compacting...'
-                        : effectiveCurrentStatus || 'Starting up...'}
-                      <span className="inline-block ml-1 animate-pulse">…</span>
+                      {(() => {
+                        const statusText = effectiveIsCompacting
+                          ? intl.formatMessage({ id: 'compacting', defaultMessage: 'Compacting...' })
+                          : effectiveCurrentStatus ||
+                            intl.formatMessage({
+                              id: randomStartupKey,
+                              defaultMessage: 'Starting up...'
+                            });
+                        const displayStatusText = stripTrailingEllipsis(statusText);
+
+                        return (
+                          <>
+                            {displayStatusText}
+                            <ThinkingDots />
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
                 )}
@@ -10745,9 +10893,11 @@ export function SidepanelApp() {
               onToggleSpeech={toggleSpeechRecording}
               onRemoveStep={removeStep}
               onUpdateStep={updateStep}
-              onSave={(steps, summary, commandName) => {
-                // Save workflow summary and stop recording
-                setPromptToSave({ prompt: summary, command: commandName });
+              onSave={(steps, summary, workflowTitle) => {
+                // Save the generated prompt. Let the shortcut modal generate its own command name
+                // instead of reusing the recording title or page title.
+                void workflowTitle;
+                setPromptToSave({ prompt: summary });
                 stopRecording();
               }}
               createMessage={createAnthropicMessage}
@@ -10895,7 +11045,11 @@ export function SidepanelApp() {
           generateName={async (prompt) => {
             try {
               const { generateShortcutName } = await import('./sessionPool');
-              return await generateShortcutName(prompt, (params) => createAnthropicMessage(params));
+              return await generateShortcutName(
+                prompt,
+                (params) => createAnthropicMessage(params),
+                intl.locale as SupportedLocale
+              );
             } catch (error) {
               return '';
             }

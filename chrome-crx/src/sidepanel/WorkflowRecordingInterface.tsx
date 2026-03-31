@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { FormattedMessage, useIntl } from 'react-intl';
+import { type SupportedLocale } from './prompts';
 import { GlobeIcon } from './icons';
 import { Button, TextInput } from '../components/SchedulingFields';
 import { Trash2, Play, Pause, Mic, MicOff, X } from 'lucide-react';
@@ -23,7 +24,7 @@ interface WorkflowRecordingInterfaceProps {
   onToggleSpeech: () => void;
   onRemoveStep: (index: number) => void;
   onUpdateStep: (index: number, updates: Partial<WorkflowStep>) => void;
-  onSave: (steps: WorkflowStep[], summary: string, commandName?: string) => void;
+  onSave: (steps: WorkflowStep[], summary: string, workflowTitle?: string) => void;
   createMessage: (message: any, signal?: AbortSignal, label?: string) => Promise<any>;
   isGeneratingSummary: boolean;
   setIsGeneratingSummary: (value: boolean) => void;
@@ -84,11 +85,19 @@ export function WorkflowRecordingInterface({
     }
   }, [isEditingTitle]);
 
-  // Favicon URL
-  const faviconUrl = useMemo(
-    () => (domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=32` : ''),
-    [domain]
-  );
+  // Get high-quality favicon from active tab
+  const [faviconUrl, setFaviconUrl] = useState('');
+
+  useEffect(() => {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      const tab = tabs[0];
+      if (tab?.favIconUrl && !tab.favIconUrl.startsWith('chrome://')) {
+        setFaviconUrl(tab.favIconUrl);
+      } else if (domain) {
+        setFaviconUrl(`https://www.google.com/s2/favicons?domain=${domain}&sz=64`);
+      }
+    });
+  }, [domain]);
 
   const commitWorkflowTitle = useCallback(() => {
     if (skipTitleCommitRef.current) {
@@ -117,7 +126,12 @@ export function WorkflowRecordingInterface({
       try {
         // Dynamic import for generateWorkflowSummary
         const { generateWorkflowSummary } = await import('./sessionPool');
-        summary = await generateWorkflowSummary(recordingState.steps, createMessage, true);
+        summary = await generateWorkflowSummary(
+          recordingState.steps,
+          createMessage,
+          true,
+          intl.locale as SupportedLocale
+        );
       } catch (error) {
         console.error('[WorkflowRecording] generateWorkflowSummary failed:', error);
       }
@@ -139,7 +153,10 @@ export function WorkflowRecordingInterface({
     if (currentInterimTranscript && currentInterimTranscript.trim()) {
       const narrationStep: WorkflowStep = {
         action: 'narration',
-        description: `Note: "${currentInterimTranscript}"`,
+        description: intl.formatMessage(
+          { id: 'workflow_note', defaultMessage: 'Note: "{text}"' },
+          { text: currentInterimTranscript }
+        ),
         speechTranscript: currentInterimTranscript,
         timestamp: Date.now(),
         url: ''

@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { useIntlSafe } from '../index-react-dom-intl';
+import { useIntlSafe, type SupportedLocale } from '../index-react-dom-intl';
 import { useSpeechRecognition } from './useSpeechRecognition';
 import { useScreenCapture } from './useScreenCapture';
 import { useTabStatusListener } from './useTabStatusListener';
@@ -157,6 +157,61 @@ export const useWorkflowRecording = ({
     setCurrentInterimTranscript(newTranscript);
   }, [speechSegments]);
 
+  const normalizeFieldName = useCallback((name?: string) => {
+    if (!name) return '';
+    return name
+      .replace(/_/g, ' ')
+      .replace(/([A-Z])/g, ' $1')
+      .trim()
+      .toLowerCase();
+  }, []);
+
+  const getTextEntryDescription = useCallback(
+    (text: string, fieldName?: string) => {
+      const preview30 = `${text.substring(0, 30)}${text.length > 30 ? '...' : ''}`;
+      const preview50 = `${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`;
+
+      let description = intl.formatMessage(
+        { id: 'workflow_type_text_preview', defaultMessage: 'Type "{text}"' },
+        { text: preview30 }
+      );
+
+      if (text.includes('@')) {
+        description = intl.formatMessage(
+          { id: 'workflow_enter_email', defaultMessage: 'Enter email "{text}"' },
+          { text }
+        );
+      } else if (text.length < 20 && !text.includes(' ')) {
+        description = intl.formatMessage(
+          { id: 'workflow_enter_text', defaultMessage: 'Enter "{text}"' },
+          { text }
+        );
+      } else if (text.length > 50) {
+        description = intl.formatMessage(
+          { id: 'workflow_type_text_long', defaultMessage: 'Type text: "{text}"' },
+          { text: preview50 }
+        );
+      }
+
+      const normalizedFieldName = normalizeFieldName(fieldName);
+      if (normalizedFieldName) {
+        description = intl.formatMessage(
+          {
+            id: 'workflow_in_field',
+            defaultMessage: '{description} in {fieldName} field'
+          },
+          {
+            description,
+            fieldName: normalizedFieldName
+          }
+        );
+      }
+
+      return description;
+    },
+    [intl, normalizeFieldName]
+  );
+
   // Listen for keystroke updates from content script
   useEffect(() => {
     if (!isRecordingRef.current || recordingState.isPaused) return;
@@ -176,23 +231,7 @@ export const useWorkflowRecording = ({
         }
 
         // Generate description
-        let description = `Type "${text.substring(0, 30)}${text.length > 30 ? '...' : ''}"`;
-        if (text.includes('@')) {
-          description = `Enter email "${text}"`;
-        } else if (text.length < 20 && !text.includes(' ')) {
-          description = `Enter "${text}"`;
-        } else if (text.length > 50) {
-          description = `Type text: "${text.substring(0, 50)}..."`;
-        }
-
-        if (element.name) {
-          const fieldName = element.name
-            .replace(/_/g, ' ')
-            .replace(/([A-Z])/g, ' $1')
-            .trim()
-            .toLowerCase();
-          description += ` in ${fieldName} field`;
-        }
+        const description = getTextEntryDescription(text, element.attributes?.name);
 
         setRecordingState((prev) => {
           const pendingIndex = prev.steps.findIndex(
@@ -236,7 +275,7 @@ export const useWorkflowRecording = ({
     return () => {
       chrome.runtime.onMessage.removeListener(handleMessage);
     };
-  }, [recordingState.isPaused, currentTabId, tabId]);
+  }, [recordingState.isPaused, currentTabId, tabId, getTextEntryDescription]);
 
   // Add click marker to screenshot
   const addClickMarkerToScreenshot = async (
@@ -289,25 +328,38 @@ export const useWorkflowRecording = ({
   };
 
   // Generate element description
-  const generateElementDescription = (element: ElementInfo): string => {
+  const generateElementDescription = useCallback((element: ElementInfo): string => {
     const tagName = element.tagName.toLowerCase();
     const text = element.text?.trim();
     const attrs = element.attributes || {};
+    const truncatedText40 = (value: string) => (value.length > 40 ? `${value.substring(0, 40)}...` : value);
+    const truncatedText50 = (value: string) => (value.length > 50 ? `${value.substring(0, 50)}...` : value);
+    const clickNamed = (value: string) =>
+      intl.formatMessage(
+        { id: 'workflow_click_named', defaultMessage: 'Click on "{target}"' },
+        { target: value }
+      );
 
     if (attrs['aria-label']) {
-      return `Click on "${attrs['aria-label']}"`;
+      return clickNamed(attrs['aria-label']);
     }
 
     if (attrs.title && (!text || text.length <= 3)) {
-      return `Click on "${attrs.title}"`;
+      return clickNamed(attrs.title);
     }
 
     if ((tagName === 'button' || tagName === 'a') && text && text.length > 1) {
-      return `Click on "${text.length > 40 ? text.substring(0, 40) + '...' : text}" button`;
+      return intl.formatMessage(
+        { id: 'workflow_click_button', defaultMessage: 'Click on "{target}" button' },
+        { target: truncatedText40(text) }
+      );
     }
 
     if ((tagName === 'button' || tagName === 'a') && attrs.title) {
-      return `Click on "${attrs.title}" button`;
+      return intl.formatMessage(
+        { id: 'workflow_click_button', defaultMessage: 'Click on "{target}" button' },
+        { target: attrs.title }
+      );
     }
 
     if (tagName === 'input') {
@@ -317,72 +369,109 @@ export const useWorkflowRecording = ({
 
       if (type === 'submit' || type === 'button') {
         const value = attrs.value || text;
-        return value ? `Click on "${value}" button` : 'Click on submit button';
+        return value
+          ? intl.formatMessage(
+              { id: 'workflow_click_button', defaultMessage: 'Click on "{target}" button' },
+              { target: value }
+            )
+          : intl.formatMessage({
+              id: 'workflow_click_submit_button',
+              defaultMessage: 'Click on submit button'
+            });
       }
 
       if (placeholder) {
-        return `Click on "${placeholder}" field`;
+        return intl.formatMessage(
+          { id: 'workflow_click_field', defaultMessage: 'Click on "{target}" field' },
+          { target: placeholder }
+        );
       }
 
       if (name) {
-        return `Click on ${name
-          .replace(/_/g, ' ')
-          .replace(/([A-Z])/g, ' $1')
-          .trim()
-          .toLowerCase()} field`;
+        return intl.formatMessage(
+          { id: 'workflow_click_named_field', defaultMessage: 'Click on {fieldName} field' },
+          { fieldName: normalizeFieldName(name) }
+        );
       }
 
-      return `Click on ${type} input`;
+      return intl.formatMessage(
+        { id: 'workflow_click_input', defaultMessage: 'Click on {inputType} input' },
+        { inputType: type }
+      );
     }
 
     if (tagName === 'select') {
       const name = attrs.name;
       return name
-        ? `Click on ${name
-            .replace(/_/g, ' ')
-            .replace(/([A-Z])/g, ' $1')
-            .trim()
-            .toLowerCase()} dropdown`
-        : 'Click on dropdown menu';
+        ? intl.formatMessage(
+            {
+              id: 'workflow_click_named_dropdown',
+              defaultMessage: 'Click on {fieldName} dropdown'
+            },
+            { fieldName: normalizeFieldName(name) }
+          )
+        : intl.formatMessage({
+            id: 'workflow_click_dropdown_menu',
+            defaultMessage: 'Click on dropdown menu'
+          });
     }
 
     if (tagName === 'img') {
       const alt = attrs.alt;
-      return alt ? `Click on "${alt}" image` : 'Click on image';
+      return alt
+        ? intl.formatMessage(
+            { id: 'workflow_click_image_named', defaultMessage: 'Click on "{target}" image' },
+            { target: alt }
+          )
+        : intl.formatMessage({ id: 'workflow_click_image', defaultMessage: 'Click on image' });
     }
 
     if (attrs.role) {
       return text
-        ? `Click on "${text.length > 40 ? text.substring(0, 40) + '...' : text}"`
-        : `Click on ${attrs.role}`;
+        ? clickNamed(truncatedText40(text))
+        : intl.formatMessage(
+            { id: 'workflow_click_role', defaultMessage: 'Click on {role}' },
+            { role: attrs.role }
+          );
     }
 
     if (tagName === 'div' || tagName === 'span') {
       const tooltip =
         attrs.title || attrs['data-tooltip'] || attrs['data-tip'] || attrs['data-original-title'];
       if (tooltip && (!text || text.length <= 3)) {
-        return `Click on "${tooltip}"`;
+        return clickNamed(tooltip);
       }
 
       if (text) {
-        const displayText = text.length > 50 ? text.substring(0, 50) + '...' : text;
+        const displayText = truncatedText50(text);
         if (attrs.class?.includes('menu') || attrs.class?.includes('nav')) {
-          return `Click on "${displayText}" menu item`;
+          return intl.formatMessage(
+            {
+              id: 'workflow_click_menu_item',
+              defaultMessage: 'Click on "{target}" menu item'
+            },
+            { target: displayText }
+          );
         }
-        return `Click on "${displayText}"`;
+        return clickNamed(displayText);
       }
 
       if (tooltip) {
-        return `Click on "${tooltip}"`;
+        return clickNamed(tooltip);
       }
     }
 
     if (attrs.id) {
-      return `Click on ${attrs.id
-        .replace(/-/g, ' ')
-        .replace(/_/g, ' ')
-        .replace(/([A-Z])/g, ' $1')
-        .trim()}`;
+      return intl.formatMessage(
+        { id: 'workflow_click_id', defaultMessage: 'Click on {target}' },
+        {
+          target: attrs.id
+            .replace(/-/g, ' ')
+            .replace(/_/g, ' ')
+            .replace(/([A-Z])/g, ' $1')
+            .trim()
+        }
+      );
     }
 
     const tooltip =
@@ -392,15 +481,18 @@ export const useWorkflowRecording = ({
       attrs['data-original-title'] ||
       attrs['aria-description'];
     if (tooltip) {
-      return `Click on "${tooltip}"`;
+      return clickNamed(tooltip);
     }
 
     if (text) {
-      return `Click on "${text.length > 40 ? text.substring(0, 40) + '...' : text}"`;
+      return clickNamed(truncatedText40(text));
     }
 
-    return `Click on ${tagName} element`;
-  };
+    return intl.formatMessage(
+      { id: 'workflow_click_tag_element', defaultMessage: 'Click on {tagName} element' },
+      { tagName }
+    );
+  }, [intl, normalizeFieldName]);
 
   // Handle captured event (click)
   const handleCapturedEvent = useCallback(
@@ -439,22 +531,10 @@ export const useWorkflowRecording = ({
 
             // Handle typed text from event
             if (event.typedText && event.typedInElement) {
-              let description = `Type "${event.typedText.substring(0, 30)}${event.typedText.length > 30 ? '...' : ''}"`;
-              if (event.typedText.includes('@')) {
-                description = `Enter email "${event.typedText}"`;
-              } else if (event.typedText.length < 20 && !event.typedText.includes(' ')) {
-                description = `Enter "${event.typedText}"`;
-              } else if (event.typedText.length > 50) {
-                description = `Type text: "${event.typedText.substring(0, 50)}..."`;
-              }
-
-              if (event.typedInElement.name) {
-                description += ` in ${event.typedInElement.name
-                  .replace(/_/g, ' ')
-                  .replace(/([A-Z])/g, ' $1')
-                  .trim()
-                  .toLowerCase()} field`;
-              }
+              const description = getTextEntryDescription(
+                event.typedText,
+                event.typedInElement.attributes?.name
+              );
 
               const typeStep: WorkflowStep = {
                 action: 'type',
@@ -554,8 +634,9 @@ export const useWorkflowRecording = ({
                     screenshot,
                     speechTranscript
                   },
-                  `Click on ${event.element.text || event.element.tagName}`,
-                  createMessage
+                  generateElementDescription(event.element),
+                  createMessage,
+                  intl.locale as SupportedLocale
                 );
                 setRecordingState((prev) => ({
                   ...prev,
@@ -618,7 +699,7 @@ export const useWorkflowRecording = ({
         processedEventsRef.current.delete(event.timestamp);
       }
     },
-    [recordingState.isPaused, captureFullScreen, createMessage]
+    [recordingState.isPaused, captureFullScreen, createMessage, generateElementDescription, getTextEntryDescription, intl.locale]
   );
 
   // Start recording
@@ -660,7 +741,14 @@ export const useWorkflowRecording = ({
 
           const navigateStep: WorkflowStep = {
             action: 'navigate',
-            description: `Navigate to ${tab.url || 'page'}`,
+            description: intl.formatMessage(
+              { id: 'navigate_to', defaultMessage: 'Navigate to {url}' },
+              {
+                url:
+                  tab.url ||
+                  intl.formatMessage({ id: 'page', defaultMessage: 'page' })
+              }
+            ),
             url: tab.url || '',
             tabId: initialTabId,
             timestamp: startTime - 100
@@ -705,7 +793,10 @@ export const useWorkflowRecording = ({
           if (isNewTab) {
             const createTabStep: WorkflowStep = {
               action: 'create_tab',
-              description: 'Create new tab',
+              description: intl.formatMessage({
+                id: 'create_new_tab',
+                defaultMessage: 'Create new tab'
+              }),
               url: tab.url || '',
               tabId: activatedTabId,
               timestamp: Date.now() - 150
@@ -719,7 +810,14 @@ export const useWorkflowRecording = ({
 
             const navigateStep: WorkflowStep = {
               action: 'navigate',
-              description: `Navigate to ${tab.url || 'page'}`,
+              description: intl.formatMessage(
+                { id: 'navigate_to', defaultMessage: 'Navigate to {url}' },
+                {
+                  url:
+                    tab.url ||
+                    intl.formatMessage({ id: 'page', defaultMessage: 'page' })
+                }
+              ),
               url: tab.url || '',
               tabId: activatedTabId,
               timestamp: Date.now() - 100
@@ -959,7 +1057,14 @@ export const useWorkflowRecording = ({
 
             const navigateStep: WorkflowStep = {
               action: 'navigate',
-              description: `Navigate to ${tab.url || 'page'}`,
+              description: intl.formatMessage(
+                { id: 'navigate_to', defaultMessage: 'Navigate to {url}' },
+                {
+                  url:
+                    tab.url ||
+                    intl.formatMessage({ id: 'page', defaultMessage: 'page' })
+                }
+              ),
               url: tab.url || '',
               tabId: activeTabId,
               timestamp: Date.now() - 100

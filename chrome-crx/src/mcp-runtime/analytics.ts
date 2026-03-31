@@ -284,8 +284,10 @@ function callbackWithDelay(ctx: any, callback: (ctx: any) => any, delay: number)
 
 // --- Emitter class (Ze) ---
 
+type CallbackFunction = (...args: any[]) => void;
+
 class Emitter {
-  callbacks: Record<string, Function[]> = {};
+  callbacks: Record<string, CallbackFunction[]> = {};
   warned: boolean = false;
   maxListeners: number;
 
@@ -299,7 +301,7 @@ class Emitter {
     }
   }
 
-  on(event: string, callback: Function): this {
+  on(event: string, callback: CallbackFunction): this {
     if (this.callbacks[event]) {
       this.callbacks[event].push(callback);
       this.warnIfPossibleMemoryLeak(event);
@@ -309,7 +311,7 @@ class Emitter {
     return this;
   }
 
-  once(event: string, callback: Function): this {
+  once(event: string, callback: CallbackFunction): this {
     const wrapper = (...args: any[]) => {
       this.off(event, wrapper);
       callback.apply(this, args);
@@ -317,7 +319,7 @@ class Emitter {
     return this.on(event, wrapper);
   }
 
-  off(event: string, callback: Function): this {
+  off(event: string, callback: CallbackFunction): this {
     const filtered = (this.callbacks[event] ?? []).filter((cb) => cb !== callback);
     this.callbacks[event] = filtered;
     return this;
@@ -1691,8 +1693,9 @@ class Analytics extends NodeEmitter {
 // =============================================================================
 
 // --- State: Analytics ---
+// eslint-disable-next-line prefer-const -- analyticsClient would be reassigned if analytics were enabled
 let analyticsClient: any = null;
-let analyticsInitPromise: Promise<void> | null = null;
+const analyticsInitPromise: Promise<void> | null = null;
 let analyticsUserId: string | null = null;
 
 // --- Segment custom HTTP client (Pt) ---
@@ -1755,7 +1758,7 @@ const identifyUser = async (): Promise<void> => {
       } else {
         analyticsUserId = null;
       }
-    } catch (err) {
+    } catch (_err) {
       // silently fail
     }
   }
@@ -1780,7 +1783,7 @@ export const trackEvent = async (
       trackData.userId = analyticsUserId;
     }
     analyticsClient.track(trackData);
-  } catch (err) {
+  } catch (_err) {
     // silently fail
   }
 };

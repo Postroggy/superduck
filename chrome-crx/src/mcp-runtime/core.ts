@@ -176,15 +176,13 @@ export async function connectBridge(): Promise<boolean> {
     return false;
   }
   const localBridge = getConfig().localBridge;
-  let oauthToken: string | null | undefined;
-  let orgId: string | undefined;
-  oauthToken = await getAccessToken();
+  const oauthToken = await getAccessToken();
   if (!oauthToken) {
     bridgeConnecting = false;
     scheduleReconnect();
     return false;
   }
-  orgId = await getOrganizationId();
+  const orgId = await getOrganizationId();
   if (!orgId) {
     bridgeConnecting = false;
     scheduleReconnect();
@@ -222,7 +220,7 @@ export async function connectBridge(): Promise<boolean> {
       try {
         const message = JSON.parse(event.data);
         await handleBridgeMessage(message);
-      } catch (err) {
+      } catch (_err) {
         // silently fail
       }
     };
@@ -250,7 +248,7 @@ export async function connectBridge(): Promise<boolean> {
     };
 
     return true;
-  } catch (err) {
+  } catch (_err) {
     bridgeConnecting = false;
     scheduleReconnect();
     return false;
