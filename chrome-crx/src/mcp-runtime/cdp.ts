@@ -679,7 +679,6 @@ class ChromeDebuggerProtocol {
   ): Promise<void> {
     if (!options?.skipIndicator) {
       await tabGroupManager.hideIndicatorForToolUse(tabId);
-      await new Promise<void>((resolve) => setTimeout(resolve, 50));
     }
     try {
       let buttonsBitmask = 0;
@@ -1038,7 +1037,6 @@ class ChromeDebuggerProtocol {
 
     if (!options?.skipIndicator) {
       await tabGroupManager.hideIndicatorForToolUse(tabId);
-      await new Promise<void>((resolve) => setTimeout(resolve, 50));
     }
 
     try {

@@ -925,22 +925,28 @@ async function executeZoom(tabId: number, params: ComputerToolParams): Promise<T
     const regionWidth = x1 - x0;
     const regionHeight = y1 - y0;
 
-    const captureResult = await cdpDebugger.sendCommand(tabId, 'Page.captureScreenshot', {
-      format: 'png',
-      captureBeyondViewport: false,
-      fromSurface: true,
-      clip: { x: x0, y: y0, width: regionWidth, height: regionHeight, scale: 1 }
-    });
+    await tabGroupManager.hideIndicatorForToolUse(tabId);
 
-    if (!captureResult || !captureResult.data) {
-      throw new Error('Failed to capture zoomed screenshot via CDP');
+    try {
+      const captureResult = await cdpDebugger.sendCommand(tabId, 'Page.captureScreenshot', {
+        format: 'png',
+        captureBeyondViewport: false,
+        fromSurface: true,
+        clip: { x: x0, y: y0, width: regionWidth, height: regionHeight, scale: 1 }
+      });
+
+      if (!captureResult || !captureResult.data) {
+        throw new Error('Failed to capture zoomed screenshot via CDP');
+      }
+
+      return {
+        output: `Successfully captured zoomed screenshot of region (${x0},${y0}) to (${x1},${y1}) - ${regionWidth}x${regionHeight} pixels`,
+        base64Image: captureResult.data,
+        imageFormat: 'png'
+      };
+    } finally {
+      await tabGroupManager.restoreIndicatorAfterToolUse(tabId);
     }
-
-    return {
-      output: `Successfully captured zoomed screenshot of region (${x0},${y0}) to (${x1},${y1}) - ${regionWidth}x${regionHeight} pixels`,
-      base64Image: captureResult.data,
-      imageFormat: 'png'
-    };
   } catch (error) {
     return {
       error: `Error capturing zoomed screenshot: ${error instanceof Error ? error.message : 'Unknown error'}`
