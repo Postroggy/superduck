@@ -6,6 +6,7 @@ import { Button, TextInput } from '../components/SchedulingFields';
 import { Trash2, Play, Pause, Mic, MicOff, X } from 'lucide-react';
 import { WorkflowStepsList, WorkflowStep } from './WorkflowStepsList';
 import { Tooltip } from './Tooltip';
+import { generateWorkflowSummary } from './sessionPool';
 
 interface RecordingState {
   isRecording: boolean;
@@ -124,8 +125,6 @@ export function WorkflowRecordingInterface({
 
     if (recordingState.steps.length > 0) {
       try {
-        // Dynamic import for generateWorkflowSummary
-        const { generateWorkflowSummary } = await import('./sessionPool');
         summary = await generateWorkflowSummary(
           recordingState.steps,
           createMessage,

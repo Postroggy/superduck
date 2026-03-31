@@ -8452,12 +8452,14 @@ body {
 }
 
 .u-hidden-scrollbar {
-    scrollbar-width: none
+    scrollbar-width: none !important;
 }
 
 .u-hidden-scrollbar::-webkit-scrollbar {
-    opacity: 0;
-    width: 0
+    display: none !important;
+    opacity: 0 !important;
+    width: 0 !important;
+    height: 0 !important;
 }
 
 .h-screen {
