@@ -916,7 +916,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
 
       if (targetTabId) {
-        chrome.runtime.sendMessage({ type: "STOP_AGENT", targetTabId });
+        // 1. Immediately tell the content script to hide all visual indicators
+        //    so the user regains page control without any delay.
+        chrome.tabs.sendMessage(targetTabId, { type: "HIDE_AGENT_INDICATORS" }).catch(() => {});
+
+        // Also update the group metadata so state stays consistent.
+        tabGroupManager.setTabIndicatorState(targetTabId, "none").catch(() => {});
+
+        // 2. Forward STOP_AGENT to the sidepanel to abort the running request.
+        //    If no listener responds (sidepanel closed), re-open it in the
+        //    background and retry. This is fire-and-forget, not blocking.
+        chrome.runtime.sendMessage({ type: "STOP_AGENT", targetTabId }).catch(() => {
+          // No listener – sidepanel is closed. Re-open and retry in background.
+          openSidePanel(targetTabId!).then(() => {
+            setTimeout(() => {
+              chrome.runtime.sendMessage({ type: "STOP_AGENT", targetTabId }).catch(() => {});
+            }, 1500);
+          }).catch(() => {});
+        });
       }
       sendResponse({ success: true });
       return;

@@ -514,7 +514,36 @@ class ChromeDebuggerProtocol {
     if (!ChromeDebuggerProtocol.debuggerListenerRegistered) {
       ChromeDebuggerProtocol.debuggerListenerRegistered = true;
       this.registerDebuggerEventHandlers();
+      this.registerDebuggerDetachHandler();
     }
+  }
+
+  /**
+   * Listen for debugger detach events.  When the user clicks "Cancel" on
+   * Chrome's "… has started debugging this browser" info-bar, Chrome detaches
+   * the debugger with reason "canceled_by_user".  We treat this the same as
+   * clicking the stop button – broadcast STOP_AGENT so the sidepanel aborts,
+   * and hide the visual indicators on the affected tab.
+   */
+  registerDebuggerDetachHandler(): void {
+    chrome.debugger.onDetach.addListener(
+      (source: chrome.debugger.Debuggee, reason: string) => {
+        if (reason !== 'canceled_by_user') return;
+        const tabId = source.tabId;
+        if (!tabId) return;
+
+        console.log('[CDP] Debugger detached by user for tab', tabId, '– stopping agent');
+
+        // Immediately hide indicators on the page via content script
+        chrome.tabs.sendMessage(tabId, { type: 'HIDE_AGENT_INDICATORS' }).catch(() => {});
+
+        // Broadcast STOP_AGENT so the sidepanel (if open) aborts the request
+        chrome.runtime.sendMessage({ type: 'STOP_AGENT', targetTabId: tabId }).catch(() => {});
+
+        // Update group metadata for consistency
+        tabGroupManager.setTabIndicatorState(tabId, 'none').catch(() => {});
+      }
+    );
   }
 
   defaultResizeParams: ResizeParams = {
