@@ -1865,8 +1865,34 @@ function formatStepCountLabel(
   );
 }
 
-function shouldAppendAnimatedEllipsis(text: string): boolean {
-  return !/(?:\.\.\.|…)$/.test(text.trim());
+function stripTrailingEllipsis(text: string): string {
+  return text.replace(/\s*(?:\.\.\.|…)\s*$/, '');
+}
+
+function ThinkingDots() {
+  return (
+    <span className="ml-1 inline-flex items-end align-middle text-[1.05em] leading-none" aria-hidden="true">
+      {[0, 1, 2].map((index) => (
+        <motion.span
+          key={index}
+          className="inline-block min-w-[0.18em] text-current"
+          initial={{ opacity: 0.28, y: 0 }}
+          animate={{
+            opacity: [0.28, 1, 0.28],
+            y: [0, -1.5, 0]
+          }}
+          transition={{
+            duration: 0.95,
+            repeat: Infinity,
+            ease: 'easeInOut',
+            delay: index * 0.14
+          }}
+        >
+          .
+        </motion.span>
+      ))}
+    </span>
+  );
 }
 
 function getStatusSummaryLanguageInstruction(locale: SupportedLocale): string {
@@ -6188,12 +6214,10 @@ const BlockRenderer = React.memo(function BlockRenderer({
 function AssistantMessageRow({
   blocks,
   isStreaming,
-  currentStatus,
   allMessages
 }: {
   blocks: any[];
   isStreaming: boolean;
-  currentStatus: string;
   allMessages: any[];
 }) {
   const [copied, setCopied] = useState(false);
@@ -6245,16 +6269,6 @@ function AssistantMessageRow({
           isStreaming={isStreaming}
           allMessages={allMessages}
         />
-
-        {/* Status indicator when streaming but no blocks yet */}
-        {isStreaming && processedBlocks.length === 0 && currentStatus && (
-          <div className="text-sm text-text-300 italic font-claude-response relative inline-block py-2">
-            {currentStatus}
-            {shouldAppendAnimatedEllipsis(currentStatus) ? (
-              <span className="inline-block ml-1 animate-pulse">…</span>
-            ) : null}
-          </div>
-        )}
 
         {/* Copy + Feedback buttons */}
         {turnIsOver && (finalAnswerText || processedBlocks.length > 0) && (
@@ -6332,13 +6346,9 @@ type StreamingTextStore = ReturnType<typeof createStreamingTextStore>;
 /** Lightweight component that subscribes to the streaming text store.
  * Only THIS component re-renders on each rAF during streaming — not the entire MessageList. */
 function StreamingTextBlock({
-  store,
-  allMessages,
-  currentStatus
+  store
 }: {
   store: StreamingTextStore;
-  allMessages: any[];
-  currentStatus: string;
 }) {
   const streamingText = useSyncExternalStore(store.subscribe, store.getSnapshot);
   const { remarkMath, rehypeKatex } = useMathPlugins();
@@ -6353,21 +6363,10 @@ function StreamingTextBlock({
     return preprocessMarkdownText(streamingText);
   }, [streamingText]);
 
-  // When no text has arrived yet, show the status indicator
+  // The global footer already renders the active tool/status line.
+  // Avoid duplicating that placeholder inside the message list.
   if (!streamingText) {
-    if (!currentStatus) return null;
-    return (
-      <div className="flex items-start group">
-        <div className="max-w-4xl claude-response w-full break-words">
-          <div className="text-sm text-text-300 italic font-claude-response relative inline-block py-2">
-            {currentStatus}
-            {shouldAppendAnimatedEllipsis(currentStatus) ? (
-              <span className="inline-block ml-1 animate-pulse">…</span>
-            ) : null}
-          </div>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   return (
@@ -6393,13 +6392,11 @@ const MessageList = React.memo(function MessageList({
   anthropicMessages,
   streamingTextStore,
   isAgentRunning,
-  currentStatus,
   scrollRefs
 }: {
   anthropicMessages: any[];
   streamingTextStore: StreamingTextStore;
   isAgentRunning: boolean;
-  currentStatus: string;
   scrollRefs?: {
     lastAssistantMessage: React.RefObject<HTMLDivElement | null>;
     lastHumanMessage: React.RefObject<HTMLDivElement | null>;
@@ -6535,17 +6532,10 @@ const MessageList = React.memo(function MessageList({
           <AssistantMessageRow
             blocks={group.assistantBlocks}
             isStreaming={isStreamingGroup}
-            currentStatus={currentStatus}
             allMessages={anthropicMessages}
           />
         )}
-        {isStreamingGroup && (
-          <StreamingTextBlock
-            store={streamingTextStore}
-            allMessages={anthropicMessages}
-            currentStatus={currentStatus}
-          />
-        )}
+        {isStreamingGroup && <StreamingTextBlock store={streamingTextStore} />}
       </div>
     );
   };
@@ -7131,6 +7121,12 @@ export function SidepanelApp() {
     useState<NotificationPreference>(undefined);
   const [showNotificationBanner, setShowNotificationBanner] = useState(false);
   const [messageLimit, setMessageLimit] = useState<MessageLimitState>({ type: 'within_limit' });
+
+  // 固定随机启动文案的选择，避免每次渲染都重新计算
+  const randomStartupKey = useMemo(
+    () => `starting_up_${Math.floor(Math.random() * 8) + 1}`,
+    [] // 只在组件挂载时计算一次
+  );
   const [messageLimitDismissed, setMessageLimitDismissed] = useState(false);
   const [skipWarningDismissed, setSkipWarningDismissed] = useState(false);
   const [announcementDismissed, setAnnouncementDismissed] = useState(false);
@@ -10250,7 +10246,6 @@ export function SidepanelApp() {
                   anthropicMessages={effectiveAnthropicMessages}
                   streamingTextStore={streamingTextStoreRef.current}
                   isAgentRunning={effectiveIsAgentRunning}
-                  currentStatus={effectiveCurrentStatus}
                   scrollRefs={messageListScrollRefs}
                 />
               )}
@@ -10274,16 +10269,15 @@ export function SidepanelApp() {
                           ? intl.formatMessage({ id: 'compacting', defaultMessage: 'Compacting...' })
                           : effectiveCurrentStatus ||
                             intl.formatMessage({
-                              id: 'starting_up',
+                              id: randomStartupKey,
                               defaultMessage: 'Starting up...'
                             });
+                        const displayStatusText = stripTrailingEllipsis(statusText);
 
                         return (
                           <>
-                            {statusText}
-                            {shouldAppendAnimatedEllipsis(statusText) ? (
-                              <span className="inline-block ml-1 animate-pulse">…</span>
-                            ) : null}
+                            {displayStatusText}
+                            <ThinkingDots />
                           </>
                         );
                       })()}
