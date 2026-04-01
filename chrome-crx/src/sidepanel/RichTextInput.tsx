@@ -3,10 +3,20 @@ import { useEditor, EditorContent, Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import { Node, mergeAttributes } from '@tiptap/core';
+import { NodeSelection } from '@tiptap/pm/state';
 import { ReactRenderer } from '@tiptap/react';
 import Suggestion, { SuggestionOptions } from '@tiptap/suggestion';
 import tippy, { Instance as TippyInstance } from 'tippy.js';
 import './RichTextInput.css';
+
+const SHORTCUT_CHIP_FLASH_CLASS = 'shortcut-chip-flash';
+
+function triggerShortcutChipFlash(element: HTMLElement | null) {
+  if (!element) return;
+  element.classList.remove(SHORTCUT_CHIP_FLASH_CLASS);
+  void element.offsetWidth;
+  element.classList.add(SHORTCUT_CHIP_FLASH_CLASS);
+}
 
 // ShortcutChip 自定义节点
 const ShortcutChip = Node.create({
@@ -63,14 +73,50 @@ const ShortcutChip = Node.create({
   },
 
   addNodeView() {
-    return ({ node }) => {
+    return ({ node, editor, getPos }) => {
       const dom = document.createElement('span');
       dom.setAttribute('data-type', 'shortcut-chip');
       dom.setAttribute('data-command', node.attrs.command);
       dom.setAttribute('data-label', node.attrs.label || node.attrs.command);
       dom.className = 'shortcut-chip';
       dom.textContent = `/${node.attrs.label || node.attrs.command}`;
-      return { dom };
+
+      const handleMouseDown = (event: MouseEvent) => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        const pos = typeof getPos === 'function' ? getPos() : null;
+        if (typeof pos !== 'number') return;
+
+        const { state, dispatch } = editor.view;
+        dispatch(state.tr.setSelection(NodeSelection.create(state.doc, pos)));
+        editor.view.focus();
+        triggerShortcutChipFlash(dom);
+      };
+
+      const handleAnimationEnd = () => {
+        requestAnimationFrame(() => {
+          dom.classList.remove(SHORTCUT_CHIP_FLASH_CLASS);
+        });
+      };
+
+      dom.addEventListener('mousedown', handleMouseDown);
+      dom.addEventListener('animationend', handleAnimationEnd);
+
+      return {
+        dom,
+        selectNode: () => {
+          triggerShortcutChipFlash(dom);
+        },
+        deselectNode: () => {
+          dom.classList.remove(SHORTCUT_CHIP_FLASH_CLASS);
+        },
+        stopEvent: (event) => event.type === 'mousedown',
+        destroy: () => {
+          dom.removeEventListener('mousedown', handleMouseDown);
+          dom.removeEventListener('animationend', handleAnimationEnd);
+        }
+      };
     };
   }
 });
@@ -157,6 +203,12 @@ export const RichTextInput = forwardRef<RichTextInputHandle, RichTextInputProps>
             })
             .insertContent(' ')
             .run(); // 插入芯片后添加空格
+
+          requestAnimationFrame(() => {
+            const chips = editor?.view.dom.querySelectorAll<HTMLElement>('[data-type="shortcut-chip"]');
+            const insertedChip = chips?.[chips.length - 1] ?? null;
+            triggerShortcutChipFlash(insertedChip);
+          });
         },
         getContent: () => {
           return getEditorContent(editor);

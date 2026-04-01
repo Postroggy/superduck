@@ -33,21 +33,40 @@
 }
 
 .shortcut-chip {
+  --shortcut-chip-color: hsl(var(--accent-secondary-100));
+  --shortcut-chip-highlight: color-mix(in srgb, var(--shortcut-chip-color) 45%, white);
   display: inline-block;
-  padding: 2px 8px;
+  padding: 0;
   margin: 0 2px;
-  background-color: #e3f2fd;
-  border: 1px solid #90caf9;
-  border-radius: 12px;
-  font-size: 0.875em;
-  color: #1976d2;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  font-size: inherit;
+  font-weight: 500;
+  line-height: inherit;
+  color: var(--shortcut-chip-color);
   cursor: pointer;
   user-select: none;
-  vertical-align: middle;
+  vertical-align: baseline;
+  white-space: nowrap;
 }
 
-.shortcut-chip:hover {
-  background-color: #bbdefb;
+.ProseMirror .shortcut-chip.shortcut-chip-flash {
+  background-image: linear-gradient(
+    90deg,
+    var(--shortcut-chip-color) 0%,
+    var(--shortcut-chip-color) 36%,
+    var(--shortcut-chip-highlight) 50%,
+    var(--shortcut-chip-color) 64%,
+    var(--shortcut-chip-color) 100%
+  );
+  background-size: 400% 100%;
+  background-repeat: no-repeat;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: shimmertext 1.15s ease-out 1 both;
 }
 
 /* TipTap ProseMirror 样式 */
