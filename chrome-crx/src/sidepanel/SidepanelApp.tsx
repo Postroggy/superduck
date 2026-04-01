@@ -56,6 +56,7 @@ import {
   PermissionActionType,
   PermissionDuration,
   SavedPromptsService,
+  type SavedPrompt as StoredSavedPrompt,
   getAccessToken,
   getConfig,
   getPermissionActionText,
@@ -147,6 +148,7 @@ import {
 } from './icons';
 
 type ChatRole = 'system' | 'user' | 'assistant';
+type VisibleChatRole = Exclude<ChatRole, 'system'>;
 type PermissionMode = 'skip_all_permission_checks' | 'follow_a_plan';
 type NotificationPreference = 'enabled' | 'disabled' | undefined;
 
@@ -686,7 +688,9 @@ function shouldUpdateMessageLimit(current: MessageLimitState, next: MessageLimit
 }
 
 function prepareMessagesForApi(messages: any[]): any[] {
-  const filtered = messages.filter((msg: any) => !('type' in msg && msg.type === 'result'));
+  const filtered = messages.filter(
+    (msg: any) => !msg.isLocalOnlyMessage && !('type' in msg && msg.type === 'result')
+  );
   let lastAssistantIdx = -1;
   for (let i = filtered.length - 1; i >= 0; i--) {
     if (filtered[i].role === 'assistant') {
@@ -7435,6 +7439,27 @@ export function SidepanelApp() {
     setMessages((prev) => [...prev, { id: createId(), role, text }]);
   }, []);
 
+  const appendVisibleLocalMessages = useCallback(
+    (entries: Array<{ role: VisibleChatRole; text: string }>) => {
+      const visibleEntries = entries.filter(({ text }) => text.trim().length > 0);
+      if (visibleEntries.length === 0) return;
+
+      setMessages((prev) => [
+        ...prev,
+        ...visibleEntries.map(({ role, text }) => ({ id: createId(), role, text }))
+      ]);
+      setAnthropicMessages((prev) => [
+        ...prev,
+        ...visibleEntries.map(({ role, text }) => ({
+          role,
+          content: text,
+          isLocalOnlyMessage: true
+        }))
+      ]);
+    },
+    []
+  );
+
   const updateLastAssistantMessage = useCallback((text: string) => {
     // During streaming, only update the external store — avoids re-rendering the
     // entire SidepanelApp component tree on every rAF frame.
@@ -7960,27 +7985,71 @@ export function SidepanelApp() {
   );
 
   const compactConversation = useCallback(
-    async (manual = false) => {
-      if (anthropicMessages.length === 0 || isCompacting) return anthropicMessages;
+    async (manual = false, options?: { visibleCommandText?: string }) => {
+      const visibleCommandText = options?.visibleCommandText?.trim();
+      const messagesToCompact = anthropicMessages.filter((msg: any) => !msg.isLocalOnlyMessage);
+
+      if (messagesToCompact.length === 0) {
+        if (visibleCommandText) {
+          appendVisibleLocalMessages([
+            { role: 'user', text: visibleCommandText },
+            { role: 'assistant', text: '没有可清理的对话历史' }
+          ]);
+        }
+        return anthropicMessages;
+      }
+
+      if (isCompacting) return anthropicMessages;
+
+      if (visibleCommandText) {
+        pushMessage('user', visibleCommandText);
+        setAnthropicMessages((prev) => [
+          ...prev,
+          { role: 'user', content: visibleCommandText, isLocalOnlyMessage: true }
+        ]);
+      }
+
       setIsCompacting(true);
       try {
         const compactor = new ConversationCompactor(async (params) =>
           createAnthropicMessage(params)
         );
-        const result = await compactor.compactConversation(anthropicMessages, MAX_TOKENS, !manual);
-        setMessageHistory(anthropicMessages);
-        setAnthropicMessages(result.messagesAfterCompacting);
+        const result = await compactor.compactConversation(messagesToCompact, MAX_TOKENS, !manual);
+        setMessageHistory(messagesToCompact);
+        setAnthropicMessages(
+          visibleCommandText
+            ? [
+                {
+                  role: 'user',
+                  content: visibleCommandText,
+                  isLocalOnlyMessage: true
+                },
+                ...result.messagesAfterCompacting
+              ]
+            : result.messagesAfterCompacting
+        );
         setTokensSaved(result.tokensSaved ?? null);
         pushMessage('system', 'Conversation compacted to save context.');
-        return result.messagesAfterCompacting;
+        return visibleCommandText
+          ? [
+              {
+                role: 'user',
+                content: visibleCommandText,
+                isLocalOnlyMessage: true
+              },
+              ...result.messagesAfterCompacting
+            ]
+          : result.messagesAfterCompacting;
       } catch (error) {
-        pushMessage('system', `Compaction failed: ${getErrorMessage(error)}`);
+        const errorText = `Compaction failed: ${getErrorMessage(error)}`;
+        pushMessage('system', errorText);
+        appendVisibleLocalMessages([{ role: 'assistant', text: errorText }]);
         return anthropicMessages;
       } finally {
         setIsCompacting(false);
       }
     },
-    [anthropicMessages, createAnthropicMessage, isCompacting, pushMessage]
+    [anthropicMessages, appendVisibleLocalMessages, createAnthropicMessage, isCompacting, pushMessage]
   );
 
   const sendCompletionNotification = useCallback(async () => {
@@ -8088,8 +8157,8 @@ export function SidepanelApp() {
       const systemCommand = matchedSpecialCommand?.command ?? (trimmed === '/share' ? 'share' : null);
 
       if (systemCommand === 'compact') {
-        // Manual compaction: compact conversation and return without sending a message
-        await compactConversation(true);
+        // Manual compaction: keep the command visible, then compact the conversation.
+        await compactConversation(true, { visibleCommandText: trimmed });
         return;
       }
 
@@ -9496,6 +9565,33 @@ export function SidepanelApp() {
     });
   }, [input, pendingAttachments, effectiveSendPrompt, effectiveIsAgentRunning, authToken, apiKey]);
 
+  const insertShortcutChip = useCallback((command: string, label?: string) => {
+    inputRef.current?.clear();
+    inputRef.current?.insertShortcut(command, label || command);
+    inputRef.current?.focus();
+  }, []);
+
+  const navigateActiveTabToUrl = useCallback(async (url: string) => {
+    try {
+      const parsedUrl = new URL(url);
+      if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+        return;
+      }
+
+      const tabs = await chrome.tabs.query({
+        active: true,
+        currentWindow: true
+      });
+      if (tabs[0]?.id) {
+        await chrome.tabs.update(tabs[0].id, {
+          url: parsedUrl.toString()
+        });
+      }
+    } catch (error) {
+      console.error('Failed to navigate to URL:', error);
+    }
+  }, []);
+
   const removeAttachment = useCallback((id: string) => {
     setPendingAttachments((prev) => {
       const next = prev.filter((item) => item.id !== id);
@@ -10555,21 +10651,48 @@ export function SidepanelApp() {
                                       setShowCommandMenu(false);
                                       setCommandSearchTerm('');
 
-                                      let savedPrompt;
+                                      // Check if it's a system command (like 'compact')
+                                      if (command === 'compact') {
+                                        setInput('');
+                                        inputRef.current?.clear();
+                                        await sendPrompt('/compact');
+                                        return;
+                                      }
+
+                                      let savedPrompt: StoredSavedPrompt | undefined;
                                       try {
-                                        savedPrompt =
-                                          await SavedPromptsService.getPromptByCommand(command);
+                                        savedPrompt = await SavedPromptsService.getPromptByCommand(command);
                                       } catch (error) {
                                         console.error('Failed to load shortcut:', error);
                                       }
 
-                                      // Clear input and insert shortcut chip
-                                      inputRef.current?.clear();
-                                      inputRef.current?.insertShortcut(
-                                        command,
-                                        savedPrompt?.name || label || command
-                                      );
-                                      inputRef.current?.focus();
+                                      if (!savedPrompt) {
+                                        insertShortcutChip(command, label);
+                                        return;
+                                      }
+
+                                      const promptType = savedPrompt.type || 'shortcut';
+
+                                      switch (promptType) {
+                                        case 'command':
+                                          // Execute immediately using the selected prompt text.
+                                          inputRef.current?.clear();
+                                          setInput('');
+                                          await effectiveSendPrompt(savedPrompt.prompt);
+                                          break;
+
+                                        case 'module':
+                                          if (savedPrompt.url) {
+                                            await navigateActiveTabToUrl(savedPrompt.url);
+                                          }
+                                          setInput('');
+                                          break;
+
+                                        case 'shortcut':
+                                        default:
+                                          insertShortcutChip(command, label);
+                                          break;
+                                      }
                                     }}
                                     onRecordWorkflow={() => {
                                       setShowCommandMenu(false);
@@ -11026,7 +11149,6 @@ export function SidepanelApp() {
         {(promptToSave !== null || promptToEdit !== null) && (
           <CreateShortcutModal
             prompt={promptToEdit || promptToSave || undefined}
-            sessionId={activeSessionId}
             currentModel={selectedModel}
             onClose={() => {
               setPromptToSave(null);
