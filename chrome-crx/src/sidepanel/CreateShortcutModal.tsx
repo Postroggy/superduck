@@ -1,25 +1,21 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { FormattedMessage, useIntl } from 'react-intl';
 import { X, MoreHorizontal, Trash2 } from 'lucide-react';
 import { Button } from '../components/SchedulingFields';
 import { TextInput, TextArea, ErrorMessage } from '../components/SchedulingFields';
 import { SchedulingFields } from '../components/SchedulingFields';
+import type {
+  NewSavedPrompt,
+  PromptType,
+  SavedPrompt as StoredSavedPrompt
+} from '../SavedPromptsService';
 
-interface SavedPrompt {
+type EditableSavedPrompt = StoredSavedPrompt & {
   id: string;
   command: string;
-  prompt: string;
-  url?: string;
-  repeatType?: string;
-  specificTime?: string;
-  specificDate?: string;
-  dayOfWeek?: number;
-  dayOfMonth?: number;
-  monthAndDay?: string;
-  model?: string;
   createdAt: number;
   usageCount: number;
-}
+};
 
 interface PromptToSave {
   prompt: string;
@@ -27,11 +23,10 @@ interface PromptToSave {
 }
 
 interface CreateShortcutModalProps {
-  prompt?: SavedPrompt | PromptToSave;
+  prompt?: EditableSavedPrompt | PromptToSave;
   onClose: () => void;
   onSave: (commandName: string) => void;
   onDelete?: () => void;
-  sessionId: string | null;
   generateName?: (prompt: string) => Promise<string>;
   currentModel: string;
 }
@@ -41,7 +36,6 @@ export function CreateShortcutModal({
   onClose,
   onSave,
   onDelete,
-  sessionId,
   generateName,
   currentModel,
 }: CreateShortcutModalProps) {
@@ -49,7 +43,7 @@ export function CreateShortcutModal({
 
   // Check if editing existing prompt
   const isEditing = !!(prompt && 'id' in prompt);
-  const existingPrompt = isEditing ? (prompt as SavedPrompt) : null;
+  const existingPrompt = isEditing ? (prompt as EditableSavedPrompt) : null;
 
   // Form state
   const initialPromptText = existingPrompt?.prompt || (prompt && !('id' in prompt) ? (prompt as PromptToSave).prompt : '') || '';
@@ -57,6 +51,7 @@ export function CreateShortcutModal({
 
   const [commandName, setCommandName] = useState(initialCommand);
   const [promptText, setPromptText] = useState(initialPromptText);
+  const [promptType, setPromptType] = useState<PromptType>(existingPrompt?.type || 'shortcut');
   const [errorMessage, setErrorMessage] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -95,7 +90,49 @@ export function CreateShortcutModal({
     return date >= new Date().toISOString().split('T')[0] ? date : '';
   });
   const [url, setUrl] = useState(existingPrompt?.url || '');
-  const [model, setModel] = useState(existingPrompt?.model || currentModel || 'claude-sonnet-4-6');
+  const model = existingPrompt?.model || currentModel || 'claude-sonnet-4-6';
+  const monthLabels = useMemo(
+    () =>
+      Array.from({ length: 12 }, (_, index) =>
+        intl.formatDate(new Date(2020, index, 1), { month: 'long' })
+      ),
+    [intl]
+  );
+  const daysOfWeekLabels = useMemo(
+    () =>
+      Array.from({ length: 7 }, (_, index) =>
+        intl.formatDate(new Date(2020, 5, 7 + index), { weekday: 'long' })
+      ),
+    [intl]
+  );
+  const moduleUrlError = useMemo(() => {
+    if (promptType !== 'module') return '';
+
+    const trimmedUrl = url.trim();
+    if (!trimmedUrl) {
+      return intl.formatMessage({
+        defaultMessage: 'Destination URL is required for module shortcuts',
+        id: 'module_url_required'
+      });
+    }
+
+    try {
+      const parsedUrl = new URL(trimmedUrl);
+      if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+        return intl.formatMessage({
+          defaultMessage: 'URL must start with http:// or https://',
+          id: 'module_url_protocol'
+        });
+      }
+    } catch {
+      return intl.formatMessage({
+        defaultMessage: 'Invalid URL format',
+        id: 'invalid_url_format'
+      });
+    }
+
+    return '';
+  }, [intl, promptType, url]);
 
   // Auto-generate name when modal opens
   const generateShortcutName = useCallback(async () => {
@@ -183,6 +220,10 @@ export function CreateShortcutModal({
     setHasAttemptedSubmit(true);
 
     if (commandName.trim() && promptText.trim()) {
+      if (promptType === 'module' && moduleUrlError) {
+        return;
+      }
+
       setIsSaving(true);
       setErrorMessage('');
 
@@ -192,9 +233,10 @@ export function CreateShortcutModal({
 
         if (isEditing && existingPrompt) {
           // Update existing prompt
-          const updates: Partial<SavedPrompt> = {
+          const updates: Partial<EditableSavedPrompt> = {
             prompt: promptText.trim(),
             command: commandName.trim(),
+            type: promptType,
             url: url.trim() || undefined,
           };
 
@@ -226,31 +268,32 @@ export function CreateShortcutModal({
           window.dispatchEvent(new Event('prompts-changed'));
         } else {
           // Create new prompt
-          const newPrompt: Omit<SavedPrompt, 'id'> = {
+          const newPrompt: NewSavedPrompt = {
             prompt: promptText.trim(),
             command: commandName.trim(),
+            type: promptType,
             url: url.trim() || undefined,
             createdAt: Date.now(),
             usageCount: 0,
           };
 
           if (scheduleEnabled) {
-            (newPrompt as any).repeatType = repeatType;
-            (newPrompt as any).specificTime = specificTime;
-            (newPrompt as any).model = model;
+            newPrompt.repeatType = repeatType;
+            newPrompt.specificTime = specificTime;
+            newPrompt.model = model;
 
             if (repeatType === 'once') {
-              (newPrompt as any).specificDate = specificDate;
+              newPrompt.specificDate = specificDate;
             } else if (repeatType === 'weekly') {
-              (newPrompt as any).dayOfWeek = dayOfWeek;
+              newPrompt.dayOfWeek = dayOfWeek;
             } else if (repeatType === 'monthly') {
-              (newPrompt as any).dayOfMonth = dayOfMonth;
+              newPrompt.dayOfMonth = dayOfMonth;
             } else if (repeatType === 'annually') {
-              (newPrompt as any).monthAndDay = `${month}-${day}`;
+              newPrompt.monthAndDay = `${month}-${day}`;
             }
           }
 
-          await SavedPromptsService.savePrompt(newPrompt as any);
+          await SavedPromptsService.savePrompt(newPrompt);
           window.dispatchEvent(new Event('prompts-changed'));
         }
 
@@ -264,6 +307,8 @@ export function CreateShortcutModal({
   }, [
     commandName,
     promptText,
+    promptType,
+    moduleUrlError,
     isEditing,
     existingPrompt,
     scheduleEnabled,
@@ -473,6 +518,88 @@ export function CreateShortcutModal({
               }
             />
 
+            {/* Type selector */}
+            <div>
+              <label className="block text-sm font-medium text-text-200 mb-2">
+                <FormattedMessage defaultMessage="Type" id="type" />
+              </label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPromptType('shortcut')}
+                  className={`flex-1 px-3 py-2 text-sm rounded-lg border transition-colors ${
+                    promptType === 'shortcut'
+                      ? 'bg-bg-200 border-border-200 text-text-000'
+                      : 'bg-bg-000 border-border-300 text-text-300 hover:bg-bg-100'
+                  }`}
+                >
+                  <FormattedMessage defaultMessage="Shortcut" id="shortcut_type" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPromptType('command')}
+                  className={`flex-1 px-3 py-2 text-sm rounded-lg border transition-colors ${
+                    promptType === 'command'
+                      ? 'bg-bg-200 border-border-200 text-text-000'
+                      : 'bg-bg-000 border-border-300 text-text-300 hover:bg-bg-100'
+                  }`}
+                >
+                  <FormattedMessage defaultMessage="Command" id="command_type" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPromptType('module')}
+                  className={`flex-1 px-3 py-2 text-sm rounded-lg border transition-colors ${
+                    promptType === 'module'
+                      ? 'bg-bg-200 border-border-200 text-text-000'
+                      : 'bg-bg-000 border-border-300 text-text-300 hover:bg-bg-100'
+                  }`}
+                >
+                  <FormattedMessage defaultMessage="Module" id="module_type" />
+                </button>
+              </div>
+              <p className="mt-1.5 text-xs text-text-400">
+                {promptType === 'shortcut' && (
+                  <FormattedMessage
+                    defaultMessage="Insert into input box for adding parameters"
+                    id="shortcut_type_desc"
+                  />
+                )}
+                {promptType === 'command' && (
+                  <FormattedMessage
+                    defaultMessage="Execute immediately when selected"
+                    id="command_type_desc"
+                  />
+                )}
+                {promptType === 'module' && (
+                  <FormattedMessage
+                    defaultMessage="Navigate to URL or open feature"
+                    id="module_type_desc"
+                  />
+                )}
+              </p>
+            </div>
+
+            {promptType === 'module' && (
+              <div>
+                <TextInput
+                  label={intl.formatMessage({
+                    defaultMessage: 'Destination URL',
+                    id: 'destination_url'
+                  })}
+                  type="url"
+                  value={url}
+                  onValueChange={(value) => setUrl(value)}
+                  placeholder="https://example.com"
+                  className="w-full text-sm"
+                  error={hasAttemptedSubmit && !!moduleUrlError}
+                />
+                {hasAttemptedSubmit && moduleUrlError && (
+                  <ErrorMessage className="mt-1">{moduleUrlError}</ErrorMessage>
+                )}
+              </div>
+            )}
+
             {/* Scheduling fields */}
             <SchedulingFields
               scheduleEnabled={scheduleEnabled}
@@ -491,11 +618,12 @@ export function CreateShortcutModal({
               setDay={setDay}
               specificTime={specificTime}
               setSpecificTime={setSpecificTime}
+              monthLabels={monthLabels}
+              daysOfWeekLabels={daysOfWeekLabels}
               url={url}
               setUrl={setUrl}
+              urlError=""
               compact
-              model={model}
-              setModel={setModel}
             />
           </div>
 

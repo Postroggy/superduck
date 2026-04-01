@@ -1112,10 +1112,13 @@ export const FOLLOW_A_PLAN = "follow_a_plan";
 // SavedPromptsService
 // =============================================================================
 
+export type PromptType = 'command' | 'shortcut' | 'module';
+
 export interface SavedPrompt {
   id: string;
   command?: string;
   prompt: string;
+  type?: PromptType;
   url?: string;
   repeatType?: string;
   specificTime?: string;
@@ -1132,6 +1135,8 @@ export interface SavedPrompt {
   [key: string]: unknown;
 }
 
+export type NewSavedPrompt = Omit<SavedPrompt, 'id' | 'prompt'> & { id?: string; prompt: string };
+
 export class SavedPromptsService {
   static async getAllPrompts(): Promise<SavedPrompt[]> {
     return (await getStorageValue(StorageKeys.SAVED_PROMPTS)) || [];
@@ -1147,17 +1152,18 @@ export class SavedPromptsService {
     return (await this.getAllPrompts()).find((p) => p.command === command);
   }
 
-  static async savePrompt(prompt: SavedPrompt): Promise<SavedPrompt> {
+  static async savePrompt(prompt: NewSavedPrompt): Promise<SavedPrompt> {
     const all = await this.getAllPrompts();
     if (prompt.command) {
       if (all.find((p) => p.command === prompt.command))
         throw new Error(`/${prompt.command} is already in use`);
     }
     const newPrompt: SavedPrompt = {
-      ...prompt,
+      ...(prompt as Omit<SavedPrompt, 'id'>),
       id: `prompt_${Date.now()}`,
-      createdAt: prompt.createdAt || Date.now(),
-      usageCount: prompt.usageCount || 0,
+      prompt: prompt.prompt,
+      createdAt: typeof prompt.createdAt === 'number' ? prompt.createdAt : Date.now(),
+      usageCount: typeof prompt.usageCount === 'number' ? prompt.usageCount : 0,
     };
     all.push(newPrompt);
     await setStorageValue(StorageKeys.SAVED_PROMPTS, all);
