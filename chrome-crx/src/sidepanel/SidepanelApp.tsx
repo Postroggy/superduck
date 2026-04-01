@@ -10268,7 +10268,7 @@ export function SidepanelApp() {
                     <ClaudeAvatar
                       state={effectiveIsCompacting ? 'shimmer' : 'thinking'}
                       isInteractive={false}
-                      className="[&_svg]:!fill-[#D97757]"
+                      className=""
                     />
                     <div className="text-sm text-text-300 italic font-claude-response relative inline-block">
                       {(() => {
