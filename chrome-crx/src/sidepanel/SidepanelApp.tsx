@@ -10163,7 +10163,8 @@ export function SidepanelApp() {
           ? {
               border: '1.7px dashed #F7CE46',
               borderRadius: '16px',
-              boxSizing: 'border-box'
+              boxSizing: 'border-box',
+              overflow: 'hidden'
             }
           : undefined
       }
