@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { FormattedMessage, useIntl } from 'react-intl';
 import { X, MoreHorizontal, Trash2 } from 'lucide-react';
 import { Button } from '../components/SchedulingFields';
-import { TextInput, TextArea, ErrorMessage } from '../components/SchedulingFields';
+import { TextInput, TextArea, ErrorMessage, Label } from '../components/SchedulingFields';
 import { SchedulingFields } from '../components/SchedulingFields';
 import type {
   NewSavedPrompt,
@@ -37,7 +37,7 @@ export function CreateShortcutModal({
   onSave,
   onDelete,
   generateName,
-  currentModel,
+  currentModel
 }: CreateShortcutModalProps) {
   const intl = useIntl();
 
@@ -46,12 +46,18 @@ export function CreateShortcutModal({
   const existingPrompt = isEditing ? (prompt as EditableSavedPrompt) : null;
 
   // Form state
-  const initialPromptText = existingPrompt?.prompt || (prompt && !('id' in prompt) ? (prompt as PromptToSave).prompt : '') || '';
-  const initialCommand = existingPrompt?.command || (prompt && !('id' in prompt) ? (prompt as PromptToSave).command : '') || '';
+  const initialPromptText =
+    existingPrompt?.prompt ||
+    (prompt && !('id' in prompt) ? (prompt as PromptToSave).prompt : '') ||
+    '';
+  const initialCommand =
+    existingPrompt?.command ||
+    (prompt && !('id' in prompt) ? (prompt as PromptToSave).command : '') ||
+    '';
 
   const [commandName, setCommandName] = useState(initialCommand);
   const [promptText, setPromptText] = useState(initialPromptText);
-  const [promptType, setPromptType] = useState<PromptType>(existingPrompt?.type || 'shortcut');
+  const promptType: PromptType = existingPrompt?.type || 'shortcut';
   const [errorMessage, setErrorMessage] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -105,15 +111,18 @@ export function CreateShortcutModal({
       ),
     [intl]
   );
-  const moduleUrlError = useMemo(() => {
-    if (promptType !== 'module') return '';
-
+  const urlErrorMessage = useMemo(() => {
     const trimmedUrl = url.trim();
-    if (!trimmedUrl) {
+
+    if (promptType === 'module' && !trimmedUrl) {
       return intl.formatMessage({
         defaultMessage: 'Destination URL is required for module shortcuts',
         id: 'module_url_required'
       });
+    }
+
+    if (!trimmedUrl) {
+      return '';
     }
 
     try {
@@ -133,6 +142,16 @@ export function CreateShortcutModal({
 
     return '';
   }, [intl, promptType, url]);
+  const urlFieldLabel =
+    promptType === 'module'
+      ? intl.formatMessage({
+          defaultMessage: 'Destination URL',
+          id: 'destination_url'
+        })
+      : intl.formatMessage({
+          defaultMessage: 'Start from',
+          id: 'start_from'
+        });
 
   // Auto-generate name when modal opens
   const generateShortcutName = useCallback(async () => {
@@ -186,7 +205,7 @@ export function CreateShortcutModal({
             if (tabUrl && tabUrl.startsWith('http')) {
               setUrl(tabUrl);
             }
-          } catch (error) {
+          } catch {
             // Ignore
           }
         }
@@ -220,7 +239,7 @@ export function CreateShortcutModal({
     setHasAttemptedSubmit(true);
 
     if (commandName.trim() && promptText.trim()) {
-      if (promptType === 'module' && moduleUrlError) {
+      if (urlErrorMessage) {
         return;
       }
 
@@ -237,7 +256,7 @@ export function CreateShortcutModal({
             prompt: promptText.trim(),
             command: commandName.trim(),
             type: promptType,
-            url: url.trim() || undefined,
+            url: url.trim() || undefined
           };
 
           if (scheduleEnabled) {
@@ -274,7 +293,7 @@ export function CreateShortcutModal({
             type: promptType,
             url: url.trim() || undefined,
             createdAt: Date.now(),
-            usageCount: 0,
+            usageCount: 0
           };
 
           if (scheduleEnabled) {
@@ -308,7 +327,7 @@ export function CreateShortcutModal({
     commandName,
     promptText,
     promptType,
-    moduleUrlError,
+    urlErrorMessage,
     isEditing,
     existingPrompt,
     scheduleEnabled,
@@ -322,7 +341,7 @@ export function CreateShortcutModal({
     url,
     model,
     onSave,
-    handleClose,
+    handleClose
   ]);
 
   // Keyboard shortcuts
@@ -332,7 +351,12 @@ export function CreateShortcutModal({
         handleClose();
       } else if (e.key === 'Enter') {
         const target = document.activeElement;
-        if (target?.tagName !== 'INPUT' && target?.tagName !== 'TEXTAREA' && !isSaving && !isDeleting) {
+        if (
+          target?.tagName !== 'INPUT' &&
+          target?.tagName !== 'TEXTAREA' &&
+          !isSaving &&
+          !isDeleting
+        ) {
           e.preventDefault();
           handleSave();
         }
@@ -377,7 +401,10 @@ export function CreateShortcutModal({
                   <button
                     onClick={() => setShowMoreMenu(!showMoreMenu)}
                     className="p-1 hover:bg-bg-200 rounded transition-colors"
-                    aria-label={intl.formatMessage({ defaultMessage: 'More options', id: 'more_options' })}
+                    aria-label={intl.formatMessage({
+                      defaultMessage: 'More options',
+                      id: 'more_options'
+                    })}
                   >
                     <MoreHorizontal size={16} className="text-text-300" />
                   </button>
@@ -390,13 +417,16 @@ export function CreateShortcutModal({
                           if (isEditing && existingPrompt) {
                             setIsDeleting(true);
                             try {
-                              const { SavedPromptsService } = await import('../SavedPromptsService');
+                              const { SavedPromptsService } =
+                                await import('../SavedPromptsService');
                               await SavedPromptsService.deletePrompt(existingPrompt.id);
                               window.dispatchEvent(new Event('prompts-changed'));
                               onDelete?.();
                               handleClose();
                             } catch (error) {
-                              setErrorMessage(error instanceof Error ? error.message : 'Failed to delete prompt');
+                              setErrorMessage(
+                                error instanceof Error ? error.message : 'Failed to delete prompt'
+                              );
                               setIsDeleting(false);
                             }
                           }
@@ -462,7 +492,8 @@ export function CreateShortcutModal({
               />
 
               {/* Error message */}
-              {((hasAttemptedSubmit && !commandName.trim()) || errorMessage?.includes('already in use')) && (
+              {((hasAttemptedSubmit && !commandName.trim()) ||
+                errorMessage?.includes('already in use')) && (
                 <ErrorMessage className="mt-1">
                   {hasAttemptedSubmit && !commandName.trim() ? (
                     <FormattedMessage defaultMessage="Name is required" id="name_is_required" />
@@ -485,7 +516,7 @@ export function CreateShortcutModal({
                       WebkitBackgroundClip: 'text',
                       WebkitTextFillColor: 'transparent',
                       backgroundClip: 'text',
-                      animation: 'shimmerSweep 2s ease-in-out infinite',
+                      animation: 'shimmerSweep 2s ease-in-out infinite'
                     }}
                   >
                     <FormattedMessage defaultMessage="Generating..." id="generating" />
@@ -509,122 +540,79 @@ export function CreateShortcutModal({
               className="min-h-32 max-h-64 overflow-y-auto font-large text-sm"
               placeholder={intl.formatMessage({
                 defaultMessage: 'Enter your prompt text...',
-                id: 'enter_your_prompt_text',
+                id: 'enter_your_prompt_text'
               })}
               error={
                 hasAttemptedSubmit && !promptText.trim()
-                  ? intl.formatMessage({ defaultMessage: 'Prompt is required', id: 'prompt_is_required' })
+                  ? intl.formatMessage({
+                      defaultMessage: 'Prompt is required',
+                      id: 'prompt_is_required'
+                    })
                   : undefined
               }
             />
-
-            {/* Type selector */}
             <div>
-              <label className="block text-sm font-medium text-text-200 mb-2">
-                <FormattedMessage defaultMessage="Type" id="type" />
-              </label>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setPromptType('shortcut')}
-                  className={`flex-1 px-3 py-2 text-sm rounded-lg border transition-colors ${
-                    promptType === 'shortcut'
-                      ? 'bg-bg-200 border-border-200 text-text-000'
-                      : 'bg-bg-000 border-border-300 text-text-300 hover:bg-bg-100'
-                  }`}
-                >
-                  <FormattedMessage defaultMessage="Shortcut" id="shortcut_type" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPromptType('command')}
-                  className={`flex-1 px-3 py-2 text-sm rounded-lg border transition-colors ${
-                    promptType === 'command'
-                      ? 'bg-bg-200 border-border-200 text-text-000'
-                      : 'bg-bg-000 border-border-300 text-text-300 hover:bg-bg-100'
-                  }`}
-                >
-                  <FormattedMessage defaultMessage="Command" id="command_type" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPromptType('module')}
-                  className={`flex-1 px-3 py-2 text-sm rounded-lg border transition-colors ${
-                    promptType === 'module'
-                      ? 'bg-bg-200 border-border-200 text-text-000'
-                      : 'bg-bg-000 border-border-300 text-text-300 hover:bg-bg-100'
-                  }`}
-                >
-                  <FormattedMessage defaultMessage="Module" id="module_type" />
-                </button>
-              </div>
-              <p className="mt-1.5 text-xs text-text-400">
-                {promptType === 'shortcut' && (
-                  <FormattedMessage
-                    defaultMessage="Insert into input box for adding parameters"
-                    id="shortcut_type_desc"
-                  />
-                )}
-                {promptType === 'command' && (
-                  <FormattedMessage
-                    defaultMessage="Execute immediately when selected"
-                    id="command_type_desc"
-                  />
-                )}
-                {promptType === 'module' && (
-                  <FormattedMessage
-                    defaultMessage="Navigate to URL or open feature"
-                    id="module_type_desc"
-                  />
-                )}
-              </p>
+              <TextInput
+                label={urlFieldLabel}
+                type="url"
+                value={url}
+                onValueChange={(value) => setUrl(value)}
+                placeholder="https://example.com"
+                className="w-full text-sm"
+                error={hasAttemptedSubmit && !!urlErrorMessage}
+              />
+              {hasAttemptedSubmit && urlErrorMessage && (
+                <ErrorMessage className="mt-1">{urlErrorMessage}</ErrorMessage>
+              )}
             </div>
 
-            {promptType === 'module' && (
+            <div className="space-y-3">
               <div>
-                <TextInput
-                  label={intl.formatMessage({
-                    defaultMessage: 'Destination URL',
-                    id: 'destination_url'
-                  })}
-                  type="url"
-                  value={url}
-                  onValueChange={(value) => setUrl(value)}
-                  placeholder="https://example.com"
-                  className="w-full text-sm"
-                  error={hasAttemptedSubmit && !!moduleUrlError}
-                />
-                {hasAttemptedSubmit && moduleUrlError && (
-                  <ErrorMessage className="mt-1">{moduleUrlError}</ErrorMessage>
-                )}
+                <div className="flex items-center justify-between gap-4">
+                  <Label
+                    id="shortcut-schedule-toggle"
+                    label={<FormattedMessage defaultMessage="Schedule" id="schedule" />}
+                    className="mb-0 text-sm"
+                  />
+                  <label className="relative inline-flex shrink-0 items-center cursor-pointer scale-90 origin-right">
+                    <input
+                      id="shortcut-schedule-toggle"
+                      type="checkbox"
+                      className="sr-only peer"
+                      checked={scheduleEnabled}
+                      onChange={(event) => setScheduleEnabled(event.target.checked)}
+                    />
+                    <div className="w-11 h-6 bg-bg-300 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-accent-secondary-100 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-border-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-secondary-100" />
+                  </label>
+                </div>
               </div>
-            )}
-
-            {/* Scheduling fields */}
-            <SchedulingFields
-              scheduleEnabled={scheduleEnabled}
-              setScheduleEnabled={setScheduleEnabled}
-              repeatType={repeatType}
-              setRepeatType={setRepeatType}
-              specificDate={specificDate}
-              setSpecificDate={setSpecificDate}
-              dayOfWeek={dayOfWeek}
-              setDayOfWeek={setDayOfWeek}
-              dayOfMonth={dayOfMonth}
-              setDayOfMonth={setDayOfMonth}
-              month={month}
-              setMonth={setMonth}
-              day={day}
-              setDay={setDay}
-              specificTime={specificTime}
-              setSpecificTime={setSpecificTime}
-              monthLabels={monthLabels}
-              daysOfWeekLabels={daysOfWeekLabels}
-              url={url}
-              setUrl={setUrl}
-              urlError=""
-              compact
-            />
+              {scheduleEnabled && (
+                <SchedulingFields
+                  scheduleEnabled={scheduleEnabled}
+                  setScheduleEnabled={setScheduleEnabled}
+                  repeatType={repeatType}
+                  setRepeatType={setRepeatType}
+                  specificDate={specificDate}
+                  setSpecificDate={setSpecificDate}
+                  dayOfWeek={dayOfWeek}
+                  setDayOfWeek={setDayOfWeek}
+                  dayOfMonth={dayOfMonth}
+                  setDayOfMonth={setDayOfMonth}
+                  month={month}
+                  setMonth={setMonth}
+                  day={day}
+                  setDay={setDay}
+                  specificTime={specificTime}
+                  setSpecificTime={setSpecificTime}
+                  monthLabels={monthLabels}
+                  daysOfWeekLabels={daysOfWeekLabels}
+                  url={url}
+                  setUrl={setUrl}
+                  urlError=""
+                  compact
+                />
+              )}
+            </div>
           </div>
 
           {/* Actions */}
