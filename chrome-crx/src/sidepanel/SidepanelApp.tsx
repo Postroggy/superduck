@@ -101,7 +101,12 @@ import {
   getBaseModel
 } from './sessionPool';
 import { useAnalytics, getModelsConfig, AnalyticsContext } from '../components/SchedulingFields';
-import { mapModelName, loadModelMapping, MODEL_MAPPING_KEYS, getMappedModelName } from '../utils/modelMapping';
+import {
+  mapModelName,
+  loadModelMapping,
+  MODEL_MAPPING_KEYS,
+  getMappedModelName
+} from '../utils/modelMapping';
 import { EmptyState } from './EmptyState';
 import { useTabEvent } from './hooks';
 import { ScrollContainer, type ScrollContainerHandle } from './ScrollContainer';
@@ -1854,10 +1859,7 @@ function formatWithFallback(
   return descriptor.defaultMessage.replace(/\{(\w+)\}/g, (_, key) => String(values?.[key] ?? ''));
 }
 
-function formatStepCountLabel(
-  formatMessage: FormatMessageLike | undefined,
-  count: number
-): string {
+function formatStepCountLabel(formatMessage: FormatMessageLike | undefined, count: number): string {
   if (!formatMessage) {
     return `${count} step${count === 1 ? '' : 's'}`;
   }
@@ -1877,7 +1879,10 @@ function stripTrailingEllipsis(text: string): string {
 
 function ThinkingDots() {
   return (
-    <span className="ml-1 inline-flex items-end align-middle text-[1.05em] leading-none" aria-hidden="true">
+    <span
+      className="ml-1 inline-flex items-end align-middle text-[1.05em] leading-none"
+      aria-hidden="true"
+    >
       {[0, 1, 2].map((index) => (
         <motion.span
           key={index}
@@ -2739,7 +2744,9 @@ const WebFetchToolCell = React.memo(function WebFetchToolCell({
     if (isError) {
       displayText = (
         <>
-          <span>{intl.formatMessage({ id: 'failed_to_fetch', defaultMessage: 'Failed to fetch' })}</span>{' '}
+          <span>
+            {intl.formatMessage({ id: 'failed_to_fetch', defaultMessage: 'Failed to fetch' })}
+          </span>{' '}
           <span className="text-text-400">{pageInfo?.title || url}</span>
         </>
       );
@@ -4806,7 +4813,8 @@ function PlanApprovalModal({
             </span>
           </PermissionActionButton>
           <p className="font-small text-text-500 pt-1 px-1">
-            SuperDuck will only use the sites listed. You'll be asked before accessing anything else.
+            SuperDuck will only use the sites listed. You'll be asked before accessing anything
+            else.
           </p>
         </div>
       )}
@@ -6351,11 +6359,7 @@ type StreamingTextStore = ReturnType<typeof createStreamingTextStore>;
 
 /** Lightweight component that subscribes to the streaming text store.
  * Only THIS component re-renders on each rAF during streaming — not the entire MessageList. */
-function StreamingTextBlock({
-  store
-}: {
-  store: StreamingTextStore;
-}) {
+function StreamingTextBlock({ store }: { store: StreamingTextStore }) {
   const streamingText = useSyncExternalStore(store.subscribe, store.getSnapshot);
   const { remarkMath, rehypeKatex } = useMathPlugins();
 
@@ -7080,7 +7084,7 @@ export function SidepanelApp() {
     const listener = (changes: any, areaName: string) => {
       if (areaName !== 'local') return;
       const mappingKeys = Object.values(MODEL_MAPPING_KEYS);
-      if (mappingKeys.some(key => key in changes)) {
+      if (mappingKeys.some((key) => key in changes)) {
         loadModelMapping().then(setModelMapping);
       }
     };
@@ -8049,7 +8053,13 @@ export function SidepanelApp() {
         setIsCompacting(false);
       }
     },
-    [anthropicMessages, appendVisibleLocalMessages, createAnthropicMessage, isCompacting, pushMessage]
+    [
+      anthropicMessages,
+      appendVisibleLocalMessages,
+      createAnthropicMessage,
+      isCompacting,
+      pushMessage
+    ]
   );
 
   const sendCompletionNotification = useCallback(async () => {
@@ -8154,7 +8164,8 @@ export function SidepanelApp() {
         slashCommand && !slashCommand.includes(' ')
           ? resolveSpecialCommand(slashCommand, intl)
           : undefined;
-      const systemCommand = matchedSpecialCommand?.command ?? (trimmed === '/share' ? 'share' : null);
+      const systemCommand =
+        matchedSpecialCommand?.command ?? (trimmed === '/share' ? 'share' : null);
 
       if (systemCommand === 'compact') {
         // Manual compaction: keep the command visible, then compact the conversation.
@@ -9758,7 +9769,8 @@ export function SidepanelApp() {
       seen.add(trimmedValue);
 
       // Get base label
-      let baseLabel = label && label.trim() ? label : getModelDisplayName(trimmedValue, modelConfig);
+      let baseLabel =
+        label && label.trim() ? label : getModelDisplayName(trimmedValue, modelConfig);
 
       // Add mapped model name if configured
       const mappedModelName = getMappedModelName(trimmedValue, modelMapping);
@@ -10156,994 +10168,1030 @@ export function SidepanelApp() {
           : undefined
       }
     >
-      <div
-        className="relative flex h-full min-h-0 flex-col"
-      >
+      <div className="relative flex h-full min-h-0 flex-col">
         <header className="flex justify-between items-center px-4 pt-3 pb-3">
-        <div className="flex items-center gap-3">
-          <div ref={modelMenuRef} className="relative">
-            <button
-              type="button"
-              className="hide-focus-ring py-1 px-2 rounded-md transition-colors text-text-200 hover:bg-bg-300 hover:text-text-100"
-              onClick={() => {
-                setIsHeaderMenuOpen(false);
-                setIsLanguageSubmenuOpen(false);
-                setIsModelMenuOpen((value) => !value);
-              }}
-              aria-haspopup="menu"
-              aria-expanded={isModelMenuOpen}
-              aria-label={intl.formatMessage({ defaultMessage: 'Select model', id: 'select_model' })}
-            >
-              <span className="flex items-center gap-1.5">
-                <span className="text-[12px] font-ui font-normal leading-[140%] tracking-[-0.2px]">
-                  {selectedModelLabel}
-                </span>
-                <ChevronDown size={12} className="text-text-300" />
-              </span>
-            </button>
-            {isModelMenuOpen ? (
-              <div className="absolute left-0 top-full mt-2 z-50 min-w-[240px] bg-bg-000 border-0.5 border-border-200 backdrop-blur-xl rounded-xl text-text-300 shadow-[0px_2px_8px_0px_hsl(var(--always-black)/8%)] p-1.5 max-h-60 overflow-y-auto">
-                {normalizedModelOptions.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => handleModelChange(option.value)}
-                    className="w-full min-h-8 px-2 py-1.5 rounded-lg text-left text-sm flex items-center gap-2 hover:bg-bg-200 hover:text-text-100 transition-colors"
-                  >
-                    <span className="flex-1">{option.label}</span>
-                    {option.value === effectiveSelectedModel ? (
-                      <Check size={14} className="text-accent-secondary-200" />
-                    ) : null}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
-        </div>
-        <div className="flex items-center gap-2.5">
-          {purlModeFeatureEnabled && (
-            <Tooltip tooltipContent="Quick mode" side="bottom">
+          <div className="flex items-center gap-3">
+            <div ref={modelMenuRef} className="relative">
               <button
                 type="button"
+                className="hide-focus-ring py-1 px-2 rounded-md transition-colors text-text-200 hover:bg-bg-300 hover:text-text-100"
                 onClick={() => {
-                  if (isPurlMode) {
-                    // Turn off immediately
-                    setPurlModeToggle(false);
-                    chrome.storage.local.set({ purlMode: false });
-                  } else {
-                    // Turn on (in the bundle there's a confirmation dialog, simplified here)
-                    setPurlModeToggle(true);
-                    chrome.storage.local.set({ purlMode: true });
-                  }
+                  setIsHeaderMenuOpen(false);
+                  setIsLanguageSubmenuOpen(false);
+                  setIsModelMenuOpen((value) => !value);
                 }}
-                disabled={effectiveIsAgentRunning}
-                className={`p-1.5 rounded-md transition-colors ${
-                  isPurlMode
-                    ? 'text-accent-main-100 bg-bg-300'
-                    : 'text-text-300 hover:bg-bg-300 hover:text-text-100'
-                } ${effectiveIsAgentRunning ? 'opacity-40 cursor-not-allowed' : ''}`}
-                aria-label="Toggle quick mode"
-                data-test-id={isPurlMode ? 'lightning-mode-active' : 'lightning-mode-inactive'}
+                aria-haspopup="menu"
+                aria-expanded={isModelMenuOpen}
+                aria-label={intl.formatMessage({
+                  defaultMessage: 'Select model',
+                  id: 'select_model'
+                })}
               >
-                <Zap size={12} fill={isPurlMode ? 'currentColor' : 'none'} />
+                <span className="flex items-center gap-1.5">
+                  <span className="text-[12px] font-ui font-normal leading-[140%] tracking-[-0.2px]">
+                    {selectedModelLabel}
+                  </span>
+                  <ChevronDown size={12} className="text-text-300" />
+                </span>
               </button>
-            </Tooltip>
-          )}
-          <button
-            type="button"
-            className="p-1.5 rounded-md transition-colors text-text-300 hover:bg-bg-300 hover:text-text-100"
-            onClick={clearConversation}
-            aria-label={intl.formatMessage({ defaultMessage: 'Clear chat', id: 'clear_chat' })}
-            title={intl.formatMessage({ defaultMessage: 'Clear chat', id: 'clear_chat' })}
-          >
-            <MessageSquarePlus size={14} />
-          </button>
-          <div ref={headerMenuRef} className="relative">
+              {isModelMenuOpen ? (
+                <div className="absolute left-0 top-full mt-2 z-50 min-w-[240px] bg-bg-000 border-0.5 border-border-200 backdrop-blur-xl rounded-xl text-text-300 shadow-[0px_2px_8px_0px_hsl(var(--always-black)/8%)] p-1.5 max-h-60 overflow-y-auto">
+                  {normalizedModelOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => handleModelChange(option.value)}
+                      className="w-full min-h-8 px-2 py-1.5 rounded-lg text-left text-sm flex items-center gap-2 hover:bg-bg-200 hover:text-text-100 transition-colors"
+                    >
+                      <span className="flex-1">{option.label}</span>
+                      {option.value === effectiveSelectedModel ? (
+                        <Check size={14} className="text-accent-secondary-200" />
+                      ) : null}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </div>
+          <div className="flex items-center gap-2.5">
+            {purlModeFeatureEnabled && (
+              <Tooltip tooltipContent="Quick mode" side="bottom">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isPurlMode) {
+                      // Turn off immediately
+                      setPurlModeToggle(false);
+                      chrome.storage.local.set({ purlMode: false });
+                    } else {
+                      // Turn on (in the bundle there's a confirmation dialog, simplified here)
+                      setPurlModeToggle(true);
+                      chrome.storage.local.set({ purlMode: true });
+                    }
+                  }}
+                  disabled={effectiveIsAgentRunning}
+                  className={`p-1.5 rounded-md transition-colors ${
+                    isPurlMode
+                      ? 'text-accent-main-100 bg-bg-300'
+                      : 'text-text-300 hover:bg-bg-300 hover:text-text-100'
+                  } ${effectiveIsAgentRunning ? 'opacity-40 cursor-not-allowed' : ''}`}
+                  aria-label="Toggle quick mode"
+                  data-test-id={isPurlMode ? 'lightning-mode-active' : 'lightning-mode-inactive'}
+                >
+                  <Zap size={12} fill={isPurlMode ? 'currentColor' : 'none'} />
+                </button>
+              </Tooltip>
+            )}
             <button
               type="button"
-              className="hide-focus-ring p-1.5 rounded-md transition-colors text-text-300 hover:bg-bg-300 hover:text-text-100"
-              onClick={() => {
-                setIsModelMenuOpen(false);
-                setIsHeaderMenuOpen((value) => {
-                  if (value) {
-                    setIsLanguageSubmenuOpen(false);
-                  }
-                  return !value;
-                });
-              }}
-              aria-label={intl.formatMessage({ defaultMessage: 'Menu', id: 'menu' })}
-              title={intl.formatMessage({ defaultMessage: 'Menu', id: 'menu' })}
+              className="p-1.5 rounded-md transition-colors text-text-300 hover:bg-bg-300 hover:text-text-100"
+              onClick={clearConversation}
+              aria-label={intl.formatMessage({ defaultMessage: 'Clear chat', id: 'clear_chat' })}
+              title={intl.formatMessage({ defaultMessage: 'Clear chat', id: 'clear_chat' })}
             >
-              <MoreHorizontal size={12} />
+              <MessageSquarePlus size={14} />
             </button>
-            {isHeaderMenuOpen ? (
-              <div className="absolute right-0 top-full mt-2 z-50 w-[240px] bg-bg-000 border-0.5 border-border-200 backdrop-blur-xl rounded-xl text-text-300 shadow-[0px_2px_8px_0px_hsl(var(--always-black)/8%)] p-1.5">
-                <button
-                  type="button"
-                  onClick={handleConvertToScheduledTask}
-                  disabled={
-                    isConvertingToTask ||
-                    effectiveIsAgentRunning ||
-                    (!hasChatMessages && !input.trim())
-                  }
-                  className="w-full min-h-8 px-2 py-1.5 rounded-lg text-left text-sm flex items-center gap-2 hover:bg-bg-200 hover:text-text-100 transition-colors disabled:opacity-40"
-                >
-                  {isConvertingToTask ? (
-                    <Loader2 size={16} className="animate-spin shrink-0" />
-                  ) : (
-                    <Workflow size={16} className="shrink-0" />
-                  )}
-                  <span className="flex-1">
-                    <MemoizedFormattedMessage defaultMessage="Convert to task" id="convert_to_task" />
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={openOptionsPage}
-                  className="w-full min-h-8 px-2 py-1.5 rounded-lg text-left text-sm flex items-center gap-2 hover:bg-bg-200 hover:text-text-100 transition-colors"
-                >
-                  <Settings2 size={16} className="shrink-0" />
-                  <span className="flex-1">
-                    <MemoizedFormattedMessage defaultMessage="Settings" id="settings" />
-                  </span>
-                </button>
-                <div className="relative">
+            <div ref={headerMenuRef} className="relative">
+              <button
+                type="button"
+                className="hide-focus-ring p-1.5 rounded-md transition-colors text-text-300 hover:bg-bg-300 hover:text-text-100"
+                onClick={() => {
+                  setIsModelMenuOpen(false);
+                  setIsHeaderMenuOpen((value) => {
+                    if (value) {
+                      setIsLanguageSubmenuOpen(false);
+                    }
+                    return !value;
+                  });
+                }}
+                aria-label={intl.formatMessage({ defaultMessage: 'Menu', id: 'menu' })}
+                title={intl.formatMessage({ defaultMessage: 'Menu', id: 'menu' })}
+              >
+                <MoreHorizontal size={12} />
+              </button>
+              {isHeaderMenuOpen ? (
+                <div className="absolute right-0 top-full mt-2 z-50 w-[240px] bg-bg-000 border-0.5 border-border-200 backdrop-blur-xl rounded-xl text-text-300 shadow-[0px_2px_8px_0px_hsl(var(--always-black)/8%)] p-1.5">
                   <button
                     type="button"
-                    onClick={() => setIsLanguageSubmenuOpen((value) => !value)}
+                    onClick={handleConvertToScheduledTask}
+                    disabled={
+                      isConvertingToTask ||
+                      effectiveIsAgentRunning ||
+                      (!hasChatMessages && !input.trim())
+                    }
+                    className="w-full min-h-8 px-2 py-1.5 rounded-lg text-left text-sm flex items-center gap-2 hover:bg-bg-200 hover:text-text-100 transition-colors disabled:opacity-40"
+                  >
+                    {isConvertingToTask ? (
+                      <Loader2 size={16} className="animate-spin shrink-0" />
+                    ) : (
+                      <Workflow size={16} className="shrink-0" />
+                    )}
+                    <span className="flex-1">
+                      <MemoizedFormattedMessage
+                        defaultMessage="Convert to task"
+                        id="convert_to_task"
+                      />
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={openOptionsPage}
                     className="w-full min-h-8 px-2 py-1.5 rounded-lg text-left text-sm flex items-center gap-2 hover:bg-bg-200 hover:text-text-100 transition-colors"
                   >
-                    <Languages size={16} className="shrink-0" />
+                    <Settings2 size={16} className="shrink-0" />
                     <span className="flex-1">
-                      <MemoizedFormattedMessage defaultMessage="Language" id="language" />
+                      <MemoizedFormattedMessage defaultMessage="Settings" id="settings" />
                     </span>
-                    <ChevronRight size={16} className="text-text-300 shrink-0" />
                   </button>
-                  {isLanguageSubmenuOpen ? (
-                    <div className="absolute right-full top-0 mr-2 z-50 min-w-44 bg-bg-000 border-0.5 border-border-200 backdrop-blur-xl rounded-xl text-text-300 shadow-[0px_2px_8px_0px_hsl(var(--always-black)/8%)] p-1.5">
-                      {SUPPORTED_LOCALES.map((entry) => (
-                        <button
-                          key={entry}
-                          type="button"
-                          onClick={() => handleLanguageSelection(entry)}
-                          className="w-full min-h-8 px-2 py-1.5 rounded-lg text-left text-sm flex items-center gap-2 hover:bg-bg-200 hover:text-text-100 transition-colors"
-                        >
-                          <span className="flex-1 whitespace-nowrap">{LOCALE_DISPLAY_NAMES[entry]}</span>
-                          {locale === entry ? (
-                            <Check size={14} className="text-accent-secondary-200" />
-                          ) : null}
-                        </button>
-                      ))}
-                    </div>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setIsLanguageSubmenuOpen((value) => !value)}
+                      className="w-full min-h-8 px-2 py-1.5 rounded-lg text-left text-sm flex items-center gap-2 hover:bg-bg-200 hover:text-text-100 transition-colors"
+                    >
+                      <Languages size={16} className="shrink-0" />
+                      <span className="flex-1">
+                        <MemoizedFormattedMessage defaultMessage="Language" id="language" />
+                      </span>
+                      <ChevronRight size={16} className="text-text-300 shrink-0" />
+                    </button>
+                    {isLanguageSubmenuOpen ? (
+                      <div className="absolute right-full top-0 mr-2 z-50 min-w-44 bg-bg-000 border-0.5 border-border-200 backdrop-blur-xl rounded-xl text-text-300 shadow-[0px_2px_8px_0px_hsl(var(--always-black)/8%)] p-1.5">
+                        {SUPPORTED_LOCALES.map((entry) => (
+                          <button
+                            key={entry}
+                            type="button"
+                            onClick={() => handleLanguageSelection(entry)}
+                            className="w-full min-h-8 px-2 py-1.5 rounded-lg text-left text-sm flex items-center gap-2 hover:bg-bg-200 hover:text-text-100 transition-colors"
+                          >
+                            <span className="flex-1 whitespace-nowrap">
+                              {LOCALE_DISPLAY_NAMES[entry]}
+                            </span>
+                            {locale === entry ? (
+                              <Check size={14} className="text-accent-secondary-200" />
+                            ) : null}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                  {!hasChatMessages ? (
+                    <p className="px-2 pt-2 text-[11px] text-text-300">
+                      <MemoizedFormattedMessage
+                        defaultMessage="Start a chat to convert it into a task."
+                        id="start_a_chat_to_convert_it_into_a"
+                      />
+                    </p>
                   ) : null}
                 </div>
-                {!hasChatMessages ? (
-                  <p className="px-2 pt-2 text-[11px] text-text-300">
-                    <MemoizedFormattedMessage
-                      defaultMessage="Start a chat to convert it into a task."
-                      id="start_a_chat_to_convert_it_into_a"
-                    />
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        </div>
-      </header>
-
-      {/* Workflow Mode Selection Modal */}
-      {showWorkflowModeSelectionModal && (
-        <WorkflowModeSelectionModal
-          isOpen={showWorkflowModeSelectionModal}
-          onVoiceOver={handleStartWorkflowRecording}
-          onClose={() => setShowWorkflowModeSelectionModal(false)}
-          currentUrl={currentPageUrl}
-          pageTitle={currentPageTitle}
-          hasMicrophonePermission={hasMicrophonePermission}
-        />
-      )}
-
-      <div className="flex-1 flex flex-col overflow-hidden relative">
-        <ScrollContainer
-          ref={autoScrollRef}
-          parentClassName={'flex-1 ' + (anthropicMessages.length === 0 ? '!overflow-hidden' : '')}
-          innerClassName="h-full"
-          pinToBottomConfig={{ disabled: false, initialValue: false }}
-        >
-          <div className="mx-auto flex size-full max-w-3xl flex-col md:px-2">
-            <div className="flex-1 flex flex-col px-4 max-w-3xl mx-auto w-full pt-1">
-              {effectiveAnthropicMessages.length === 0 ? (
-                <EmptyState
-                  tabId={query.tabId}
-                  onPromptClick={(prompt) => {
-                    setInput(prompt);
-                  }}
-                />
-              ) : (
-                <MessageList
-                  anthropicMessages={effectiveAnthropicMessages}
-                  streamingTextStore={streamingTextStoreRef.current}
-                  isAgentRunning={effectiveIsAgentRunning}
-                  scrollRefs={messageListScrollRefs}
-                />
-              )}
-              <LastMessageSentinel ref={sentinelCallbackRef} />
-              <div ref={scrollRefs.extras} className="min-h-8">
-                {(effectiveIsAgentRunning || effectiveIsCompacting) && !permissionPrompt && (
-                  <div
-                    className={
-                      'flex items-center gap-3 ' +
-                      (!(effectiveIsAgentRunning || effectiveIsCompacting) ? 'invisible' : '')
-                    }
-                  >
-                    <ClaudeAvatar
-                      state={effectiveIsCompacting ? 'shimmer' : 'thinking'}
-                      isInteractive={false}
-                      className=""
-                    />
-                    <div className="text-sm text-text-300 italic font-claude-response relative inline-block">
-                      {(() => {
-                        const statusText = effectiveIsCompacting
-                          ? intl.formatMessage({ id: 'compacting', defaultMessage: 'Compacting...' })
-                          : effectiveCurrentStatus ||
-                            intl.formatMessage({
-                              id: randomStartupKey,
-                              defaultMessage: 'Starting up...'
-                            });
-                        const displayStatusText = stripTrailingEllipsis(statusText);
-
-                        return (
-                          <>
-                            {displayStatusText}
-                            <ThinkingDots />
-                          </>
-                        );
-                      })()}
-                    </div>
-                  </div>
-                )}
-              </div>
-              <AutoScrollSpacer
-                scrollRefs={scrollRefs}
-                autoScrollRef={autoScrollRef}
-                messageCount={anthropicMessages.length}
-              />
+              ) : null}
             </div>
-            <div ref={scrollRefs.chatInput} className="sticky bottom-0 mx-auto w-full z-[5]">
-              <div className="mx-3 md:mx-0">
-                {/* Scroll-to-bottom button */}
-                <ScrollToBottomButton
-                  autoscrollRef={autoScrollRef}
-                  sentinelElement={sentinelElement}
-                  isStreaming={effectiveIsAgentRunning}
+          </div>
+        </header>
+
+        {/* Workflow Mode Selection Modal */}
+        {showWorkflowModeSelectionModal && (
+          <WorkflowModeSelectionModal
+            isOpen={showWorkflowModeSelectionModal}
+            onVoiceOver={handleStartWorkflowRecording}
+            onClose={() => setShowWorkflowModeSelectionModal(false)}
+            currentUrl={currentPageUrl}
+            pageTitle={currentPageTitle}
+            hasMicrophonePermission={hasMicrophonePermission}
+          />
+        )}
+
+        <div className="flex-1 flex flex-col overflow-hidden relative">
+          <ScrollContainer
+            ref={autoScrollRef}
+            parentClassName={'flex-1 ' + (anthropicMessages.length === 0 ? '!overflow-hidden' : '')}
+            innerClassName="h-full"
+            pinToBottomConfig={{ disabled: false, initialValue: false }}
+          >
+            <div className="mx-auto flex size-full max-w-3xl flex-col md:px-2">
+              <div className="flex-1 flex flex-col px-4 max-w-3xl mx-auto w-full pt-1">
+                {effectiveAnthropicMessages.length === 0 ? (
+                  <EmptyState
+                    tabId={query.tabId}
+                    onPromptClick={(prompt) => {
+                      setInput(prompt);
+                    }}
+                  />
+                ) : (
+                  <MessageList
+                    anthropicMessages={effectiveAnthropicMessages}
+                    streamingTextStore={streamingTextStoreRef.current}
+                    isAgentRunning={effectiveIsAgentRunning}
+                    scrollRefs={messageListScrollRefs}
+                  />
+                )}
+                <LastMessageSentinel ref={sentinelCallbackRef} />
+                <div ref={scrollRefs.extras} className="min-h-8">
+                  {(effectiveIsAgentRunning || effectiveIsCompacting) && !permissionPrompt && (
+                    <div
+                      className={
+                        'flex items-center gap-3 ' +
+                        (!(effectiveIsAgentRunning || effectiveIsCompacting) ? 'invisible' : '')
+                      }
+                    >
+                      <ClaudeAvatar
+                        state={effectiveIsCompacting ? 'shimmer' : 'thinking'}
+                        isInteractive={false}
+                        className=""
+                      />
+                      <div className="text-sm text-text-300 italic font-claude-response relative inline-block">
+                        {(() => {
+                          const statusText = effectiveIsCompacting
+                            ? intl.formatMessage({
+                                id: 'compacting',
+                                defaultMessage: 'Compacting...'
+                              })
+                            : effectiveCurrentStatus ||
+                              intl.formatMessage({
+                                id: randomStartupKey,
+                                defaultMessage: 'Starting up...'
+                              });
+                          const displayStatusText = stripTrailingEllipsis(statusText);
+
+                          return (
+                            <>
+                              {displayStatusText}
+                              <ThinkingDots />
+                            </>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <AutoScrollSpacer
+                  scrollRefs={scrollRefs}
+                  autoScrollRef={autoScrollRef}
+                  messageCount={anthropicMessages.length}
                 />
-                <div className="bg-bg-100">
-                  {/* Banner area — matches bundle placement inside input area */}
-                  <div className="px-3 md:px-2">
-                    <AnimatePresence mode="wait">
-                      {(() => {
-                        if (activeBanner === 'eligibility') {
-                          return isEligible ? null : (
-                            <CompactBanner key="eligibility" type="info">
-                              <div className="flex justify-between items-center w-full">
-                                <span>SuperDuck in Chrome requires a paid plan</span>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    chrome.tabs.create({
-                                      url: 'https://claude.ai/upgrade?hide_free=true'
-                                    });
-                                  }}
-                                  className="underline cursor-pointer text-text-100 opacity-90 hover:opacity-100"
-                                >
-                                  Upgrade plan
-                                </button>
-                              </div>
-                            </CompactBanner>
-                          );
-                        }
-                        if (activeBanner === 'error') {
-                          const isNetworkError =
-                            effectiveRuntimeError?.toLowerCase().includes('connection error') ||
-                            effectiveRuntimeError?.toLowerCase().includes('network error') ||
-                            effectiveRuntimeError?.toLowerCase().includes('failed to fetch');
-                          return (
-                            <CompactBanner
-                              key="error"
-                              type="error"
-                              onDismiss={() => effectiveClearError()}
-                              dismissWithGradient
-                            >
-                              {effectiveRuntimeError}
-                              {isNetworkError && (
-                                <>
-                                  {' '}
-                                  <button
-                                    onClick={() => {
-                                      setRuntimeError(null);
-                                      // Retry is not available in simplified source
-                                    }}
-                                    className="underline hover:opacity-80 transition-opacity"
-                                  >
-                                    Retry
-                                  </button>
-                                </>
-                              )}
-                            </CompactBanner>
-                          );
-                        }
-                        if (activeBanner === 'refusal') {
-                          return (
-                            <CompactBanner key="refusal" type="refusal">
-                              <span className="font-small">
-                                SuperDuck is unable to respond to this request, which appears to
-                                violate our{' '}
-                                <button
-                                  onClick={() =>
-                                    chrome.tabs.create({
-                                      url: 'https://www.anthropic.com/legal/aup'
-                                    })
-                                  }
-                                  className="inline-link"
-                                >
-                                  Usage Policy
-                                </button>
-                                . Please start a new chat.
-                              </span>
-                            </CompactBanner>
-                          );
-                        }
-                        if (activeBanner === 'messageLimit' && messageLimitBanner) {
-                          return (
-                            <CompactBanner
-                              key="messageLimit"
-                              type={messageLimitBanner.isBlocking ? 'danger' : 'info'}
-                              onDismiss={
-                                messageLimitBanner.dismissible
-                                  ? () => setMessageLimitDismissed(true)
-                                  : undefined
-                              }
-                            >
-                              {messageLimitBanner.text}
-                              {messageLimitBanner.actionLabel && messageLimitBanner.actionUrl && (
-                                <>
-                                  {' · '}
+              </div>
+              <div ref={scrollRefs.chatInput} className="sticky bottom-0 mx-auto w-full z-[5]">
+                <div className="mx-3 md:mx-0">
+                  {/* Scroll-to-bottom button */}
+                  <ScrollToBottomButton
+                    autoscrollRef={autoScrollRef}
+                    sentinelElement={sentinelElement}
+                    isStreaming={effectiveIsAgentRunning}
+                  />
+                  <div className="bg-bg-100">
+                    {/* Banner area — matches bundle placement inside input area */}
+                    <div className="px-3 md:px-2">
+                      <AnimatePresence mode="wait">
+                        {(() => {
+                          if (activeBanner === 'eligibility') {
+                            return isEligible ? null : (
+                              <CompactBanner key="eligibility" type="info">
+                                <div className="flex justify-between items-center w-full">
+                                  <span>SuperDuck in Chrome requires a paid plan</span>
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      chrome.tabs.create({ url: messageLimitBanner.actionUrl! });
+                                      chrome.tabs.create({
+                                        url: 'https://claude.ai/upgrade?hide_free=true'
+                                      });
                                     }}
                                     className="underline cursor-pointer text-text-100 opacity-90 hover:opacity-100"
                                   >
-                                    {messageLimitBanner.actionLabel}
-                                  </button>
-                                </>
-                              )}
-                            </CompactBanner>
-                          );
-                        }
-                        if (activeBanner === 'highRisk') {
-                          return (
-                            <CompactBanner
-                              key="highRisk"
-                              type="high-risk"
-                              onDismiss={() => setSkipWarningDismissed(true)}
-                              dismissWithGradient
-                            >
-                              <MemoizedFormattedMessage
-                                id="high_risk_claude_can_take_most_actions_on"
-                                defaultMessage="<bold>HIGH RISK:</bold> SuperDuck can take most actions on the internet now. This setting could put your data at risk. <link>See safe use tips</link>"
-                                values={{
-                                  bold: (chunks: any) => <span className="font-bold">{chunks}</span>,
-                                  link: (chunks: any) => (
-                                    <button
-                                      onClick={() => chrome.tabs.create({ url: SAFE_USE_TIPS_URL })}
-                                      className="underline hover:opacity-80 transition-colors"
-                                    >
-                                      {chunks}
-                                    </button>
-                                  )
-                                }}
-                              />
-                            </CompactBanner>
-                          );
-                        }
-                        if (activeBanner === 'notification') {
-                          return (
-                            <CompactBanner
-                              key="notification"
-                              type="notification"
-                              onAction={async () => {
-                                setNotificationsEnabled('enabled');
-                                await setStorageValue(StorageKeys.NOTIFICATIONS_ENABLED, 'enabled');
-                                setShowNotificationBanner(false);
-                              }}
-                              onDismiss={() => {
-                                setNotificationsEnabled('disabled');
-                                void setStorageValue(StorageKeys.NOTIFICATIONS_ENABLED, 'disabled');
-                                setShowNotificationBanner(false);
-                              }}
-                              actionText="Notify me"
-                              actionIcon={<Bell size={16} />}
-                            >
-                              Get notified when tasks complete or need input
-                            </CompactBanner>
-                          );
-                        }
-                        if (activeBanner === 'announcement') {
-                          const text = announcementConfig.text ?? '';
-                          return (
-                            <CompactBanner
-                              key="announcement"
-                              type="announcement"
-                              onDismiss={dismissAnnouncement}
-                            >
-                              <div className="flex items-start gap-2">
-                                <AnnouncementIcon size={16} />
-                                {text}
-                              </div>
-                            </CompactBanner>
-                          );
-                        }
-                        return null;
-                      })()}
-                    </AnimatePresence>
-                  </div>
-                  {/* Model fallback card — shown when safety filters pause the chat */}
-                  {lastStopReason?.reason === 'refusal' && fallbackConfig && (
-                    <ModelFallbackCard
-                      currentModelName={fallbackConfig.currentModelName}
-                      fallbackModelName={fallbackConfig.fallbackModelName}
-                      fallbackDisplayName={fallbackConfig.fallbackDisplayName}
-                      learnMoreUrl={fallbackConfig.learnMoreUrl || 'https://support.anthropic.com'}
-                      onRetry={() => void retryWithFallback()}
-                      onSendFeedback={sendRefusalFeedback}
-                    />
-                  )}
-                  {/* Chat input — hidden when fallback card is shown or when recording */}
-                  {!(lastStopReason?.reason === 'refusal' && fallbackConfig) &&
-                    !recordingState.isRecording && (
-                      <>
-                        <div
-                          data-chat-input-container="true"
-                          className="bg-bg-000 rounded-2xl relative z-30 transition-all focus-within:outline-none cursor-text shadow-[0_0.25rem_1.25rem_hsl(var(--always-black)/3.5%),0_0_0_0.5px_hsla(var(--border-300)/0.15)] hover:shadow-[0_0.25rem_1.25rem_hsl(var(--always-black)/3.5%),0_0_0_0.5px_hsla(var(--border-200)/0.3)] focus-within:shadow-[0_0.25rem_1.25rem_hsl(var(--always-black)/7.5%),0_0_0_0.5px_hsla(var(--border-200)/0.3)]"
-                          onClick={() => inputRef.current?.focus()}
-                        >
-                          {pendingAttachments.length > 0 ? (
-                            <div className="px-4 pt-3 pb-1 flex flex-wrap gap-2">
-                              {pendingAttachments.map((attachment) => (
-                                <div
-                                  key={attachment.id}
-                                  className="inline-flex items-center gap-1.5 max-w-full rounded-lg border border-border-300 bg-bg-100 px-2 py-1 text-xs text-text-200"
-                                >
-                                  <Paperclip size={12} className="shrink-0 text-text-300" />
-                                  <span className="truncate max-w-[180px]">
-                                    {attachment.fileName}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      removeAttachment(attachment.id);
-                                    }}
-                                    className="shrink-0 rounded hover:bg-bg-200 p-0.5 text-text-300"
-                                    aria-label="Remove attachment"
-                                  >
-                                    <X size={12} />
+                                    Upgrade plan
                                   </button>
                                 </div>
-                              ))}
-                            </div>
-                          ) : null}
+                              </CompactBanner>
+                            );
+                          }
+                          if (activeBanner === 'error') {
+                            const isNetworkError =
+                              effectiveRuntimeError?.toLowerCase().includes('connection error') ||
+                              effectiveRuntimeError?.toLowerCase().includes('network error') ||
+                              effectiveRuntimeError?.toLowerCase().includes('failed to fetch');
+                            return (
+                              <CompactBanner
+                                key="error"
+                                type="error"
+                                onDismiss={() => effectiveClearError()}
+                                dismissWithGradient
+                              >
+                                {effectiveRuntimeError}
+                                {isNetworkError && (
+                                  <>
+                                    {' '}
+                                    <button
+                                      onClick={() => {
+                                        setRuntimeError(null);
+                                        // Retry is not available in simplified source
+                                      }}
+                                      className="underline hover:opacity-80 transition-opacity"
+                                    >
+                                      Retry
+                                    </button>
+                                  </>
+                                )}
+                              </CompactBanner>
+                            );
+                          }
+                          if (activeBanner === 'refusal') {
+                            return (
+                              <CompactBanner key="refusal" type="refusal">
+                                <span className="font-small">
+                                  SuperDuck is unable to respond to this request, which appears to
+                                  violate our{' '}
+                                  <button
+                                    onClick={() =>
+                                      chrome.tabs.create({
+                                        url: 'https://www.anthropic.com/legal/aup'
+                                      })
+                                    }
+                                    className="inline-link"
+                                  >
+                                    Usage Policy
+                                  </button>
+                                  . Please start a new chat.
+                                </span>
+                              </CompactBanner>
+                            );
+                          }
+                          if (activeBanner === 'messageLimit' && messageLimitBanner) {
+                            return (
+                              <CompactBanner
+                                key="messageLimit"
+                                type={messageLimitBanner.isBlocking ? 'danger' : 'info'}
+                                onDismiss={
+                                  messageLimitBanner.dismissible
+                                    ? () => setMessageLimitDismissed(true)
+                                    : undefined
+                                }
+                              >
+                                {messageLimitBanner.text}
+                                {messageLimitBanner.actionLabel && messageLimitBanner.actionUrl && (
+                                  <>
+                                    {' · '}
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        chrome.tabs.create({ url: messageLimitBanner.actionUrl! });
+                                      }}
+                                      className="underline cursor-pointer text-text-100 opacity-90 hover:opacity-100"
+                                    >
+                                      {messageLimitBanner.actionLabel}
+                                    </button>
+                                  </>
+                                )}
+                              </CompactBanner>
+                            );
+                          }
+                          if (activeBanner === 'highRisk') {
+                            return (
+                              <CompactBanner
+                                key="highRisk"
+                                type="high-risk"
+                                onDismiss={() => setSkipWarningDismissed(true)}
+                                dismissWithGradient
+                              >
+                                <MemoizedFormattedMessage
+                                  id="high_risk_claude_can_take_most_actions_on"
+                                  defaultMessage="<bold>HIGH RISK:</bold> SuperDuck can take most actions on the internet now. This setting could put your data at risk. <link>See safe use tips</link>"
+                                  values={{
+                                    bold: (chunks: any) => (
+                                      <span className="font-bold">{chunks}</span>
+                                    ),
+                                    link: (chunks: any) => (
+                                      <button
+                                        onClick={() =>
+                                          chrome.tabs.create({ url: SAFE_USE_TIPS_URL })
+                                        }
+                                        className="underline hover:opacity-80 transition-colors"
+                                      >
+                                        {chunks}
+                                      </button>
+                                    )
+                                  }}
+                                />
+                              </CompactBanner>
+                            );
+                          }
+                          if (activeBanner === 'notification') {
+                            return (
+                              <CompactBanner
+                                key="notification"
+                                type="notification"
+                                onAction={async () => {
+                                  setNotificationsEnabled('enabled');
+                                  await setStorageValue(
+                                    StorageKeys.NOTIFICATIONS_ENABLED,
+                                    'enabled'
+                                  );
+                                  setShowNotificationBanner(false);
+                                }}
+                                onDismiss={() => {
+                                  setNotificationsEnabled('disabled');
+                                  void setStorageValue(
+                                    StorageKeys.NOTIFICATIONS_ENABLED,
+                                    'disabled'
+                                  );
+                                  setShowNotificationBanner(false);
+                                }}
+                                actionText="Notify me"
+                                actionIcon={<Bell size={16} />}
+                              >
+                                Get notified when tasks complete or need input
+                              </CompactBanner>
+                            );
+                          }
+                          if (activeBanner === 'announcement') {
+                            const text = announcementConfig.text ?? '';
+                            return (
+                              <CompactBanner
+                                key="announcement"
+                                type="announcement"
+                                onDismiss={dismissAnnouncement}
+                              >
+                                <div className="flex items-start gap-2">
+                                  <AnnouncementIcon size={16} />
+                                  {text}
+                                </div>
+                              </CompactBanner>
+                            );
+                          }
+                          return null;
+                        })()}
+                      </AnimatePresence>
+                    </div>
+                    {/* Model fallback card — shown when safety filters pause the chat */}
+                    {lastStopReason?.reason === 'refusal' && fallbackConfig && (
+                      <ModelFallbackCard
+                        currentModelName={fallbackConfig.currentModelName}
+                        fallbackModelName={fallbackConfig.fallbackModelName}
+                        fallbackDisplayName={fallbackConfig.fallbackDisplayName}
+                        learnMoreUrl={
+                          fallbackConfig.learnMoreUrl || 'https://support.anthropic.com'
+                        }
+                        onRetry={() => void retryWithFallback()}
+                        onSendFeedback={sendRefusalFeedback}
+                      />
+                    )}
+                    {/* Chat input — hidden when fallback card is shown or when recording */}
+                    {!(lastStopReason?.reason === 'refusal' && fallbackConfig) &&
+                      !recordingState.isRecording && (
+                        <>
+                          <div
+                            data-chat-input-container="true"
+                            className="bg-bg-000 rounded-2xl relative z-30 transition-all focus-within:outline-none cursor-text shadow-[0_0.25rem_1.25rem_hsl(var(--always-black)/3.5%),0_0_0_0.5px_hsla(var(--border-300)/0.15)] hover:shadow-[0_0.25rem_1.25rem_hsl(var(--always-black)/3.5%),0_0_0_0.5px_hsla(var(--border-200)/0.3)] focus-within:shadow-[0_0.25rem_1.25rem_hsl(var(--always-black)/7.5%),0_0_0_0.5px_hsla(var(--border-200)/0.3)]"
+                            onClick={() => inputRef.current?.focus()}
+                          >
+                            {pendingAttachments.length > 0 ? (
+                              <div className="px-4 pt-3 pb-1 flex flex-wrap gap-2">
+                                {pendingAttachments.map((attachment) => (
+                                  <div
+                                    key={attachment.id}
+                                    className="inline-flex items-center gap-1.5 max-w-full rounded-lg border border-border-300 bg-bg-100 px-2 py-1 text-xs text-text-200"
+                                  >
+                                    <Paperclip size={12} className="shrink-0 text-text-300" />
+                                    <span className="truncate max-w-[180px]">
+                                      {attachment.fileName}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        removeAttachment(attachment.id);
+                                      }}
+                                      className="shrink-0 rounded hover:bg-bg-200 p-0.5 text-text-300"
+                                      aria-label="Remove attachment"
+                                    >
+                                      <X size={12} />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
 
-                          <div className="px-4 pt-4 pb-2">
-                            <div className="relative">
-                              {/* Shortcuts menu */}
-                              {showCommandMenu && (
-                                <div ref={commandMenuRef}>
-                                  <ShortcutsMenu
-                                    searchTerm={commandSearchTerm}
-                                    onSelect={async (command, label) => {
-                                      commandMenuDismissedRef.current = true;
-                                      commandMenuDismissedInputRef.current = inputValueRef.current;
+                            <div className={`px-4 ${showCommandMenu ? 'pt-3 pb-1' : 'pt-4 pb-2'}`}>
+                              <div className="relative">
+                                {/* Shortcuts menu */}
+                                {showCommandMenu && (
+                                  <div ref={commandMenuRef}>
+                                    <ShortcutsMenu
+                                      searchTerm={commandSearchTerm}
+                                      onSelect={async (command, label) => {
+                                        commandMenuDismissedRef.current = true;
+                                        commandMenuDismissedInputRef.current =
+                                          inputValueRef.current;
 
-                                      // Close menu first to prevent reopening
-                                      setShowCommandMenu(false);
-                                      setCommandSearchTerm('');
+                                        // Close menu first to prevent reopening
+                                        setShowCommandMenu(false);
+                                        setCommandSearchTerm('');
 
-                                      // Check if it's a system command (like 'compact')
-                                      if (command === 'compact') {
-                                        setInput('');
-                                        inputRef.current?.clear();
-                                        await sendPrompt('/compact');
-                                        return;
-                                      }
-
-                                      let savedPrompt: StoredSavedPrompt | undefined;
-                                      try {
-                                        savedPrompt = await SavedPromptsService.getPromptByCommand(command);
-                                      } catch (error) {
-                                        console.error('Failed to load shortcut:', error);
-                                      }
-
-                                      if (!savedPrompt) {
-                                        insertShortcutChip(command, label);
-                                        return;
-                                      }
-
-                                      const promptType = savedPrompt.type || 'shortcut';
-
-                                      switch (promptType) {
-                                        case 'command':
-                                          // Execute immediately using the selected prompt text.
+                                        // Check if it's a system command (like 'compact')
+                                        if (command === 'compact') {
+                                          setInput('');
                                           inputRef.current?.clear();
-                                          setInput('');
-                                          await effectiveSendPrompt(savedPrompt.prompt);
-                                          break;
+                                          await sendPrompt('/compact');
+                                          return;
+                                        }
 
-                                        case 'module':
-                                          if (savedPrompt.url) {
-                                            await navigateActiveTabToUrl(savedPrompt.url);
-                                          }
-                                          setInput('');
-                                          break;
+                                        let savedPrompt: StoredSavedPrompt | undefined;
+                                        try {
+                                          savedPrompt =
+                                            await SavedPromptsService.getPromptByCommand(command);
+                                        } catch (error) {
+                                          console.error('Failed to load shortcut:', error);
+                                        }
 
-                                        case 'shortcut':
-                                        default:
+                                        if (!savedPrompt) {
                                           insertShortcutChip(command, label);
-                                          break;
-                                      }
-                                    }}
-                                    onRecordWorkflow={() => {
-                                      setShowCommandMenu(false);
-                                      setCommandSearchTerm('');
-                                      setInput('');
-                                      setShowWorkflowModeSelectionModal(true);
-                                    }}
-                                    onScheduleTask={() => {
-                                      setShowCommandMenu(false);
-                                      setCommandSearchTerm('');
-                                      setInput('');
-                                      // TODO: Open schedule task modal
-                                      console.log('Schedule task clicked');
-                                    }}
-                                    onEditShortcut={(shortcut) => {
-                                      setShowCommandMenu(false);
-                                      setCommandSearchTerm('');
-                                      inputRef.current?.clear();
-                                      setPromptToEdit({
-                                        id: shortcut.id,
-                                        prompt: shortcut.prompt,
-                                        command: shortcut.command
+                                          return;
+                                        }
+
+                                        const promptType = savedPrompt.type || 'shortcut';
+
+                                        switch (promptType) {
+                                          case 'command':
+                                            // Execute immediately using the selected prompt text.
+                                            inputRef.current?.clear();
+                                            setInput('');
+                                            await effectiveSendPrompt(savedPrompt.prompt);
+                                            break;
+
+                                          case 'module':
+                                            if (savedPrompt.url) {
+                                              await navigateActiveTabToUrl(savedPrompt.url);
+                                            }
+                                            setInput('');
+                                            break;
+
+                                          case 'shortcut':
+                                          default:
+                                            insertShortcutChip(command, label);
+                                            break;
+                                        }
+                                      }}
+                                      onRecordWorkflow={() => {
+                                        setShowCommandMenu(false);
+                                        setCommandSearchTerm('');
+                                        setInput('');
+                                        setShowWorkflowModeSelectionModal(true);
+                                      }}
+                                      onScheduleTask={() => {
+                                        setShowCommandMenu(false);
+                                        setCommandSearchTerm('');
+                                        setInput('');
+                                        // TODO: Open schedule task modal
+                                        console.log('Schedule task clicked');
+                                      }}
+                                      onEditShortcut={(shortcut) => {
+                                        setShowCommandMenu(false);
+                                        setCommandSearchTerm('');
+                                        inputRef.current?.clear();
+                                        setPromptToEdit({
+                                          id: shortcut.id,
+                                          prompt: shortcut.prompt,
+                                          command: shortcut.command
+                                        });
+                                      }}
+                                      onClose={() => {
+                                        commandMenuDismissedRef.current = true;
+                                        commandMenuDismissedInputRef.current = input;
+                                        setShowCommandMenu(false);
+                                        setCommandSearchTerm('');
+                                      }}
+                                    />
+                                  </div>
+                                )}
+
+                                <RichTextInput
+                                  ref={inputRef}
+                                  value={input}
+                                  onChange={setInput}
+                                  onSubmit={submit}
+                                  placeholder={
+                                    messages.length === 0
+                                      ? intl.formatMessage({
+                                          id: 'type_a_message',
+                                          defaultMessage: 'Type a message...'
+                                        })
+                                      : intl.formatMessage({
+                                          id: 'reply_to_claude',
+                                          defaultMessage: 'Reply to SuperDuck'
+                                        })
+                                  }
+                                  disabled={false}
+                                />
+                              </div>
+                            </div>
+
+                            <input
+                              ref={fileInputRef}
+                              type="file"
+                              multiple
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(event) => {
+                                void handleFileSelection(event.target.files);
+                                event.target.value = '';
+                              }}
+                            />
+
+                            <div
+                              className={`relative flex items-center justify-between px-3 ${
+                                showCommandMenu ? 'pb-2' : 'pb-3'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <div ref={permissionMenuRef} className="relative">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      console.log(
+                                        '[DEBUG] Permission menu button clicked, current state:',
+                                        isPermissionMenuOpen
+                                      );
+                                      setIsActionsMenuOpen(false);
+                                      setIsPermissionMenuOpen((value) => {
+                                        console.log(
+                                          '[DEBUG] Toggling permission menu from',
+                                          value,
+                                          'to',
+                                          !value
+                                        );
+                                        return !value;
                                       });
                                     }}
-                                    onClose={() => {
-                                      commandMenuDismissedRef.current = true;
-                                      commandMenuDismissedInputRef.current = input;
-                                      setShowCommandMenu(false);
-                                      setCommandSearchTerm('');
-                                    }}
-                                  />
-                                </div>
-                              )}
-
-                              <RichTextInput
-                                ref={inputRef}
-                                value={input}
-                                onChange={setInput}
-                                onSubmit={submit}
-                                placeholder={
-                                  messages.length === 0
-                                    ? intl.formatMessage({
-                                        id: 'type_a_message',
-                                        defaultMessage: 'Type a message...'
-                                      })
-                                    : intl.formatMessage({
-                                        id: 'reply_to_claude',
-                                        defaultMessage: 'Reply to SuperDuck'
-                                      })
-                                }
-                                disabled={false}
-                              />
-                            </div>
-                          </div>
-
-                          <input
-                            ref={fileInputRef}
-                            type="file"
-                            multiple
-                            accept="image/*"
-                            className="hidden"
-                            onChange={(event) => {
-                              void handleFileSelection(event.target.files);
-                              event.target.value = '';
-                            }}
-                          />
-
-                          <div className="flex items-center justify-between px-3 pb-3 relative">
-                            <div className="flex items-center gap-2">
-                              <div ref={permissionMenuRef} className="relative">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    console.log(
-                                      '[DEBUG] Permission menu button clicked, current state:',
-                                      isPermissionMenuOpen
-                                    );
-                                    setIsActionsMenuOpen(false);
-                                    setIsPermissionMenuOpen((value) => {
-                                      console.log(
-                                        '[DEBUG] Toggling permission menu from',
-                                        value,
-                                        'to',
-                                        !value
-                                      );
-                                      return !value;
-                                    });
-                                  }}
-                                  className="inline-flex items-center gap-1.5 h-7 rounded-lg border border-border-300 bg-bg-000 px-2 text-[11px] text-text-200 hover:bg-bg-200 transition-colors"
-                                  aria-haspopup="menu"
-                                  aria-expanded={isPermissionMenuOpen}
-                                  aria-label="Permission mode"
-                                  title="Permission mode"
-                                >
-                                  {permissionMode === 'follow_a_plan' ? (
-                                    <Hand size={12} className="text-text-300" />
-                                  ) : (
-                                    <ChevronsRight size={12} className="text-text-300" />
-                                  )}
-                                  <span>{selectedPermissionModeLabel}</span>
-                                  <ChevronDown size={12} className="text-text-300" />
-                                </button>
-                                {isPermissionMenuOpen ? (
-                                  <div className="absolute left-0 bottom-full mb-2 z-50 w-80 bg-bg-000 border-0.5 border-border-200 backdrop-blur-xl rounded-xl text-text-300 shadow-[0px_2px_8px_0px_hsl(var(--always-black)/8%)] p-1.5">
-                                    {permissionModeMenuOptions.map((option) => {
-                                      const isSelected = permissionMode === option.value;
-                                      const Icon = option.Icon;
-
-                                      return (
-                                        <button
-                                          key={option.value}
-                                          type="button"
-                                          onClick={() => {
-                                            setPermissionMode(option.value);
-                                            setIsPermissionMenuOpen(false);
-                                          }}
-                                          className={`w-full px-3 py-2 rounded-lg text-left flex items-start gap-3 transition-colors ${isSelected ? 'bg-bg-200' : 'hover:bg-bg-200'}`}
-                                        >
-                                          <div className="shrink-0 mt-0.5">
-                                            <Icon size={16} className="text-text-200" />
-                                          </div>
-                                          <div className="flex-1 min-w-0">
-                                            <div className="text-sm font-medium text-text-100">
-                                              {intl.formatMessage({
-                                                id: option.labelId,
-                                                defaultMessage: option.labelDefault
-                                              })}
-                                            </div>
-                                            <div className="mt-1 text-xs text-text-400">
-                                              {intl.formatMessage({
-                                                id: option.descriptionId,
-                                                defaultMessage: option.descriptionDefault
-                                              })}
-                                            </div>
-                                          </div>
-                                          <div className="shrink-0 self-center">
-                                            {isSelected ? (
-                                              <Check
-                                                size={16}
-                                                className="text-accent-secondary-200"
-                                              />
-                                            ) : null}
-                                          </div>
-                                        </button>
-                                      );
-                                    })}
-                                    {shouldDisableSkipPermissions ? (
-                                      <p className="px-3 pt-2 text-[11px] text-text-300">
-                                        {intl.formatMessage({
-                                          id: 'LStwu4n1yT_blocked',
-                                          defaultMessage:
-                                            'Act without asking is unavailable on blocked pages.'
-                                        })}
-                                      </p>
-                                    ) : null}
-                                  </div>
-                                ) : null}
-                              </div>
-                              {attachmentCount > 0 ? (
-                                <span className="text-[11px] text-text-300">
-                                  {attachmentCount} image(s)
-                                </span>
-                              ) : null}
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                              {/* Teach Claude button */}
-                              <Tooltip
-                                tooltipContent={intl.formatMessage({
-                                  defaultMessage: 'Teach SuperDuck',
-                                  id: 'teach_claude'
-                                })}
-                                side="top"
-                              >
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setShowWorkflowModeSelectionModal(true);
-                                  }}
-                                  className="inline-flex items-center justify-center relative shrink-0 select-none font-medium h-7 w-7 rounded-lg active:scale-95 transition-all duration-200 text-text-300 hover:text-text-200 hover:bg-bg-200"
-                                  aria-label={intl.formatMessage({
-                                    defaultMessage: 'Teach SuperDuck',
-                                    id: 'teach_claude'
-                                  })}
-                                >
-                                  <CursorClickIcon size={12} />
-                                </button>
-                              </Tooltip>
-
-                              <Tooltip
-                                tooltipContent={intl.formatMessage({
-                                  defaultMessage: 'Actions',
-                                  id: 'actions'
-                                })}
-                                side="top"
-                              >
-                                <div ref={actionsMenuRef} className="relative">
-                                  <button
-                                    type="button"
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      setIsPermissionMenuOpen(false);
-                                      setIsActionsMenuOpen((value) => !value);
-                                    }}
-                                    className="inline-flex items-center justify-center relative shrink-0 select-none font-medium h-7 w-7 rounded-lg active:scale-95 transition-all duration-200 text-text-300 hover:text-text-200 hover:bg-bg-200"
-                                    aria-label={intl.formatMessage({
-                                      defaultMessage: 'Actions',
-                                      id: 'actions'
-                                    })}
+                                    className="inline-flex items-center gap-1.5 h-7 rounded-lg border border-border-300 bg-bg-000 px-2 text-[11px] text-text-200 hover:bg-bg-200 transition-colors"
+                                    aria-haspopup="menu"
+                                    aria-expanded={isPermissionMenuOpen}
+                                    aria-label="Permission mode"
+                                    title="Permission mode"
                                   >
-                                    <Plus size={12} />
+                                    {permissionMode === 'follow_a_plan' ? (
+                                      <Hand size={12} className="text-text-300" />
+                                    ) : (
+                                      <ChevronsRight size={12} className="text-text-300" />
+                                    )}
+                                    <span>{selectedPermissionModeLabel}</span>
+                                    <ChevronDown size={12} className="text-text-300" />
                                   </button>
-                                  {isActionsMenuOpen ? (
-                                    <div className="absolute right-0 bottom-full mb-2 z-50 w-max min-w-[176px] bg-bg-000 border-0.5 border-border-200 backdrop-blur-xl rounded-xl text-text-300 shadow-[0px_2px_8px_0px_hsl(var(--always-black)/8%)] p-1.5">
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setIsActionsMenuOpen(false);
-                                          fileInputRef.current?.click();
-                                        }}
-                                        className="w-full min-h-8 px-2 py-1.5 rounded-lg text-left text-sm flex items-center gap-2 hover:bg-bg-200 hover:text-text-100 transition-colors whitespace-nowrap"
-                                      >
-                                        <Paperclip size={14} />
-                                        <span>
-                                          <MemoizedFormattedMessage
-                                            defaultMessage="Upload image"
-                                            id="upload_image"
-                                          />
-                                        </span>
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => void captureCurrentTabScreenshot()}
-                                        className="w-full min-h-8 px-2 py-1.5 rounded-lg text-left text-sm flex items-center gap-2 hover:bg-bg-200 hover:text-text-100 transition-colors whitespace-nowrap"
-                                      >
-                                        <Camera size={14} />
-                                        <span>
-                                          <MemoizedFormattedMessage
-                                            defaultMessage="Take a screenshot"
-                                            id="take_a_screenshot"
-                                          />
-                                        </span>
-                                      </button>
+                                  {isPermissionMenuOpen ? (
+                                    <div className="absolute left-0 bottom-full mb-2 z-50 w-80 bg-bg-000 border-0.5 border-border-200 backdrop-blur-xl rounded-xl text-text-300 shadow-[0px_2px_8px_0px_hsl(var(--always-black)/8%)] p-1.5">
+                                      {permissionModeMenuOptions.map((option) => {
+                                        const isSelected = permissionMode === option.value;
+                                        const Icon = option.Icon;
+
+                                        return (
+                                          <button
+                                            key={option.value}
+                                            type="button"
+                                            onClick={() => {
+                                              setPermissionMode(option.value);
+                                              setIsPermissionMenuOpen(false);
+                                            }}
+                                            className={`w-full px-3 py-2 rounded-lg text-left flex items-start gap-3 transition-colors ${isSelected ? 'bg-bg-200' : 'hover:bg-bg-200'}`}
+                                          >
+                                            <div className="shrink-0 mt-0.5">
+                                              <Icon size={16} className="text-text-200" />
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                              <div className="text-sm font-medium text-text-100">
+                                                {intl.formatMessage({
+                                                  id: option.labelId,
+                                                  defaultMessage: option.labelDefault
+                                                })}
+                                              </div>
+                                              <div className="mt-1 text-xs text-text-400">
+                                                {intl.formatMessage({
+                                                  id: option.descriptionId,
+                                                  defaultMessage: option.descriptionDefault
+                                                })}
+                                              </div>
+                                            </div>
+                                            <div className="shrink-0 self-center">
+                                              {isSelected ? (
+                                                <Check
+                                                  size={16}
+                                                  className="text-accent-secondary-200"
+                                                />
+                                              ) : null}
+                                            </div>
+                                          </button>
+                                        );
+                                      })}
+                                      {shouldDisableSkipPermissions ? (
+                                        <p className="px-3 pt-2 text-[11px] text-text-300">
+                                          {intl.formatMessage({
+                                            id: 'LStwu4n1yT_blocked',
+                                            defaultMessage:
+                                              'Act without asking is unavailable on blocked pages.'
+                                          })}
+                                        </p>
+                                      ) : null}
                                     </div>
                                   ) : null}
                                 </div>
-                              </Tooltip>
+                                {attachmentCount > 0 ? (
+                                  <span className="text-[11px] text-text-300">
+                                    {attachmentCount} image(s)
+                                  </span>
+                                ) : null}
+                              </div>
 
-                              {effectiveIsAgentRunning ? (
-                                <button
-                                  type="button"
-                                  data-test-id="stop-button"
-                                  onClick={() => effectiveCancel()}
-                                  className="inline-flex items-center justify-center relative shrink-0 select-none font-medium h-7 w-7 rounded-lg active:scale-95 text-text-300 hover:text-text-200 hover:bg-bg-200 transition-colors"
-                                  aria-label={intl.formatMessage({
-                                    defaultMessage: 'Stop message',
-                                    id: 'stop_message'
+                              <div className="flex items-center gap-2">
+                                {/* Teach Claude button */}
+                                <Tooltip
+                                  tooltipContent={intl.formatMessage({
+                                    defaultMessage: 'Teach SuperDuck',
+                                    id: 'teach_claude'
                                   })}
-                                  title={intl.formatMessage({
-                                    defaultMessage: 'Stop message',
-                                    id: 'stop_message'
-                                  })}
+                                  side="top"
                                 >
-                                  <CircleStop size={14} />
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  data-test-id="send-button"
-                                  onClick={submit}
-                                  disabled={
-                                    (!input.trim() && pendingAttachments.length === 0) ||
-                                    effectiveIsAgentRunning
-                                  }
-                                  className={
-                                    'inline-flex items-center justify-center relative shrink-0 select-none disabled:pointer-events-none disabled:opacity-50 disabled:shadow-none disabled:drop-shadow-none font-medium transition-colors h-7 w-7 rounded-lg active:scale-95 ' +
-                                    (permissionMode === 'skip_all_permission_checks'
-                                      ? 'bg-[#BF8534] hover:bg-[#A06F2C] text-white'
-                                      : 'bg-accent-main-000 hover:bg-accent-main-200 text-oncolor-100')
-                                  }
-                                  aria-label={intl.formatMessage({
-                                    defaultMessage: 'Send message',
-                                    id: 'send_message'
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setShowWorkflowModeSelectionModal(true);
+                                    }}
+                                    className="inline-flex items-center justify-center relative shrink-0 select-none font-medium h-7 w-7 rounded-lg active:scale-95 transition-all duration-200 text-text-300 hover:text-text-200 hover:bg-bg-200"
+                                    aria-label={intl.formatMessage({
+                                      defaultMessage: 'Teach SuperDuck',
+                                      id: 'teach_claude'
+                                    })}
+                                  >
+                                    <CursorClickIcon size={12} />
+                                  </button>
+                                </Tooltip>
+
+                                <Tooltip
+                                  tooltipContent={intl.formatMessage({
+                                    defaultMessage: 'Actions',
+                                    id: 'actions'
                                   })}
-                                  title={intl.formatMessage({
-                                    defaultMessage: 'Send message',
-                                    id: 'send_message'
-                                  })}
+                                  side="top"
                                 >
-                                  <ArrowUp size={14} />
-                                </button>
-                              )}
+                                  <div ref={actionsMenuRef} className="relative">
+                                    <button
+                                      type="button"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        setIsPermissionMenuOpen(false);
+                                        setIsActionsMenuOpen((value) => !value);
+                                      }}
+                                      className="inline-flex items-center justify-center relative shrink-0 select-none font-medium h-7 w-7 rounded-lg active:scale-95 transition-all duration-200 text-text-300 hover:text-text-200 hover:bg-bg-200"
+                                      aria-label={intl.formatMessage({
+                                        defaultMessage: 'Actions',
+                                        id: 'actions'
+                                      })}
+                                    >
+                                      <Plus size={12} />
+                                    </button>
+                                    {isActionsMenuOpen ? (
+                                      <div className="absolute right-0 bottom-full mb-2 z-50 w-max min-w-[176px] bg-bg-000 border-0.5 border-border-200 backdrop-blur-xl rounded-xl text-text-300 shadow-[0px_2px_8px_0px_hsl(var(--always-black)/8%)] p-1.5">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setIsActionsMenuOpen(false);
+                                            fileInputRef.current?.click();
+                                          }}
+                                          className="w-full min-h-8 px-2 py-1.5 rounded-lg text-left text-sm flex items-center gap-2 hover:bg-bg-200 hover:text-text-100 transition-colors whitespace-nowrap"
+                                        >
+                                          <Paperclip size={14} />
+                                          <span>
+                                            <MemoizedFormattedMessage
+                                              defaultMessage="Upload image"
+                                              id="upload_image"
+                                            />
+                                          </span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => void captureCurrentTabScreenshot()}
+                                          className="w-full min-h-8 px-2 py-1.5 rounded-lg text-left text-sm flex items-center gap-2 hover:bg-bg-200 hover:text-text-100 transition-colors whitespace-nowrap"
+                                        >
+                                          <Camera size={14} />
+                                          <span>
+                                            <MemoizedFormattedMessage
+                                              defaultMessage="Take a screenshot"
+                                              id="take_a_screenshot"
+                                            />
+                                          </span>
+                                        </button>
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                </Tooltip>
+
+                                {effectiveIsAgentRunning ? (
+                                  <button
+                                    type="button"
+                                    data-test-id="stop-button"
+                                    onClick={() => effectiveCancel()}
+                                    className="inline-flex items-center justify-center relative shrink-0 select-none font-medium h-7 w-7 rounded-lg active:scale-95 text-text-300 hover:text-text-200 hover:bg-bg-200 transition-colors"
+                                    aria-label={intl.formatMessage({
+                                      defaultMessage: 'Stop message',
+                                      id: 'stop_message'
+                                    })}
+                                    title={intl.formatMessage({
+                                      defaultMessage: 'Stop message',
+                                      id: 'stop_message'
+                                    })}
+                                  >
+                                    <CircleStop size={14} />
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    data-test-id="send-button"
+                                    onClick={submit}
+                                    disabled={
+                                      (!input.trim() && pendingAttachments.length === 0) ||
+                                      effectiveIsAgentRunning
+                                    }
+                                    className={
+                                      'inline-flex items-center justify-center relative shrink-0 select-none disabled:pointer-events-none disabled:opacity-50 disabled:shadow-none disabled:drop-shadow-none font-medium transition-colors h-7 w-7 rounded-lg active:scale-95 ' +
+                                      (permissionMode === 'skip_all_permission_checks'
+                                        ? 'bg-[#BF8534] hover:bg-[#A06F2C] text-white'
+                                        : 'bg-accent-main-000 hover:bg-accent-main-200 text-oncolor-100')
+                                    }
+                                    aria-label={intl.formatMessage({
+                                      defaultMessage: 'Send message',
+                                      id: 'send_message'
+                                    })}
+                                    title={intl.formatMessage({
+                                      defaultMessage: 'Send message',
+                                      id: 'send_message'
+                                    })}
+                                  >
+                                    <ArrowUp size={14} />
+                                  </button>
+                                )}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                        <div className="flex justify-center py-1.5 text-text-500 bg-bg-100">
-                          <a
-                            href="https://support.anthropic.com/en/articles/8525154-claude-is-providing-incorrect-or-misleading-responses-what-s-going-on"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-[11px] hover:text-text-300 transition-colors text-center"
-                          >
-                            <MemoizedFormattedMessage
-                              defaultMessage="SuperDuck is AI and can make mistakes. Please double-check responses."
-                              id="ai_can_make_mistakes_please_doublecheck_responses"
-                            />
-                          </a>
-                        </div>
-                      </>
-                    )}
+                          <div className="flex justify-center py-1.5 text-text-500 bg-bg-100">
+                            <a
+                              href="https://support.anthropic.com/en/articles/8525154-claude-is-providing-incorrect-or-misleading-responses-what-s-going-on"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[11px] hover:text-text-300 transition-colors text-center"
+                            >
+                              <MemoizedFormattedMessage
+                                defaultMessage="SuperDuck is AI and can make mistakes. Please double-check responses."
+                                id="ai_can_make_mistakes_please_doublecheck_responses"
+                              />
+                            </a>
+                          </div>
+                        </>
+                      )}
+                  </div>
                 </div>
+                <div className="bg-bg-100 h-0.5" />
               </div>
-              <div className="bg-bg-100 h-0.5" />
             </div>
-          </div>
-        </ScrollContainer>
+          </ScrollContainer>
 
-        {/* Workflow Recording Interface — shown when recording, replaces chat interface */}
-        {recordingState.isRecording && (
-          <div className="absolute inset-0 z-[5]">
-            <WorkflowRecordingInterface
-              recordingState={recordingState}
-              isSpeechRecording={isSpeechRecording}
-              isSpeechSupported={isSpeechSupported}
-              hasSpeechPermission={hasSpeechPermissionFromHook}
-              currentInterimTranscript={currentInterimTranscript}
-              onStop={stopRecording}
-              onTogglePause={togglePause}
-              onToggleSpeech={toggleSpeechRecording}
-              onRemoveStep={removeStep}
-              onUpdateStep={updateStep}
-              onSave={(steps, summary, workflowTitle) => {
-                // Save the generated prompt. Let the shortcut modal generate its own command name
-                // instead of reusing the recording title or page title.
-                void workflowTitle;
-                setPromptToSave({ prompt: summary });
-                stopRecording();
-              }}
-              createMessage={createAnthropicMessage}
-              isGeneratingSummary={isGeneratingSummary}
-              setIsGeneratingSummary={setIsGeneratingSummary}
-              currentUrl={currentPageUrl}
-              pageTitle={currentPageTitle}
-            />
-          </div>
-        )}
-        {/* Inline permission prompt overlay — matches bundle's absolute bottom-0 positioning */}
-        {permissionPrompt && (
-          <div className="absolute bottom-0 left-0 right-0 z-[10]">
-            <div className="mx-auto max-w-3xl md:px-2">
-              <div className="mx-3 md:mx-0 border border-border-300 rounded-[14px] shadow-[0_4px_20px_0_rgba(0,0,0,0.04)] bg-bg-100">
-                <InlinePermissionPrompt
-                  prompt={permissionPrompt}
-                  onAllow={handlePermissionAllow}
-                  onDeny={handlePermissionDeny}
-                  disableAlwaysAllow={permissionMode === 'follow_a_plan'}
+          {/* Workflow Recording Interface — shown when recording, replaces chat interface */}
+          {recordingState.isRecording && (
+            <div className="absolute inset-0 z-[5]">
+              <WorkflowRecordingInterface
+                recordingState={recordingState}
+                isSpeechRecording={isSpeechRecording}
+                isSpeechSupported={isSpeechSupported}
+                hasSpeechPermission={hasSpeechPermissionFromHook}
+                currentInterimTranscript={currentInterimTranscript}
+                onStop={stopRecording}
+                onTogglePause={togglePause}
+                onToggleSpeech={toggleSpeechRecording}
+                onRemoveStep={removeStep}
+                onUpdateStep={updateStep}
+                onSave={(steps, summary, workflowTitle) => {
+                  // Save the generated prompt. Let the shortcut modal generate its own command name
+                  // instead of reusing the recording title or page title.
+                  void workflowTitle;
+                  setPromptToSave({ prompt: summary });
+                  stopRecording();
+                }}
+                createMessage={createAnthropicMessage}
+                isGeneratingSummary={isGeneratingSummary}
+                setIsGeneratingSummary={setIsGeneratingSummary}
+                currentUrl={currentPageUrl}
+                pageTitle={currentPageTitle}
+              />
+            </div>
+          )}
+          {/* Inline permission prompt overlay — matches bundle's absolute bottom-0 positioning */}
+          {permissionPrompt && (
+            <div className="absolute bottom-0 left-0 right-0 z-[10]">
+              <div className="mx-auto max-w-3xl md:px-2">
+                <div className="mx-3 md:mx-0 border border-border-300 rounded-[14px] shadow-[0_4px_20px_0_rgba(0,0,0,0.04)] bg-bg-100">
+                  <InlinePermissionPrompt
+                    prompt={permissionPrompt}
+                    onAllow={handlePermissionAllow}
+                    onDeny={handlePermissionDeny}
+                    disableAlwaysAllow={permissionMode === 'follow_a_plan'}
+                  />
+                </div>
+                <div className="bg-bg-100 h-3" />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {pendingLocale ? (
+          <div className="fixed inset-0 z-50 bg-black/40 p-4 flex items-center justify-center">
+            <div className="w-full max-w-sm rounded-2xl border border-border-300 bg-bg-100 p-4">
+              <h3 className="text-base font-medium text-text-100">
+                <MemoizedFormattedMessage defaultMessage="Change language" id="change_language" />
+              </h3>
+              <p className="text-sm text-text-300 mt-4">
+                <MemoizedFormattedMessage
+                  defaultMessage="Changing the language will start a new chat."
+                  id="changing_the_language_will_start_a_new_chat"
                 />
+              </p>
+              <div className="flex justify-end gap-2 mt-6">
+                <button
+                  type="button"
+                  className="px-3 py-2 rounded-lg border border-border-300 text-sm text-text-200 hover:bg-bg-200 transition-colors"
+                  onClick={() => setPendingLocale(null)}
+                >
+                  <MemoizedFormattedMessage defaultMessage="Cancel" id="cancel" />
+                </button>
+                <button
+                  type="button"
+                  className="px-3 py-2 rounded-lg bg-text-100 text-bg-100 text-sm hover:bg-text-200 transition-colors"
+                  onClick={confirmLocaleChange}
+                >
+                  <MemoizedFormattedMessage defaultMessage="Continue" id="continue" />
+                </button>
               </div>
-              <div className="bg-bg-100 h-3" />
             </div>
           </div>
-        )}
-      </div>
+        ) : null}
 
-      {pendingLocale ? (
-        <div className="fixed inset-0 z-50 bg-black/40 p-4 flex items-center justify-center">
-          <div className="w-full max-w-sm rounded-2xl border border-border-300 bg-bg-100 p-4">
-            <h3 className="text-base font-medium text-text-100">
-              <MemoizedFormattedMessage defaultMessage="Change language" id="change_language" />
-            </h3>
-            <p className="text-sm text-text-300 mt-4">
-              <MemoizedFormattedMessage
-                defaultMessage="Changing the language will start a new chat."
-                id="changing_the_language_will_start_a_new_chat"
+        {pairingPrompt ? (
+          <div className="fixed inset-0 bg-black/40 p-4 flex items-center justify-center">
+            <div className="w-full max-w-md rounded-xl border border-border-300 bg-bg-000 p-4">
+              <h3 className="text-base font-medium text-text-100 mb-2">
+                <MemoizedFormattedMessage
+                  id="wants_to_connect"
+                  defaultMessage="{clientLabel} wants to connect"
+                  values={{
+                    clientLabel:
+                      pairingPrompt.clientType === 'claude-code' ? 'Claude Code' : 'Claude Desktop'
+                  }}
+                />
+              </h3>
+              <p className="text-sm text-text-300 mb-3">
+                <MemoizedFormattedMessage
+                  id="name_this_browser_so_you_can_identify_it"
+                  defaultMessage="Name this browser so you can identify it later."
+                />
+              </p>
+              <input
+                type="text"
+                value={pairingName}
+                onChange={(event) => setPairingName(event.target.value)}
+                placeholder={intl.formatMessage({
+                  id: 'eg_work_laptop_personal_chrome',
+                  defaultMessage: 'e.g., "Work laptop", "Personal Chrome"'
+                })}
+                className="w-full px-3 py-2 text-sm rounded-lg border border-border-300 bg-bg-100 text-text-100"
               />
-            </p>
-            <div className="flex justify-end gap-2 mt-6">
-              <button
-                type="button"
-                className="px-3 py-2 rounded-lg border border-border-300 text-sm text-text-200 hover:bg-bg-200 transition-colors"
-                onClick={() => setPendingLocale(null)}
-              >
-                <MemoizedFormattedMessage defaultMessage="Cancel" id="cancel" />
-              </button>
-              <button
-                type="button"
-                className="px-3 py-2 rounded-lg bg-text-100 text-bg-100 text-sm hover:bg-text-200 transition-colors"
-                onClick={confirmLocaleChange}
-              >
-                <MemoizedFormattedMessage defaultMessage="Continue" id="continue" />
-              </button>
+              <div className="flex justify-end gap-2 mt-4">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await chrome.runtime.sendMessage({
+                      type: 'pairing_dismissed',
+                      request_id: pairingPrompt.requestId
+                    });
+                    setPairingPrompt(null);
+                    setPairingName('');
+                  }}
+                  className="px-3 py-2 text-sm rounded-lg border border-border-300 text-text-200"
+                >
+                  <MemoizedFormattedMessage id="ignore" defaultMessage="Ignore" />
+                </button>
+                <button
+                  type="button"
+                  disabled={!pairingName.trim()}
+                  onClick={async () => {
+                    await chrome.runtime.sendMessage({
+                      type: 'pairing_confirmed',
+                      request_id: pairingPrompt.requestId,
+                      name: pairingName.trim()
+                    });
+                    setPairingPrompt(null);
+                    setPairingName('');
+                  }}
+                  className="px-3 py-2 text-sm rounded-lg bg-accent-main-100 text-oncolor-100 disabled:opacity-50"
+                >
+                  <MemoizedFormattedMessage id="connect" defaultMessage="Connect" />
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      ) : null}
-
-      {pairingPrompt ? (
-        <div className="fixed inset-0 bg-black/40 p-4 flex items-center justify-center">
-          <div className="w-full max-w-md rounded-xl border border-border-300 bg-bg-000 p-4">
-            <h3 className="text-base font-medium text-text-100 mb-2">
-              <MemoizedFormattedMessage
-                id="wants_to_connect"
-                defaultMessage="{clientLabel} wants to connect"
-                values={{ clientLabel: pairingPrompt.clientType === 'claude-code' ? 'Claude Code' : 'Claude Desktop' }}
-              />
-            </h3>
-            <p className="text-sm text-text-300 mb-3">
-              <MemoizedFormattedMessage id="name_this_browser_so_you_can_identify_it" defaultMessage="Name this browser so you can identify it later." />
-            </p>
-            <input
-              type="text"
-              value={pairingName}
-              onChange={(event) => setPairingName(event.target.value)}
-              placeholder={intl.formatMessage({ id: 'eg_work_laptop_personal_chrome', defaultMessage: 'e.g., "Work laptop", "Personal Chrome"' })}
-              className="w-full px-3 py-2 text-sm rounded-lg border border-border-300 bg-bg-100 text-text-100"
-            />
-            <div className="flex justify-end gap-2 mt-4">
-              <button
-                type="button"
-                onClick={async () => {
-                  await chrome.runtime.sendMessage({
-                    type: 'pairing_dismissed',
-                    request_id: pairingPrompt.requestId
-                  });
-                  setPairingPrompt(null);
-                  setPairingName('');
-                }}
-                className="px-3 py-2 text-sm rounded-lg border border-border-300 text-text-200"
-              >
-                <MemoizedFormattedMessage id="ignore" defaultMessage="Ignore" />
-              </button>
-              <button
-                type="button"
-                disabled={!pairingName.trim()}
-                onClick={async () => {
-                  await chrome.runtime.sendMessage({
-                    type: 'pairing_confirmed',
-                    request_id: pairingPrompt.requestId,
-                    name: pairingName.trim()
-                  });
-                  setPairingPrompt(null);
-                  setPairingName('');
-                }}
-                className="px-3 py-2 text-sm rounded-lg bg-accent-main-100 text-oncolor-100 disabled:opacity-50"
-              >
-                <MemoizedFormattedMessage id="connect" defaultMessage="Connect" />
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+        ) : null}
 
         {/* Create Shortcut Modal - shown when promptToSave or promptToEdit is set */}
         {(promptToSave !== null || promptToEdit !== null) && (
