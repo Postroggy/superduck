@@ -10169,7 +10169,7 @@ export function SidepanelApp() {
       }
     >
       <div className="relative flex h-full min-h-0 flex-col">
-        <header className="flex justify-between items-center px-4 pt-3 pb-3">
+        <header className="shrink-0 flex justify-between items-center px-4 pt-3 pb-3">
           <div className="flex items-center gap-3">
             <div ref={modelMenuRef} className="relative">
               <button
@@ -10361,10 +10361,12 @@ export function SidepanelApp() {
           />
         )}
 
-        <div className="flex-1 flex flex-col overflow-hidden relative">
+        <div className="flex-1 min-h-0 flex flex-col overflow-hidden relative">
           <ScrollContainer
             ref={autoScrollRef}
-            parentClassName={'flex-1 ' + (anthropicMessages.length === 0 ? '!overflow-hidden' : '')}
+            parentClassName={
+              'flex-1 min-h-0 ' + (anthropicMessages.length === 0 ? '!overflow-hidden' : '')
+            }
             innerClassName="h-full"
             pinToBottomConfig={{ disabled: false, initialValue: false }}
           >
