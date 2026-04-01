@@ -10552,23 +10552,6 @@ export function SidepanelApp() {
                                       try {
                                         savedPrompt =
                                           await SavedPromptsService.getPromptByCommand(command);
-
-                                        // If shortcut has URL, navigate to it
-                                        if (savedPrompt?.url) {
-                                          try {
-                                            const tabs = await chrome.tabs.query({
-                                              active: true,
-                                              currentWindow: true
-                                            });
-                                            if (tabs[0]?.id) {
-                                              await chrome.tabs.update(tabs[0].id, {
-                                                url: savedPrompt.url
-                                              });
-                                            }
-                                          } catch (error) {
-                                            console.error('Failed to navigate to URL:', error);
-                                          }
-                                        }
                                       } catch (error) {
                                         console.error('Failed to load shortcut:', error);
                                       }
