@@ -719,6 +719,7 @@
   "menu": "Menu",
   "loading_more": "Loading more...",
   "system_prompts_and_metadata": "System prompts and metadata",
+  "time_input_placeholder": "e.g., 9:30 AM or 14:00",
   "created_a_file": "Created a file",
   "claude_wants_to_use": "SuperDuck wants to use:",
   "revoke": "Revoke",

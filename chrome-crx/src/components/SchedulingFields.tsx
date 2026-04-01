@@ -6,25 +6,25 @@ import React, {
   useMemo,
   createContext,
   useContext,
-  forwardRef,
-} from "react";
-import { useIntl, FormattedMessage } from "react-intl";
-import { createLucideIcon } from "lucide-react";
-import { cva } from "class-variance-authority";
-import { clsx } from "clsx";
-import { motion, AnimatePresence } from "framer-motion";
-import { Slot, Slottable } from "@radix-ui/react-slot";
-import * as SelectPrimitive from "@radix-ui/react-select";
-import * as ToggleGroupPrimitive from "@radix-ui/react-toggle-group";
-import * as TooltipPrimitive from "@radix-ui/react-tooltip";
-import * as PopoverPrimitive from "@radix-ui/react-popover";
-import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
-import { GrowthBook, GrowthBookProvider } from "@growthbook/growthbook-react";
-import { DateTime } from "luxon";
-import Calendar from "react-calendar";
-import _ from "lodash";
-import loginSvg from "../login.svg";
-import loginDarkSvg from "../login_dark.svg";
+  forwardRef
+} from 'react';
+import { useIntl, FormattedMessage } from 'react-intl';
+import { createLucideIcon } from 'lucide-react';
+import { cva } from 'class-variance-authority';
+import { clsx } from 'clsx';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Slot, Slottable } from '@radix-ui/react-slot';
+import * as SelectPrimitive from '@radix-ui/react-select';
+import * as ToggleGroupPrimitive from '@radix-ui/react-toggle-group';
+import * as TooltipPrimitive from '@radix-ui/react-tooltip';
+import * as PopoverPrimitive from '@radix-ui/react-popover';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
+import { GrowthBook, GrowthBookProvider } from '@growthbook/growthbook-react';
+import { DateTime } from 'luxon';
+import Calendar from 'react-calendar';
+import _ from 'lodash';
+import loginSvg from '../login.svg';
+import loginDarkSvg from '../login_dark.svg';
 import {
   StorageKeys,
   getStorageValue,
@@ -33,9 +33,10 @@ import {
   apiClient,
   loginWithAnthropic,
   FeatureProvider,
-  useFeatureValue,
-} from "../SavedPromptsService";
-import { IntlMessageLoaderProvider } from "../index-react-dom-intl";
+  useFeatureValue
+} from '../SavedPromptsService';
+import { IntlMessageLoaderProvider } from '../index-react-dom-intl';
+import { isChineseLocale } from '../utils/locale';
 
 function cn(...inputs: any[]): string {
   return clsx(inputs);
@@ -46,21 +47,14 @@ function cn(...inputs: any[]): string {
 // =============================================================================
 
 function getDomainSuffix(hostname: string): string | undefined {
-  if (hostname.endsWith(".anthropic.com")) return ".anthropic.com";
-  if (hostname === "claude.ai" || hostname.endsWith(".claude.ai"))
-    return ".claude.ai";
-  if (hostname === "claude.com" || hostname.endsWith(".claude.com"))
-    return ".claude.com";
-  if (
-    hostname === "claude-ai.staging.ant.dev" ||
-    hostname === "preview.claude-ai.staging.ant.dev"
-  )
-    return ".staging.ant.dev";
-  if (hostname.endsWith(".pr-preview.ant.dev")) return ".pr-preview.ant.dev";
-  if (hostname === "console.staging.ant.dev")
-    return ".console.staging.ant.dev";
-  if (hostname === "platform.staging.ant.dev")
-    return ".platform.staging.ant.dev";
+  if (hostname.endsWith('.anthropic.com')) return '.anthropic.com';
+  if (hostname === 'claude.ai' || hostname.endsWith('.claude.ai')) return '.claude.ai';
+  if (hostname === 'claude.com' || hostname.endsWith('.claude.com')) return '.claude.com';
+  if (hostname === 'claude-ai.staging.ant.dev' || hostname === 'preview.claude-ai.staging.ant.dev')
+    return '.staging.ant.dev';
+  if (hostname.endsWith('.pr-preview.ant.dev')) return '.pr-preview.ant.dev';
+  if (hostname === 'console.staging.ant.dev') return '.console.staging.ant.dev';
+  if (hostname === 'platform.staging.ant.dev') return '.platform.staging.ant.dev';
   return undefined;
 }
 
@@ -69,24 +63,24 @@ function getDomainSuffix(hostname: string): string | undefined {
 // =============================================================================
 
 const CookiesContext = createContext<any>(null);
-const EXPIRED_DATE = "Thu, 01 Jan 1970 00:00:01 GMT";
+const EXPIRED_DATE = 'Thu, 01 Jan 1970 00:00:01 GMT';
 
 function getParentDomains(hostname: string): string[] {
   const suffix = getDomainSuffix(hostname);
   if (!suffix) return [];
-  const parts = suffix.slice(1).split(".");
+  const parts = suffix.slice(1).split('.');
   const result: string[] = [];
   for (let i = 1; i < parts.length - 1; i++) {
-    result.push("." + parts.slice(i).join("."));
+    result.push('.' + parts.slice(i).join('.'));
   }
   return result;
 }
 
 const cookies = {
   get: (name: string): string | undefined => {
-    const parts = document.cookie.split(";");
+    const parts = document.cookie.split(';');
     for (let i = 0; i < parts.length; i++) {
-      const [key, value] = parts[i].trim().split("=");
+      const [key, value] = parts[i].trim().split('=');
       if (name === key) return decodeURIComponent(value);
     }
   },
@@ -94,34 +88,34 @@ const cookies = {
     const parts = [
       `${name}=${encodeURIComponent(value)}`,
       `max-age=${options.maxAgeSeconds ?? 31536e3}`,
-      "samesite=lax",
-      "secure",
-      "path=/",
+      'samesite=lax',
+      'secure',
+      'path=/'
     ];
     const domain = getDomainSuffix(window.location.hostname);
     if (domain) {
       document.cookie = `${name}=[removed]; expires=${EXPIRED_DATE}; samesite=lax; secure; path=/`;
       parts.push(`domain=${domain}`);
     }
-    document.cookie = parts.join("; ");
+    document.cookie = parts.join('; ');
   },
   delete: (name: string) => {
     const parts = [
       `${name}=[removed]`,
       `expires=${EXPIRED_DATE}`,
-      "samesite=lax",
-      "secure",
-      "path=/",
+      'samesite=lax',
+      'secure',
+      'path=/'
     ];
     const domain = getDomainSuffix(window.location.hostname);
     if (domain) {
-      document.cookie = [...parts, `domain=${domain}`].join("; ");
+      document.cookie = [...parts, `domain=${domain}`].join('; ');
     }
     for (const parentDomain of getParentDomains(window.location.hostname)) {
-      document.cookie = [...parts, `domain=${parentDomain}`].join("; ");
+      document.cookie = [...parts, `domain=${parentDomain}`].join('; ');
     }
-    document.cookie = parts.join("; ");
-  },
+    document.cookie = parts.join('; ');
+  }
 };
 
 // =============================================================================
@@ -129,8 +123,8 @@ const cookies = {
 // =============================================================================
 
 function setRef(ref: any, value: any) {
-  if (typeof ref === "function") return ref(value);
-  if (typeof ref === "object" && ref !== null && "current" in ref) {
+  if (typeof ref === 'function') return ref(value);
+  if (typeof ref === 'object' && ref !== null && 'current' in ref) {
     ref.current = value;
   }
 }
@@ -139,11 +133,11 @@ function composeRefs(...refs: any[]) {
   const cleanups = new Map();
   return (node: any) => {
     if (
-      refs.forEach((ref) => {
+      (refs.forEach((ref) => {
         const cleanup = setRef(ref, node);
         if (cleanup) cleanups.set(ref, cleanup);
       }),
-      cleanups.size > 0
+      cleanups.size > 0)
     )
       return () => {
         refs.forEach((ref) => {
@@ -165,41 +159,41 @@ function useComposedRefs(...refs: any[]) {
 // =============================================================================
 
 export enum LogTag {
-  LOCAL_DEV = "[LOCAL_DEV]",
-  QUICK_ENTRY = "[QUICK_ENTRY]",
-  DESKTOP_AUTH = "[DESKTOP_AUTH]",
-  CHAT_COMPLETION = "[COMPLETION]",
-  EVALS = "[EVALS]",
-  TEST_ONLY = "[TEST_ONLY]",
-  O11Y_INTERNALS = "[O11Y]",
-  AGE_VERIFICATION_SERVER = "[Age Verification Server]",
-  BOOTSTRAP = "[BOOTSTRAP]",
-  USER_CONTENT_RENDERER = "[USER_CONTENT_RENDERER]",
-  MCP = "[MCP]",
-  ARTIFACTS = "[ARTIFACTS]",
-  BILLING = "[BILLING]",
-  WORKBENCH = "[WORKBENCH]",
-  METAPROMPT = "[METAPROMPT]",
-  LOCAL_STORAGE = "[LOCAL_STORAGE]",
-  SERVICE_WORKER = "[SERVICE_WORKER]",
-  FILE_UPLOAD = "[FILE_UPLOAD]",
-  CLIPBOARD = "[CLIPBOARD]",
-  SEGMENT_EVENT = "[SEGMENT_EVENT]",
-  I18N = "[I18N]",
-  DESKTOP_API = "[DESKTOP_API]",
-  DOCS = "[DOCS]",
-  EXPERIENCE_FRAMEWORK = "[EXPERIENCE_FRAMEWORK]",
-  PRIVATE_API = "[PRIVATE_API]",
-  LOCAL_SESSION = "[LOCAL_SESSION]",
-  NEST_UPDATE_PROXY = "[NEST_UPDATE_PROXY]",
-  CC_NATIVE_INTERNAL_PROXY = "[CC_NATIVE_INTERNAL_PROXY]",
-  LTI = "[LTI]",
-  REACT_QUERY_CLIENT = "[REACT_QUERY_CLIENT]",
-  CODE_ONBOARDING = "[CODE_ONBOARDING]",
-  FEATURE_FLAGS = "[FEATURE_FLAGS]",
-  SESSION_RECOVERY = "[SESSION_RECOVERY]",
-  VOICE_MODE = "[VOICE_MODE]",
-  TUTOR = "[TUTOR]",
+  LOCAL_DEV = '[LOCAL_DEV]',
+  QUICK_ENTRY = '[QUICK_ENTRY]',
+  DESKTOP_AUTH = '[DESKTOP_AUTH]',
+  CHAT_COMPLETION = '[COMPLETION]',
+  EVALS = '[EVALS]',
+  TEST_ONLY = '[TEST_ONLY]',
+  O11Y_INTERNALS = '[O11Y]',
+  AGE_VERIFICATION_SERVER = '[Age Verification Server]',
+  BOOTSTRAP = '[BOOTSTRAP]',
+  USER_CONTENT_RENDERER = '[USER_CONTENT_RENDERER]',
+  MCP = '[MCP]',
+  ARTIFACTS = '[ARTIFACTS]',
+  BILLING = '[BILLING]',
+  WORKBENCH = '[WORKBENCH]',
+  METAPROMPT = '[METAPROMPT]',
+  LOCAL_STORAGE = '[LOCAL_STORAGE]',
+  SERVICE_WORKER = '[SERVICE_WORKER]',
+  FILE_UPLOAD = '[FILE_UPLOAD]',
+  CLIPBOARD = '[CLIPBOARD]',
+  SEGMENT_EVENT = '[SEGMENT_EVENT]',
+  I18N = '[I18N]',
+  DESKTOP_API = '[DESKTOP_API]',
+  DOCS = '[DOCS]',
+  EXPERIENCE_FRAMEWORK = '[EXPERIENCE_FRAMEWORK]',
+  PRIVATE_API = '[PRIVATE_API]',
+  LOCAL_SESSION = '[LOCAL_SESSION]',
+  NEST_UPDATE_PROXY = '[NEST_UPDATE_PROXY]',
+  CC_NATIVE_INTERNAL_PROXY = '[CC_NATIVE_INTERNAL_PROXY]',
+  LTI = '[LTI]',
+  REACT_QUERY_CLIENT = '[REACT_QUERY_CLIENT]',
+  CODE_ONBOARDING = '[CODE_ONBOARDING]',
+  FEATURE_FLAGS = '[FEATURE_FLAGS]',
+  SESSION_RECOVERY = '[SESSION_RECOVERY]',
+  VOICE_MODE = '[VOICE_MODE]',
+  TUTOR = '[TUTOR]'
 }
 
 // =============================================================================
@@ -218,7 +212,7 @@ const Logger = {
     return () => {
       console.groupEnd();
     };
-  },
+  }
 };
 
 // =============================================================================
@@ -230,7 +224,7 @@ function useLocalStorageInternal({
   defaultValue,
   deserialize = JSON.parse,
   getInitialValueInEffect = false,
-  sync = true,
+  sync = true
 }: {
   key: string;
   defaultValue: any;
@@ -240,17 +234,17 @@ function useLocalStorageInternal({
 }): [any, (value: any) => void, () => void] {
   const storageKey = `LSS-${key}`;
   const tabId = useRef(
-    crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
   );
   const isUpdating = useRef(false);
   const [value, setValue] = useState(() => {
     if (getInitialValueInEffect) return defaultValue;
     try {
-      if (typeof window === "undefined") return defaultValue;
+      if (typeof window === 'undefined') return defaultValue;
       const raw = window.localStorage.getItem(storageKey);
       if (raw) {
         const parsed = JSON.parse(raw);
-        return parsed && typeof parsed === "object" && "value" in parsed
+        return parsed && typeof parsed === 'object' && 'value' in parsed
           ? parsed.value
           : deserialize(raw);
       }
@@ -267,9 +261,9 @@ function useLocalStorageInternal({
         if (raw) {
           const parsed = JSON.parse(raw);
           setValue(
-            parsed && typeof parsed === "object" && "value" in parsed
+            parsed && typeof parsed === 'object' && 'value' in parsed
               ? parsed.value
-              : deserialize(raw),
+              : deserialize(raw)
           );
         }
       } catch (e) {
@@ -282,17 +276,17 @@ function useLocalStorageInternal({
     (newValue: any) => {
       isUpdating.current = true;
       setValue((prev: any) => {
-        const resolved = typeof newValue === "function" ? newValue(prev) : newValue;
+        const resolved = typeof newValue === 'function' ? newValue(prev) : newValue;
         try {
           const wrapped = { value: resolved, tabId: tabId.current, timestamp: Date.now() };
           const serialized = JSON.stringify(wrapped);
-          if (window.localStorage.setItem(storageKey, serialized), sync) {
-            const event = new StorageEvent("storage", {
+          if ((window.localStorage.setItem(storageKey, serialized), sync)) {
+            const event = new StorageEvent('storage', {
               key: storageKey,
               newValue: serialized,
               oldValue: window.localStorage.getItem(storageKey),
               storageArea: window.localStorage,
-              url: window.location.href,
+              url: window.location.href
             });
             setTimeout(() => {
               window.dispatchEvent(event);
@@ -307,7 +301,7 @@ function useLocalStorageInternal({
         isUpdating.current = false;
       });
     },
-    [storageKey, sync],
+    [storageKey, sync]
   );
 
   const remove = useCallback(() => {
@@ -321,7 +315,7 @@ function useLocalStorageInternal({
       if (e.key === storageKey && e.newValue && !isUpdating.current) {
         try {
           const parsed = JSON.parse(e.newValue);
-          if (parsed && typeof parsed === "object" && "value" in parsed && "tabId" in parsed) {
+          if (parsed && typeof parsed === 'object' && 'value' in parsed && 'tabId' in parsed) {
             if (parsed.tabId === tabId.current) return;
             setValue((prev: any) => (_.isEqual(prev, parsed.value) ? prev : parsed.value));
           } else {
@@ -332,13 +326,13 @@ function useLocalStorageInternal({
           Logger.warn(
             LogTag.LOCAL_STORAGE,
             `Error handling storage event for "${storageKey}"`,
-            err,
+            err
           );
         }
       }
     };
-    window.addEventListener("storage", handler);
-    return () => window.removeEventListener("storage", handler);
+    window.addEventListener('storage', handler);
+    return () => window.removeEventListener('storage', handler);
   }, [storageKey, sync, deserialize]);
 
   return [value, set, remove];
@@ -350,7 +344,7 @@ function useLocalStorage(key: string, defaultValue: any, sync = true) {
     defaultValue,
     deserialize: (e: string) => (e === undefined ? defaultValue : JSON.parse(e)),
     getInitialValueInEffect: false,
-    sync,
+    sync
   });
 }
 
@@ -358,46 +352,46 @@ function useLocalStorage(key: string, defaultValue: any, sync = true) {
 // Theme (export y = useTheme, export t = ThemeProvider)
 // =============================================================================
 
-const DARK_MEDIA_QUERY = "(prefers-color-scheme: dark)";
+const DARK_MEDIA_QUERY = '(prefers-color-scheme: dark)';
 const ThemeContext = createContext<any>(undefined);
 
 function resolveMode(mode: string): string {
-  if (typeof window !== "undefined" && mode === "auto") {
-    return window?.matchMedia(DARK_MEDIA_QUERY).matches ? "dark" : "light";
+  if (typeof window !== 'undefined' && mode === 'auto') {
+    return window?.matchMedia(DARK_MEDIA_QUERY).matches ? 'dark' : 'light';
   }
-  return mode === "auto" ? "light" : mode;
+  return mode === 'auto' ? 'light' : mode;
 }
 
 function applyTheme(theme: string) {
-  if (typeof document === "undefined") return;
+  if (typeof document === 'undefined') return;
   document.documentElement.dataset.theme = theme;
   updateThemeColor();
 }
 
 function applyMode(mode: string, cookieUtil: typeof cookies) {
-  if (typeof document === "undefined") return;
+  if (typeof document === 'undefined') return;
   const resolved = resolveMode(mode);
-  cookieUtil.set("CH-prefers-color-scheme", resolved);
+  cookieUtil.set('CH-prefers-color-scheme', resolved);
   document.documentElement.dataset.mode = resolved;
   updateThemeColor();
 }
 
 function updateThemeColor() {
   const style = getComputedStyle(document.documentElement);
-  const [h, s, l] = style.getPropertyValue("--bg-200").split(" ");
+  const [h, s, l] = style.getPropertyValue('--bg-200').split(' ');
   const color = `hsl(${h},${s},${l})`;
   let meta = document.querySelector('meta[name="theme-color"]');
   if (!meta) {
-    meta = document.createElement("meta");
-    meta.setAttribute("name", "theme-color");
+    meta = document.createElement('meta');
+    meta.setAttribute('name', 'theme-color');
     document.head.appendChild(meta);
   }
-  meta.setAttribute("content", color);
+  meta.setAttribute('content', color);
 }
 
 function ThemeProvider({
   initialTheme,
-  children,
+  children
 }: {
   initialTheme: string;
   children: React.ReactNode;
@@ -405,15 +399,15 @@ function ThemeProvider({
   const [theme, setTheme] = useState(initialTheme);
   const cookieUtil = (() => {
     const ctx = useContext(CookiesContext);
-    if (typeof window !== "undefined") return cookies;
-    if (!ctx) throw new Error("useCookies must be used within a ServerCookiesProvider");
+    if (typeof window !== 'undefined') return cookies;
+    if (!ctx) throw new Error('useCookies must be used within a ServerCookiesProvider');
     return ctx;
   })();
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     setMounted(true);
   }, []);
-  const [mode, setMode] = useLocalStorage("userThemeMode", "auto");
+  const [mode, setMode] = useLocalStorage('userThemeMode', 'auto');
   const [resolvedMode, setResolvedMode] = useState(resolveMode(mode));
 
   useEffect(() => {
@@ -428,20 +422,18 @@ function ThemeProvider({
   }, [cookieUtil, mode]);
 
   useEffect(() => {
-    if (mode !== "auto") return;
+    if (mode !== 'auto') return;
     const mq = window.matchMedia(DARK_MEDIA_QUERY);
-    mq.addEventListener("change", handleMediaChange);
-    return () => mq.removeEventListener("change", handleMediaChange);
+    mq.addEventListener('change', handleMediaChange);
+    return () => mq.removeEventListener('change', handleMediaChange);
   }, [mode, handleMediaChange]);
 
   useEffect(() => {
-    (window as any).electronWindowControl?.setThemeMode?.(mode === "auto" ? "system" : mode);
+    (window as any).electronWindowControl?.setThemeMode?.(mode === 'auto' ? 'system' : mode);
   }, [mode]);
 
   return (
-    <ThemeContext.Provider
-      value={{ theme, mode, setMode, setTheme, resolvedMode, mounted }}
-    >
+    <ThemeContext.Provider value={{ theme, mode, setMode, setTheme, resolvedMode, mounted }}>
       {children}
     </ThemeContext.Provider>
   );
@@ -449,7 +441,7 @@ function ThemeProvider({
 
 const useTheme = () => {
   const ctx = useContext(ThemeContext);
-  if (ctx === undefined) throw new Error("useTheme must be used within a ThemeProvider");
+  if (ctx === undefined) throw new Error('useTheme must be used within a ThemeProvider');
   return ctx;
 };
 
@@ -467,19 +459,25 @@ const LoadingSpinner: React.FC = () => (
 // Lucide Icons (export F = createLucideIcon, export aq = CheckIcon, export G = ChevronDownIcon)
 // =============================================================================
 
-const CheckIcon = createLucideIcon("check", [
-  ["path", { d: "M20 6 9 17l-5-5", key: "1gmf2c" }],
-]);
+const CheckIcon = createLucideIcon('check', [['path', { d: 'M20 6 9 17l-5-5', key: '1gmf2c' }]]);
 
-const ChevronDownIcon = createLucideIcon("chevron-down", [
-  ["path", { d: "m6 9 6 6 6-6", key: "qrunsl" }],
+const ChevronDownIcon = createLucideIcon('chevron-down', [
+  ['path', { d: 'm6 9 6 6 6-6', key: 'qrunsl' }]
 ]);
 
 // =============================================================================
 // Claude SVG Icons (export I = ClaudeIcon, export a = ClaudeIconAlt, etc.)
 // =============================================================================
 
-const ICON_SIZE_MAP: Record<number, number> = { 12: 16, 14: 16, 16: 20, 20: 20, 24: 24, 28: 28, 32: 32 };
+const ICON_SIZE_MAP: Record<number, number> = {
+  12: 16,
+  14: 16,
+  16: 20,
+  20: 20,
+  24: 24,
+  28: 28,
+  32: 32
+};
 
 interface ClaudeIconProps {
   size?: number;
@@ -495,8 +493,8 @@ const ClaudeIcon: React.FC<ClaudeIconProps> = ({
   vectorSizeOverride,
   className,
   alt,
-  viewBox = "0 0 20 20",
-  children,
+  viewBox = '0 0 20 20',
+  children
 }) => {
   const vectorSize = vectorSizeOverride || ICON_SIZE_MAP[size];
   const svg = (
@@ -518,22 +516,35 @@ const ClaudeIcon: React.FC<ClaudeIconProps> = ({
   return (
     <div
       className={className}
-      style={{ width: size, height: size, display: "flex", alignItems: "center", justifyContent: "center" }}
+      style={{
+        width: size,
+        height: size,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}
     >
       {svg}
     </div>
   );
 };
 
-const ICON_SIZE_MAP_ALT: Record<number, number> = { 12: 16, 16: 20, 20: 20, 24: 24, 28: 28, 32: 32 };
+const ICON_SIZE_MAP_ALT: Record<number, number> = {
+  12: 16,
+  16: 20,
+  20: 20,
+  24: 24,
+  28: 28,
+  32: 32
+};
 
 const ClaudeIconAlt: React.FC<ClaudeIconProps> = ({
   size = 20,
   vectorSizeOverride,
   className,
   alt,
-  viewBox = "0 0 20 20",
-  children,
+  viewBox = '0 0 20 20',
+  children
 }) => {
   const vectorSize = vectorSizeOverride || ICON_SIZE_MAP_ALT[size];
   const svg = (
@@ -553,7 +564,7 @@ const ClaudeIconAlt: React.FC<ClaudeIconProps> = ({
   if (vectorSizeOverride) return svg;
   return (
     <div
-      className={cn("flex items-center justify-center", className)}
+      className={cn('flex items-center justify-center', className)}
       style={{ width: size, height: size }}
     >
       {svg}
@@ -563,47 +574,42 @@ const ClaudeIconAlt: React.FC<ClaudeIconProps> = ({
 
 // Phosphor-style IconBase (export g = IconBase)
 const PhosphorIconContext = createContext({
-  color: "currentColor",
-  size: "1em",
-  weight: "regular",
-  mirrored: false,
+  color: 'currentColor',
+  size: '1em',
+  weight: 'regular',
+  mirrored: false
 });
 
 const IconBase = forwardRef((props: any, ref: any) => {
-  const {
-    alt,
-    color,
-    size,
-    weight,
-    mirrored,
-    children,
-    weights,
-    ...rest
-  } = props;
+  const { alt, color, size, weight, mirrored, children, weights, ...rest } = props;
   const ctx = useContext(PhosphorIconContext);
   return React.createElement(
-    "svg",
+    'svg',
     {
       ref,
-      xmlns: "http://www.w3.org/2000/svg",
+      xmlns: 'http://www.w3.org/2000/svg',
       width: size ?? ctx.size,
       height: size ?? ctx.size,
       fill: color ?? ctx.color,
-      viewBox: "0 0 256 256",
-      transform: (mirrored || ctx.mirrored) ? "scale(-1, 1)" : undefined,
-      ...rest,
+      viewBox: '0 0 256 256',
+      transform: mirrored || ctx.mirrored ? 'scale(-1, 1)' : undefined,
+      ...rest
     },
-    alt && React.createElement("title", null, alt),
+    alt && React.createElement('title', null, alt),
     children,
-    weights.get(weight ?? ctx.weight),
+    weights.get(weight ?? ctx.weight)
   );
 });
-IconBase.displayName = "IconBase";
+IconBase.displayName = 'IconBase';
 
 // Small SVG icon components
 const CalendarIcon: React.FC<any> = (props) => (
   <ClaudeIcon {...props}>
-    <path fillRule="evenodd" clipRule="evenodd" d="M13.4999 2.00037C13.776 2.00037 13.9999 2.22422 13.9999 2.50037V3.00037H15.4999C16.3283 3.00037 16.9999 3.67194 16.9999 4.50037V15.5004C16.9997 16.3286 16.3282 17.0004 15.4999 17.0004H4.49988C3.67163 17.0003 3.00008 16.3286 2.99988 15.5004V4.50037C2.99988 3.67198 3.67151 3.00043 4.49988 3.00037H5.99988V2.50037C5.99988 2.22426 6.22379 2.00043 6.49988 2.00037C6.77602 2.00037 6.99988 2.22422 6.99988 2.50037V3.00037H12.9999V2.50037C12.9999 2.22426 13.2238 2.00043 13.4999 2.00037ZM3.99988 15.5004C4.00008 15.7763 4.22392 16.0003 4.49988 16.0004H15.4999C15.7759 16.0004 15.9997 15.7763 15.9999 15.5004V8.00037H3.99988V15.5004ZM4.49988 4.00037C4.22379 4.00043 3.99988 4.22427 3.99988 4.50037V7.00037H15.9999V4.50037C15.9999 4.22422 15.776 4.00037 15.4999 4.00037H13.9999V5.50037C13.9997 5.77634 13.7759 6.00037 13.4999 6.00037C13.2239 6.0003 13.0001 5.7763 12.9999 5.50037V4.00037H6.99988V5.50037C6.99968 5.77634 6.7759 6.00037 6.49988 6.00037C6.22391 6.0003 6.00008 5.7763 5.99988 5.50037V4.00037H4.49988Z" />
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M13.4999 2.00037C13.776 2.00037 13.9999 2.22422 13.9999 2.50037V3.00037H15.4999C16.3283 3.00037 16.9999 3.67194 16.9999 4.50037V15.5004C16.9997 16.3286 16.3282 17.0004 15.4999 17.0004H4.49988C3.67163 17.0003 3.00008 16.3286 2.99988 15.5004V4.50037C2.99988 3.67198 3.67151 3.00043 4.49988 3.00037H5.99988V2.50037C5.99988 2.22426 6.22379 2.00043 6.49988 2.00037C6.77602 2.00037 6.99988 2.22422 6.99988 2.50037V3.00037H12.9999V2.50037C12.9999 2.22426 13.2238 2.00043 13.4999 2.00037ZM3.99988 15.5004C4.00008 15.7763 4.22392 16.0003 4.49988 16.0004H15.4999C15.7759 16.0004 15.9997 15.7763 15.9999 15.5004V8.00037H3.99988V15.5004ZM4.49988 4.00037C4.22379 4.00043 3.99988 4.22427 3.99988 4.50037V7.00037H15.9999V4.50037C15.9999 4.22422 15.776 4.00037 15.4999 4.00037H13.9999V5.50037C13.9997 5.77634 13.7759 6.00037 13.4999 6.00037C13.2239 6.0003 13.0001 5.7763 12.9999 5.50037V4.00037H6.99988V5.50037C6.99968 5.77634 6.7759 6.00037 6.49988 6.00037C6.22391 6.0003 6.00008 5.7763 5.99988 5.50037V4.00037H4.49988Z"
+    />
   </ClaudeIcon>
 );
 
@@ -680,7 +686,7 @@ const CloseIcon: React.FC<any> = (props) => (
 function getModelDisplayName(model: string, config: any): string {
   if (config.options) {
     for (const opt of config.options) {
-      if (typeof opt !== "string" && opt.model === model) return opt.name;
+      if (typeof opt !== 'string' && opt.model === model) return opt.name;
     }
   }
   if (config.models) {
@@ -698,7 +704,7 @@ function getModelDisplayName(model: string, config: any): string {
 // =============================================================================
 
 function getModelsConfig() {
-  return useFeatureValue("chrome_ext_models", {});
+  return useFeatureValue('chrome_ext_models', {});
 }
 
 // =============================================================================
@@ -706,11 +712,11 @@ function getModelsConfig() {
 // =============================================================================
 
 const DROPDOWN_CONTENT_CLASS =
-  "z-dropdown bg-bg-000 border-0.5 border-border-200 backdrop-blur-xl rounded-xl min-w-[8rem] text-text-300 shadow-[0px_2px_8px_0px_hsl(var(--always-black)/8%)] dark:shadow-[0px_2px_8px_0px_hsl(var(--always-black)/24%)]";
+  'z-dropdown bg-bg-000 border-0.5 border-border-200 backdrop-blur-xl rounded-xl min-w-[8rem] text-text-300 shadow-[0px_2px_8px_0px_hsl(var(--always-black)/8%)] dark:shadow-[0px_2px_8px_0px_hsl(var(--always-black)/24%)]';
 const DROPDOWN_MAX_HEIGHT_CLASS =
-  "max-h-[min(var(--radix-select-content-available-height,var(--radix-dropdown-menu-content-available-height)),var(--dropdown-max-height,24rem))] overflow-y-auto overflow-x-hidden";
+  'max-h-[min(var(--radix-select-content-available-height,var(--radix-dropdown-menu-content-available-height)),var(--dropdown-max-height,24rem))] overflow-y-auto overflow-x-hidden';
 const DROPDOWN_ITEM_CLASS =
-  "font-base min-h-8 px-2 py-1.5 rounded-lg cursor-pointer whitespace-nowrap overflow-hidden text-ellipsis grid grid-cols-[minmax(0,_1fr)_auto] gap-2 items-center outline-none select-none [&[data-highlighted]]:bg-bg-200 [&[data-highlighted]]:text-text-000";
+  'font-base min-h-8 px-2 py-1.5 rounded-lg cursor-pointer whitespace-nowrap overflow-hidden text-ellipsis grid grid-cols-[minmax(0,_1fr)_auto] gap-2 items-center outline-none select-none [&[data-highlighted]]:bg-bg-200 [&[data-highlighted]]:text-text-000';
 
 // =============================================================================
 // Tooltip components (export T = TooltipRoot, export $ = TooltipContent)
@@ -724,70 +730,70 @@ const DefaultTooltipContent = forwardRef<any, any>(({ className, ...props }, ref
   <TooltipPrimitive.Content
     ref={ref}
     className={cn(
-      "px-2 py-1 text-xs font-normal font-ui leading-tight rounded-md shadow-md text-always-white bg-always-black/80 backdrop-blur break-words z-tooltip max-w-[13rem] text-pretty [*:disabled_&]:hidden",
-      className,
+      'px-2 py-1 text-xs font-normal font-ui leading-tight rounded-md shadow-md text-always-white bg-always-black/80 backdrop-blur break-words z-tooltip max-w-[13rem] text-pretty [*:disabled_&]:hidden',
+      className
     )}
     {...props}
   />
 ));
-DefaultTooltipContent.displayName = "DefaultContent";
+DefaultTooltipContent.displayName = 'DefaultContent';
 
 // =============================================================================
 // Button variant styles
 // =============================================================================
 
 const primaryStyle =
-  "bg-accent-main-100 text-oncolor-100 shadow-[inset_0_0.5px_0_hsla(var(--bg-000)/15%),0_0.5px_0.5px_hsla(var(--always-black)/18%)]";
+  'bg-accent-main-100 text-oncolor-100 shadow-[inset_0_0.5px_0_hsla(var(--bg-000)/15%),0_0.5px_0.5px_hsla(var(--always-black)/18%)]';
 const secondaryStyle =
-  "bg-bg-000 text-text-200 border-border-300 hover:border-border-200 shadow-[0_0.5px_0.5px_hsla(var(--always-black)/6%)]";
-const ghostStyle = "bg-transparent text-text-200 hover:bg-bg-200";
+  'bg-bg-000 text-text-200 border-border-300 hover:border-border-200 shadow-[0_0.5px_0.5px_hsla(var(--always-black)/6%)]';
+const ghostStyle = 'bg-transparent text-text-200 hover:bg-bg-200';
 const dangerStyle =
-  "bg-danger-000 text-oncolor-100 shadow-[inset_0_0.5px_0_hsla(var(--bg-000)/15%),0_0.5px_0.5px_hsla(var(--always-black)/18%)]";
-const claudeStyle = "bg-accent-main-100 text-oncolor-100";
+  'bg-danger-000 text-oncolor-100 shadow-[inset_0_0.5px_0_hsla(var(--bg-000)/15%),0_0.5px_0.5px_hsla(var(--always-black)/18%)]';
+const claudeStyle = 'bg-accent-main-100 text-oncolor-100';
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center relative shrink-0 can-focus select-none disabled:pointer-events-none disabled:opacity-50 disabled:shadow-none disabled:drop-shadow-none",
+  'inline-flex items-center justify-center relative shrink-0 can-focus select-none disabled:pointer-events-none disabled:opacity-50 disabled:shadow-none disabled:drop-shadow-none',
   {
     variants: {
       variant: {
         primary:
-          "font-base-bold relative overflow-hidden transition-transform will-change-transform ease-[cubic-bezier(0.165,0.85,0.45,1)] duration-150 hover:scale-y-[1.015] hover:scale-x-[1.005] backface-hidden",
-        claude: "font-base-bold transition-colors",
+          'font-base-bold relative overflow-hidden transition-transform will-change-transform ease-[cubic-bezier(0.165,0.85,0.45,1)] duration-150 hover:scale-y-[1.015] hover:scale-x-[1.005] backface-hidden',
+        claude: 'font-base-bold transition-colors',
         secondary:
-          "font-base-bold border-0.5 relative overflow-hidden transition duration-100 backface-hidden",
+          'font-base-bold border-0.5 relative overflow-hidden transition duration-100 backface-hidden',
         ghost:
-          "border-transparent transition font-base duration-300 ease-[cubic-bezier(0.165,0.85,0.45,1)]",
+          'border-transparent transition font-base duration-300 ease-[cubic-bezier(0.165,0.85,0.45,1)]',
         danger:
-          "font-base-bold transition hover:scale-y-[1.015] hover:scale-x-[1.005] hover:opacity-95",
+          'font-base-bold transition hover:scale-y-[1.015] hover:scale-x-[1.005] hover:opacity-95'
       },
       size: {
-        default: "h-9 px-4 py-2 rounded-lg min-w-[5rem] active:scale-[0.985] whitespace-nowrap",
-        sm: "h-8 rounded-md px-3 min-w-[4rem] active:scale-[0.985] whitespace-nowrap !text-xs",
-        lg: "h-11 rounded-[0.6rem] px-5 min-w-[6rem] active:scale-[0.985] whitespace-nowrap !text-base",
-        icon: "h-9 w-9 rounded-md active:scale-95 shrink-0",
-        icon_xs: "h-6 w-6 rounded-md active:scale-95",
-        icon_sm: "h-8 w-8 rounded-md active:scale-95",
-        icon_lg: "h-11 w-11 rounded-[0.6rem] active:scale-95",
+        default: 'h-9 px-4 py-2 rounded-lg min-w-[5rem] active:scale-[0.985] whitespace-nowrap',
+        sm: 'h-8 rounded-md px-3 min-w-[4rem] active:scale-[0.985] whitespace-nowrap !text-xs',
+        lg: 'h-11 rounded-[0.6rem] px-5 min-w-[6rem] active:scale-[0.985] whitespace-nowrap !text-base',
+        icon: 'h-9 w-9 rounded-md active:scale-95 shrink-0',
+        icon_xs: 'h-6 w-6 rounded-md active:scale-95',
+        icon_sm: 'h-8 w-8 rounded-md active:scale-95',
+        icon_lg: 'h-11 w-11 rounded-[0.6rem] active:scale-95'
       },
-      option: { rounded: "!rounded-full", prepend: "", append: "" },
+      option: { rounded: '!rounded-full', prepend: '', append: '' }
     },
     compoundVariants: [
-      { size: "default", option: "prepend", class: "pl-2 pr-3 gap-1" },
-      { size: "lg", option: "prepend", class: "pl-2.5 pr-3.5 gap-1" },
-      { size: "sm", option: "prepend", class: "pl-2 pr-2.5 gap-1" },
-      { size: "default", option: "append", class: "pl-3 pr-2 gap-1" },
-      { size: "lg", option: "append", class: "pl-3.5 pr-2.5 gap-1" },
-      { size: "sm", option: "append", class: "pl-2.5 pr-2 gap-1" },
+      { size: 'default', option: 'prepend', class: 'pl-2 pr-3 gap-1' },
+      { size: 'lg', option: 'prepend', class: 'pl-2.5 pr-3.5 gap-1' },
+      { size: 'sm', option: 'prepend', class: 'pl-2 pr-2.5 gap-1' },
+      { size: 'default', option: 'append', class: 'pl-3 pr-2 gap-1' },
+      { size: 'lg', option: 'append', class: 'pl-3.5 pr-2.5 gap-1' },
+      { size: 'sm', option: 'append', class: 'pl-2.5 pr-2 gap-1' }
     ],
-    defaultVariants: { variant: "primary", size: "default" },
-  },
+    defaultVariants: { variant: 'primary', size: 'default' }
+  }
 );
 
 const Button = forwardRef<HTMLButtonElement, any>(
   (
     {
       className,
-      variant = "primary",
+      variant = 'primary',
       size,
       option,
       loading,
@@ -798,9 +804,9 @@ const Button = forwardRef<HTMLButtonElement, any>(
       append,
       disabled,
       children,
-      type = "button",
+      type = 'button',
       tooltip,
-      tooltipSide = "bottom",
+      tooltipSide = 'bottom',
       tooltipDelay,
       tooltipDisabled,
       tooltipHoverable = false,
@@ -808,42 +814,46 @@ const Button = forwardRef<HTMLButtonElement, any>(
       colorized,
       ...rest
     },
-    ref,
+    ref
   ) => {
-    if (prepend) option = "prepend";
-    if (append || shortcut) option = "append";
+    if (prepend) option = 'prepend';
+    if (append || shortcut) option = 'append';
 
-    const isColorized = colorized && (variant === "primary" || variant === "secondary" || variant === "ghost");
-    const isIconOnly = !children || (size && size.startsWith("icon"));
+    const isColorized =
+      colorized && (variant === 'primary' || variant === 'secondary' || variant === 'ghost');
+    const isIconOnly = !children || (size && size.startsWith('icon'));
 
     const variantStyle = (() => {
       switch (variant) {
-        case "secondary": return secondaryStyle;
-        case "ghost": return ghostStyle;
-        case "danger": return dangerStyle;
-        case "claude": return claudeStyle;
-        default: return primaryStyle;
+        case 'secondary':
+          return secondaryStyle;
+        case 'ghost':
+          return ghostStyle;
+        case 'danger':
+          return dangerStyle;
+        case 'claude':
+          return claudeStyle;
+        default:
+          return primaryStyle;
       }
     })();
 
     const buttonClass = cn(
       buttonVariants({ variant, size, option, className }),
       variantStyle,
-      loading && "!text-transparent ![text-shadow:_none]",
+      loading && '!text-transparent ![text-shadow:_none]'
     );
 
     const content = (
       <>
         {loading && (
-          <div className={cn("absolute inset-0 flex items-center justify-center")}>
+          <div className={cn('absolute inset-0 flex items-center justify-center')}>
             <div className="animate-spin rounded-full h-4 w-4 border-2 border-current border-t-transparent" />
           </div>
         )}
         {prepend}
         {children && <Slottable>{children}</Slottable>}
-        {shortcut && (
-          <kbd className="ml-1 text-xs opacity-60">{shortcut}</kbd>
-        )}
+        {shortcut && <kbd className="ml-1 text-xs opacity-60">{shortcut}</kbd>}
         {append}
       </>
     );
@@ -865,7 +875,11 @@ const Button = forwardRef<HTMLButtonElement, any>(
         type={type}
         className={buttonClass}
         disabled={disabled || loading}
-        aria-label={!rest["aria-label"] && tooltip && isIconOnly && typeof tooltip === "string" ? tooltip : undefined}
+        aria-label={
+          !rest['aria-label'] && tooltip && isIconOnly && typeof tooltip === 'string'
+            ? tooltip
+            : undefined
+        }
         {...rest}
       >
         {content}
@@ -877,18 +891,16 @@ const Button = forwardRef<HTMLButtonElement, any>(
         <TooltipRoot delayDuration={tooltipDelay}>
           <TooltipTrigger asChild>{button}</TooltipTrigger>
           <TooltipPrimitive.Portal>
-            <DefaultTooltipContent side={tooltipSide}>
-              {tooltip}
-            </DefaultTooltipContent>
+            <DefaultTooltipContent side={tooltipSide}>{tooltip}</DefaultTooltipContent>
           </TooltipPrimitive.Portal>
         </TooltipRoot>
       );
     }
 
     return button;
-  },
+  }
 );
-Button.displayName = "Button";
+Button.displayName = 'Button';
 
 // =============================================================================
 // Spinner / Login prompt (export a3 = Spinner)
@@ -902,19 +914,19 @@ const Spinner: React.FC = () => {
     <div className="flex flex-col items-center">
       <img
         src={loginSvg}
-        alt={intl.formatMessage({ defaultMessage: "Login", id: "login" })}
+        alt={intl.formatMessage({ defaultMessage: 'Login', id: 'login' })}
         className="dark:hidden"
-        style={{ width: "96px", height: "96px", marginBottom: "20px" }}
+        style={{ width: '96px', height: '96px', marginBottom: '20px' }}
       />
       <img
         src={loginDarkSvg}
-        alt={intl.formatMessage({ defaultMessage: "Login", id: "login" })}
+        alt={intl.formatMessage({ defaultMessage: 'Login', id: 'login' })}
         className="hidden dark:block"
-        style={{ width: "96px", height: "96px", marginBottom: "20px" }}
+        style={{ width: '96px', height: '96px', marginBottom: '20px' }}
       />
       <h2
         className="text-text-100 text-center font-heading"
-        style={{ fontSize: "28px", lineHeight: "130%" }}
+        style={{ fontSize: '28px', lineHeight: '130%' }}
       >
         <FormattedMessage defaultMessage="Log in" id="log_in" />
       </h2>
@@ -924,7 +936,10 @@ const Spinner: React.FC = () => {
           id="claude_in_chrome_is_available_to"
         />
         <br />
-        <FormattedMessage defaultMessage="all paid plan subscribers" id="all_paid_plan_subscribers" />
+        <FormattedMessage
+          defaultMessage="all paid plan subscribers"
+          id="all_paid_plan_subscribers"
+        />
       </p>
       <Button
         onClick={async () => {
@@ -953,16 +968,16 @@ const Spinner: React.FC = () => {
 
 const useProfileQuery = (enabled = true) =>
   useQuery({
-    queryKey: ["userProfile"],
-    queryFn: async () => apiClient.fetch("/api/oauth/profile"),
+    queryKey: ['userProfile'],
+    queryFn: async () => apiClient.fetch('/api/oauth/profile'),
     enabled,
     staleTime: 3e5,
     gcTime: 6e5,
     retry: (failureCount: number, error: Error) => {
-      if (error.message.includes("401")) return false;
-      if (error.message.includes("403")) return false;
+      if (error.message.includes('401')) return false;
+      if (error.message.includes('403')) return false;
       return failureCount < 3;
-    },
+    }
   });
 
 // =============================================================================
@@ -1004,7 +1019,7 @@ const CurrentAccountProvider: React.FC<{ children: React.ReactNode }> = ({ child
     userProfile: userProfile ?? null,
     isLoading: isCheckingToken || (hasToken && isLoading),
     error,
-    isAuthenticated: hasToken && !!userProfile,
+    isAuthenticated: hasToken && !!userProfile
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -1012,7 +1027,7 @@ const CurrentAccountProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
 const useAuth = () => {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useCurrentAccount must be used within a CurrentAccountProvider");
+  if (!ctx) throw new Error('useCurrentAccount must be used within a CurrentAccountProvider');
   return ctx;
 };
 
@@ -1038,7 +1053,7 @@ const FeatureGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
 const AnalyticsProviderInner: React.FC<{ children: React.ReactNode; pageName: string }> = ({
   children,
-  pageName,
+  pageName
 }) => {
   if (!analyticsPromise) {
     analyticsPromise = (async () => {
@@ -1047,20 +1062,20 @@ const AnalyticsProviderInner: React.FC<{ children: React.ReactNode; pageName: st
         const anonymousId = await getOrCreateAnonymousId();
         const config = getConfig();
         if (!analyticsInstance && config.segmentWriteKey) {
-        //   analyticsInstance = AnalyticsBrowser.load(
-        //     { writeKey: config.segmentWriteKey },
-        //     { user: { persist: false } },
-        //   );
-        //   analyticsInstance.setAnonymousId(anonymousId);
-        //   analyticsInstance.register({
-        //     name: "Extension Version Plugin",
-        //     type: "before",
-        //     version: "1.0.0",
-        //     load: () => Promise.resolve(),
-        //     isLoaded: () => true,
-        //     track: (ctx: any) => (ctx.updateEvent("properties.extension_version", version), ctx),
-        //     page: (ctx: any) => (ctx.updateEvent("properties.extension_version", version), ctx),
-        //   });
+          //   analyticsInstance = AnalyticsBrowser.load(
+          //     { writeKey: config.segmentWriteKey },
+          //     { user: { persist: false } },
+          //   );
+          //   analyticsInstance.setAnonymousId(anonymousId);
+          //   analyticsInstance.register({
+          //     name: "Extension Version Plugin",
+          //     type: "before",
+          //     version: "1.0.0",
+          //     load: () => Promise.resolve(),
+          //     isLoaded: () => true,
+          //     track: (ctx: any) => (ctx.updateEvent("properties.extension_version", version), ctx),
+          //     page: (ctx: any) => (ctx.updateEvent("properties.extension_version", version), ctx),
+          //   });
         }
         return { analytics: null };
       } catch {
@@ -1078,16 +1093,16 @@ const AnalyticsProviderInner: React.FC<{ children: React.ReactNode; pageName: st
         email: userProfile.account.email,
         organizationID: userProfile.organization.uuid,
         organizationUUID: userProfile.organization.uuid,
-        applicationSlug: "claude-browser-use",
+        applicationSlug: 'claude-browser-use',
         isMax: userProfile.account.has_claude_max,
         isPro: userProfile.account.has_claude_pro,
-        orgType: userProfile.organization.organization_type,
+        orgType: userProfile.organization.organization_type
       });
     }
   }, [isAuthenticated, userProfile, analytics]);
 
   useEffect(() => {
-    if (analytics) analytics.page("Extension", pageName);
+    if (analytics) analytics.page('Extension', pageName);
   }, [analytics, pageName]);
 
   const resetAnalytics = useCallback(async () => {
@@ -1123,7 +1138,7 @@ const AnalyticsProviderInner: React.FC<{ children: React.ReactNode; pageName: st
 
 const AnalyticsProvider: React.FC<{ children: React.ReactNode; pageName: string }> = ({
   children,
-  pageName,
+  pageName
 }) => (
   <React.Suspense fallback={<LoadingSpinner />}>
     <AnalyticsProviderInner pageName={pageName}>{children}</AnalyticsProviderInner>
@@ -1132,7 +1147,7 @@ const AnalyticsProvider: React.FC<{ children: React.ReactNode; pageName: string 
 
 const useAnalytics = () => {
   const ctx = useContext(AnalyticsContext);
-  if (!ctx) throw new Error("useAnalytics must be used within an AnalyticsProvider");
+  if (!ctx) throw new Error('useAnalytics must be used within an AnalyticsProvider');
   return ctx;
 };
 
@@ -1143,7 +1158,7 @@ const useAnalytics = () => {
 const growthbook = new GrowthBook();
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { retry: 2, staleTime: 3e5, gcTime: 6e5 } },
+  defaultOptions: { queries: { retry: 2, staleTime: 3e5, gcTime: 6e5 } }
 });
 
 // =============================================================================
@@ -1152,10 +1167,10 @@ const queryClient = new QueryClient({
 
 const AppProvider: React.FC<{ children: React.ReactNode; pageName: string }> = ({
   children,
-  pageName,
+  pageName
 }) => {
   useEffect(() => {
-    document.documentElement.setAttribute("data-theme", "claude");
+    document.documentElement.setAttribute('data-theme', 'claude');
   }, []);
 
   return (
@@ -1177,20 +1192,24 @@ const AppProvider: React.FC<{ children: React.ReactNode; pageName: string }> = (
 // Label (export M via FormattedMessage re-export)
 // =============================================================================
 
-const Label = forwardRef<HTMLLabelElement, { label?: React.ReactNode; id?: string; className?: string }>(
-  ({ label, id, className }, ref) =>
-    label ? (
-      <label htmlFor={id} className={cn("text-text-200 mb-1 block font-base", className)} ref={ref}>
-        {label}
-      </label>
-    ) : null,
+const Label = forwardRef<
+  HTMLLabelElement,
+  { label?: React.ReactNode; id?: string; className?: string }
+>(({ label, id, className }, ref) =>
+  label ? (
+    <label htmlFor={id} className={cn('text-text-200 mb-1 block font-base', className)} ref={ref}>
+      {label}
+    </label>
+  ) : null
 );
-Label.displayName = "Label";
+Label.displayName = 'Label';
 
 function useGeneratedId({ id, label }: { id?: string; label?: React.ReactNode }) {
   return useMemo(
-    () => id || (label && typeof label === "string" ? _.uniqueId(`${_.camelCase(label)}_`) : _.uniqueId()),
-    [label, id],
+    () =>
+      id ||
+      (label && typeof label === 'string' ? _.uniqueId(`${_.camelCase(label)}_`) : _.uniqueId()),
+    [label, id]
   );
 }
 
@@ -1199,21 +1218,21 @@ function useGeneratedId({ id, label }: { id?: string; label?: React.ReactNode })
 // =============================================================================
 
 const inputVariants = cva(
-  "text-text-100 py-0 transition-colors can-focus cursor-text appearance-none w-full bg-bg-000 border border-border-300 hover:border-border-200 placeholder:text-text-500 disabled:cursor-not-allowed disabled:opacity-50",
+  'text-text-100 py-0 transition-colors can-focus cursor-text appearance-none w-full bg-bg-000 border border-border-300 hover:border-border-200 placeholder:text-text-500 disabled:cursor-not-allowed disabled:opacity-50',
   {
     variants: {
       size: {
-        default: "h-9 px-3 text-sm rounded-lg",
-        sm: "h-8 px-2 text-sm rounded-md",
-        lg: "h-11 px-3 text-base rounded-[0.6rem]",
+        default: 'h-9 px-3 text-sm rounded-lg',
+        sm: 'h-8 px-2 text-sm rounded-md',
+        lg: 'h-11 px-3 text-base rounded-[0.6rem]'
       },
       error: {
-        true: "border-danger-100 hover:border-danger-100 focus:border-danger-100",
-        false: "",
-      },
+        true: 'border-danger-100 hover:border-danger-100 focus:border-danger-100',
+        false: ''
+      }
     },
-    defaultVariants: { size: "default", error: false },
-  },
+    defaultVariants: { size: 'default', error: false }
+  }
 );
 
 // =============================================================================
@@ -1228,11 +1247,11 @@ const TextInput = forwardRef<HTMLInputElement, any>(
       id,
       label,
       secondaryLabel,
-      size = "default",
+      size = 'default',
       error,
       type,
       value,
-      currencySymbol = "$",
+      currencySymbol = '$',
       labelClassName,
       onChange,
       onValueChange,
@@ -1241,7 +1260,7 @@ const TextInput = forwardRef<HTMLInputElement, any>(
       append,
       ...rest
     },
-    ref,
+    ref
   ) => {
     const inputClass = cn(inputVariants({ size, error, className }), className);
     const generatedId = useGeneratedId({ id, label });
@@ -1264,7 +1283,7 @@ const TextInput = forwardRef<HTMLInputElement, any>(
     }, [value]);
 
     const { defaultValue: _dv, step: _step, ...filteredRest } = rest;
-    const isSimple = type !== "currency" && !(prepend || append);
+    const isSimple = type !== 'currency' && !(prepend || append);
 
     const handleCompositionStart = () => {
       isComposing.current = true;
@@ -1291,7 +1310,10 @@ const TextInput = forwardRef<HTMLInputElement, any>(
         {label && <Label label={label} id={generatedId} className={labelClassName} />}
         {(prepend || append) && (
           <div
-            className={cn(inputClass, "inline-flex cursor-text items-stretch gap-2 can-focus-within")}
+            className={cn(
+              inputClass,
+              'inline-flex cursor-text items-stretch gap-2 can-focus-within'
+            )}
             onClick={() => innerRef.current?.focus()}
           >
             {prepend && <div className="flex items-center">{prepend}</div>}
@@ -1310,10 +1332,10 @@ const TextInput = forwardRef<HTMLInputElement, any>(
             {append && (
               <div
                 className={cn(
-                  "flex items-center",
-                  size === "default" && "-mr-2",
-                  size === "sm" && "-mr-2",
-                  size === "lg" && "-mr-1.5",
+                  'flex items-center',
+                  size === 'default' && '-mr-2',
+                  size === 'sm' && '-mr-2',
+                  size === 'lg' && '-mr-1.5'
                 )}
               >
                 {append}
@@ -1338,9 +1360,9 @@ const TextInput = forwardRef<HTMLInputElement, any>(
         {secondaryLabel && <div className="text-text-400 mt-1 text-sm">{secondaryLabel}</div>}
       </>
     );
-  },
+  }
 );
-TextInput.displayName = "TextInput";
+TextInput.displayName = 'TextInput';
 
 // =============================================================================
 // ErrorMessage (export Q = ErrorMessage)
@@ -1348,7 +1370,7 @@ TextInput.displayName = "TextInput";
 
 function ErrorMessage({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={cn("flex items-start gap-1", className)}>
+    <div className={cn('flex items-start gap-1', className)}>
       <WarningIcon className="text-danger-000 mt-1 shrink-0" size={16} />
       <p className="text-danger-000 text-sm">{children}</p>
     </div>
@@ -1378,12 +1400,12 @@ const TextArea = forwardRef<HTMLTextAreaElement, any>(
       placeholder,
       ...rest
     },
-    ref,
+    ref
   ) => {
     const generatedId = useGeneratedId({ id, label });
     const innerRef = useRef<HTMLTextAreaElement>(null);
     const isArrayPlaceholder = Array.isArray(placeholder);
-    const placeholderText = isArrayPlaceholder ? "" : placeholder;
+    const placeholderText = isArrayPlaceholder ? '' : placeholder;
 
     const isComposing = useRef(false);
     const [localValue, setLocalValue] = useState(value);
@@ -1397,7 +1419,7 @@ const TextArea = forwardRef<HTMLTextAreaElement, any>(
     useEffect(() => {
       const el = innerRef.current;
       if (el && !fullHeight) {
-        el.style.height = "auto";
+        el.style.height = 'auto';
         el.style.height = `${el.scrollHeight}px`;
       }
     }, [localValue, fullHeight]);
@@ -1423,9 +1445,11 @@ const TextArea = forwardRef<HTMLTextAreaElement, any>(
     };
 
     return (
-      <div className={cn(fullHeight && "h-full flex flex-col")}>
-        {label && !insetLabel && <Label label={label} id={generatedId} className={labelClassName} />}
-        <div className={cn("relative", fullHeight && "flex-1")}>
+      <div className={cn(fullHeight && 'h-full flex flex-col')}>
+        {label && !insetLabel && (
+          <Label label={label} id={generatedId} className={labelClassName} />
+        )}
+        <div className={cn('relative', fullHeight && 'flex-1')}>
           {isArrayPlaceholder && (
             <PlaceholderRotator
               placeholders={placeholder as string[]}
@@ -1440,11 +1464,11 @@ const TextArea = forwardRef<HTMLTextAreaElement, any>(
             value={localValue}
             placeholder={placeholderText}
             className={cn(
-              "text-text-100 w-full bg-bg-000 border border-border-300 hover:border-border-200 rounded-lg p-3 transition-colors can-focus resize-none placeholder:text-text-500 disabled:cursor-not-allowed disabled:opacity-50",
-              error && "border-danger-100",
-              fullHeight && "h-full",
-              customScrollbar && "custom-scrollbar",
-              className,
+              'text-text-100 w-full bg-bg-000 border border-border-300 hover:border-border-200 rounded-lg p-3 transition-colors can-focus resize-none placeholder:text-text-500 disabled:cursor-not-allowed disabled:opacity-50',
+              error && 'border-danger-100',
+              fullHeight && 'h-full',
+              customScrollbar && 'custom-scrollbar',
+              className
             )}
             onChange={handleChange}
             onCompositionStart={handleCompositionStart}
@@ -1452,16 +1476,16 @@ const TextArea = forwardRef<HTMLTextAreaElement, any>(
             {...rest}
           />
         </div>
-        {typeof error === "string" && error && (
+        {typeof error === 'string' && error && (
           <div className="mt-1.5">
             <ErrorMessage>{error}</ErrorMessage>
           </div>
         )}
       </div>
     );
-  },
+  }
 );
-TextArea.displayName = "TextArea";
+TextArea.displayName = 'TextArea';
 
 // =============================================================================
 // PlaceholderRotator
@@ -1487,9 +1511,9 @@ const PlaceholderRotator: React.FC<{
   return (
     <div
       className={cn(
-        "absolute top-0 left-0 right-0 bottom-0 w-full h-full p-3 pointer-events-none",
-        !isShown && "opacity-0",
-        className,
+        'absolute top-0 left-0 right-0 bottom-0 w-full h-full p-3 pointer-events-none',
+        !isShown && 'opacity-0',
+        className
       )}
     >
       <AnimatePresence>
@@ -1525,9 +1549,13 @@ const SegmentedControl: React.FC<{
   testId?: string;
   className?: string;
   itemClassName?: string;
-  renderItem?: (element: React.ReactNode, option: SegmentedControlOption, state: { isSelected: boolean }) => React.ReactNode;
+  renderItem?: (
+    element: React.ReactNode,
+    option: SegmentedControlOption,
+    state: { isSelected: boolean }
+  ) => React.ReactNode;
   disabled?: boolean;
-  rounded?: "default" | "full";
+  rounded?: 'default' | 'full';
 }> = ({
   options,
   onSelect,
@@ -1538,7 +1566,7 @@ const SegmentedControl: React.FC<{
   itemClassName,
   renderItem,
   disabled,
-  rounded = "default",
+  rounded = 'default',
   ...rest
 }) => {
   const isControlled = selectedKey !== undefined;
@@ -1580,21 +1608,24 @@ const SegmentedControl: React.FC<{
     }
   }, [activeKey, options]);
 
-  const itemClass = "flex items-center justify-center h-[28px] min-w-7 gap-1.5 px-3 rounded-lg";
-  const roundedClass = useMemo(() => (rounded === "full" ? "rounded-full" : "rounded-[.625rem]"), [rounded]);
+  const itemClass = 'flex items-center justify-center h-[28px] min-w-7 gap-1.5 px-3 rounded-lg';
+  const roundedClass = useMemo(
+    () => (rounded === 'full' ? 'rounded-full' : 'rounded-[.625rem]'),
+    [rounded]
+  );
 
   return (
     <ToggleGroupPrimitive.Root
       type="single"
       value={activeKey}
       className={cn(
-        "group/segmented-control relative inline-flex w-fit h-8 text-sm font-medium bg-bg-300 p-0.5 cursor-pointer select-none",
+        'group/segmented-control relative inline-flex w-fit h-8 text-sm font-medium bg-bg-300 p-0.5 cursor-pointer select-none',
         className,
-        roundedClass,
+        roundedClass
       )}
       disabled={disabled}
       onValueChange={(val) => {
-        if (val !== "") {
+        if (val !== '') {
           setInternalKey(val);
           onSelect?.(val);
         }
@@ -1611,7 +1642,7 @@ const SegmentedControl: React.FC<{
             className={cn(
               itemClass,
               "text-text-500 hover:text-text-300 data-[state='on']:text-text-100 transition-colors duration-[250ms] motion-reduce:duration-0",
-              itemClassName,
+              itemClassName
             )}
             data-testid={`${testId}-${opt.key}`}
           >
@@ -1623,22 +1654,22 @@ const SegmentedControl: React.FC<{
       <div
         aria-hidden
         className={cn(
-          "pointer-events-none absolute inset-0 p-0.5 transition-[opacity] duration-[250ms]",
-          !activeKey && "opacity-0",
-          roundedClass,
+          'pointer-events-none absolute inset-0 p-0.5 transition-[opacity] duration-[250ms]',
+          !activeKey && 'opacity-0',
+          roundedClass
         )}
-        style={{ filter: "drop-shadow(0px 0px 0.5px hsl(var(--border-300)/30%))" }}
+        style={{ filter: 'drop-shadow(0px 0px 0.5px hsl(var(--border-300)/30%))' }}
       >
         <div
           ref={bgRef}
           className={cn(
-            "relative flex bg-bg-000",
-            hasTransition && "transition-[clip-path] duration-[250ms] motion-reduce:duration-0 ease",
+            'relative flex bg-bg-000',
+            hasTransition && 'transition-[clip-path] duration-[250ms] motion-reduce:duration-0 ease'
           )}
-          style={{ clipPath: "rect(0% 0% 100% 0%)" }}
+          style={{ clipPath: 'rect(0% 0% 100% 0%)' }}
         >
           {options.map((opt) => (
-            <div key={opt.key} className={cn(itemClass, "text-transparent")} aria-hidden>
+            <div key={opt.key} className={cn(itemClass, 'text-transparent')} aria-hidden>
               {opt.label}
             </div>
           ))}
@@ -1662,10 +1693,10 @@ function SimpleSelect({
   value,
   onChange,
   options,
-  placeholder = "Select...",
+  placeholder = 'Select...',
   disabled = false,
   className,
-  label,
+  label
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -1676,17 +1707,18 @@ function SimpleSelect({
   label?: string;
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [position, setPosition] = useState<"bottom" | "top">("bottom");
+  const [position, setPosition] = useState<'bottom' | 'top'>('bottom');
   const containerRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const selected = options.find((o) => o.value === value);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setIsOpen(false);
+      if (containerRef.current && !containerRef.current.contains(e.target as Node))
+        setIsOpen(false);
     };
-    if (isOpen) document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    if (isOpen) document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
   }, [isOpen]);
 
   return (
@@ -1703,26 +1735,26 @@ function SimpleSelect({
                 const spaceBelow = window.innerHeight - rect.bottom;
                 const spaceAbove = rect.top;
                 const menuHeight = Math.min(240, 40 * options.length + 16);
-                setPosition(spaceBelow < menuHeight && spaceAbove > spaceBelow ? "top" : "bottom");
+                setPosition(spaceBelow < menuHeight && spaceAbove > spaceBelow ? 'top' : 'bottom');
               }
               setIsOpen(!isOpen);
             }
           }}
           disabled={disabled}
           className={cn(
-            "w-full h-9 px-3 py-2 text-left",
-            "border border-border-300 rounded-lg",
-            "bg-bg-000 text-text-100 text-sm",
-            "flex items-center justify-between",
-            "transition-colors can-focus",
-            !disabled && "hover:border-border-200 cursor-pointer",
-            isOpen && "border-border-200",
-            disabled && "opacity-50 cursor-not-allowed bg-bg-100",
+            'w-full h-9 px-3 py-2 text-left',
+            'border border-border-300 rounded-lg',
+            'bg-bg-000 text-text-100 text-sm',
+            'flex items-center justify-between',
+            'transition-colors can-focus',
+            !disabled && 'hover:border-border-200 cursor-pointer',
+            isOpen && 'border-border-200',
+            disabled && 'opacity-50 cursor-not-allowed bg-bg-100'
           )}
         >
           <span className="flex items-center gap-2">
             {selected?.icon}
-            <span className={selected || placeholder ? "" : "text-text-400"}>
+            <span className={selected || placeholder ? '' : 'text-text-400'}>
               {selected?.label || placeholder}
             </span>
           </span>
@@ -1731,8 +1763,8 @@ function SimpleSelect({
         {isOpen && (
           <div
             className={cn(
-              "absolute z-dropdown w-full bg-bg-000 border-0.5 border-border-200 rounded-xl backdrop-blur-xl shadow-[0px_2px_8px_0px_hsl(var(--always-black)/8%)] dark:shadow-[0px_2px_8px_0px_hsl(var(--always-black)/24%)] p-1.5 max-h-60 overflow-auto",
-              position === "bottom" ? "mt-1 top-full" : "mb-1 bottom-full",
+              'absolute z-dropdown w-full bg-bg-000 border-0.5 border-border-200 rounded-xl backdrop-blur-xl shadow-[0px_2px_8px_0px_hsl(var(--always-black)/8%)] dark:shadow-[0px_2px_8px_0px_hsl(var(--always-black)/24%)] p-1.5 max-h-60 overflow-auto',
+              position === 'bottom' ? 'mt-1 top-full' : 'mb-1 bottom-full'
             )}
           >
             {options.map((opt) => (
@@ -1745,17 +1777,19 @@ function SimpleSelect({
                   setIsOpen(false);
                 }}
                 className={cn(
-                  "w-full px-2 py-2 text-left rounded-md transition-colors",
-                  "hover:bg-bg-200",
-                  "flex items-center justify-between",
-                  "font-base",
+                  'w-full px-2 py-2 text-left rounded-md transition-colors',
+                  'hover:bg-bg-200',
+                  'flex items-center justify-between',
+                  'font-base'
                 )}
               >
                 <span className="flex items-center gap-2">
                   {opt.icon}
                   <span className="text-text-100">{opt.label}</span>
                 </span>
-                {value === opt.value && <CheckIcon size={16} className="text-accent-secondary-100" />}
+                {value === opt.value && (
+                  <CheckIcon size={16} className="text-accent-secondary-100" />
+                )}
               </button>
             ))}
           </div>
@@ -1776,27 +1810,44 @@ function isValidTime(value: string): boolean {
 function parseTimeInput(input: string): string | null {
   const trimmed = input.trim();
   if (isValidTime(trimmed)) {
-    const [h, m] = trimmed.split(":");
-    return `${h.padStart(2, "0")}:${m}`;
+    const [h, m] = trimmed.split(':');
+    return `${h.padStart(2, '0')}:${m}`;
   }
-  const match = trimmed.match(/^(\d{1,2}):(\d{2})\s*(am|pm|AM|PM)$/);
+
+  const normalized = trimmed
+    .replace(/上午/g, 'AM ')
+    .replace(/下午/g, 'PM ')
+    .replace(/中午/g, 'PM ')
+    .replace(/凌晨/g, 'AM ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const match = normalized.match(/^(?:(am|pm|AM|PM)\s*)?(\d{1,2}):(\d{2})(?:\s*(am|pm|AM|PM))?$/);
   if (match) {
-    let hours = parseInt(match[1], 10);
-    const mins = match[2];
-    const period = match[3].toUpperCase();
+    const prefixPeriod = match[1];
+    const suffixPeriod = match[4];
+    let hours = parseInt(match[2], 10);
+    const mins = match[3];
+    const period = (prefixPeriod || suffixPeriod)?.toUpperCase();
+    if (!period) return null;
     if (hours < 1 || hours > 12 || parseInt(mins, 10) > 59) return null;
-    if (period === "PM" && hours !== 12) hours += 12;
-    else if (period === "AM" && hours === 12) hours = 0;
-    return `${hours.toString().padStart(2, "0")}:${mins}`;
+    if (period === 'PM' && hours !== 12) hours += 12;
+    else if (period === 'AM' && hours === 12) hours = 0;
+    return `${hours.toString().padStart(2, '0')}:${mins}`;
   }
   return null;
 }
 
 function formatTime12h(value: string): string {
   if (!isValidTime(value)) return value;
-  const [h, m] = value.split(":");
+  const [h, m] = value.split(':');
   const hour = parseInt(h, 10);
-  return `${hour === 0 ? 12 : hour > 12 ? hour - 12 : hour}:${m} ${hour < 12 ? "AM" : "PM"}`;
+  return `${hour === 0 ? 12 : hour > 12 ? hour - 12 : hour}:${m} ${hour < 12 ? 'AM' : 'PM'}`;
+}
+
+function formatTimeForLocale(value: string, locale?: string): string {
+  if (!isValidTime(value)) return value;
+  if (isChineseLocale(locale)) return value;
+  return formatTime12h(value);
 }
 
 // =============================================================================
@@ -1807,7 +1858,7 @@ function TimeInput({
   value,
   onChange,
   label,
-  className,
+  className
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -1815,7 +1866,8 @@ function TimeInput({
   className?: string;
 }) {
   const intl = useIntl();
-  const [display, setDisplay] = useState(formatTime12h(value));
+  const isChinese = isChineseLocale(intl.locale);
+  const [display, setDisplay] = useState(formatTimeForLocale(value, intl.locale));
   const [isOpen, setIsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -1824,18 +1876,16 @@ function TimeInput({
   const timeOptions: { value: string; label: string }[] = [];
   for (let h = 0; h < 24; h++) {
     for (let m = 0; m < 60; m += 15) {
-      const displayHour = h === 0 ? 12 : h > 12 ? h - 12 : h;
-      const period = h < 12 ? "AM" : "PM";
-      const val = `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
-      const lbl = `${displayHour}:${m.toString().padStart(2, "0")} ${period}`;
+      const val = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+      const lbl = isChinese ? val : formatTime12h(val);
       timeOptions.push({ value: val, label: lbl });
     }
   }
 
   useEffect(() => {
-    setDisplay(formatTime12h(value));
+    setDisplay(formatTimeForLocale(value, intl.locale));
     setError(null);
-  }, [value]);
+  }, [value, intl.locale]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -1847,8 +1897,8 @@ function TimeInput({
       )
         setIsOpen(false);
     };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
   }, []);
 
   const handleInputChange = useCallback(
@@ -1859,50 +1909,50 @@ function TimeInput({
       const parsed = parseTimeInput(val);
       if (parsed) onChange(parsed);
     },
-    [onChange],
+    [onChange]
   );
 
   const handleBlur = useCallback(() => {
     const parsed = parseTimeInput(display);
     if (parsed) {
-      setDisplay(formatTime12h(parsed));
+      setDisplay(formatTimeForLocale(parsed, intl.locale));
       onChange(parsed);
       setError(null);
-    } else if (display.trim() !== "") {
-      setError(intl.formatMessage({ defaultMessage: "Invalid time format", id: "/6iExgDC34" }));
-      setDisplay(formatTime12h(value));
+    } else if (display.trim() !== '') {
+      setError(intl.formatMessage({ defaultMessage: 'Invalid time format', id: '/6iExgDC34' }));
+      setDisplay(formatTimeForLocale(value, intl.locale));
     }
   }, [display, onChange, value, intl]);
 
   const selectTime = useCallback(
     (val: string) => {
       onChange(val);
-      setDisplay(formatTime12h(val));
+      setDisplay(formatTimeForLocale(val, intl.locale));
       setIsOpen(false);
       setError(null);
     },
-    [onChange],
+    [onChange, intl.locale]
   );
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (e.key === "Enter") {
+      if (e.key === 'Enter') {
         e.preventDefault();
         handleBlur();
         setIsOpen(false);
-      } else if (e.key === "Escape") {
+      } else if (e.key === 'Escape') {
         setIsOpen(false);
-        setDisplay(formatTime12h(value));
+        setDisplay(formatTimeForLocale(value, intl.locale));
         setError(null);
-      } else if (e.key === "ArrowDown" && !isOpen) {
+      } else if (e.key === 'ArrowDown' && !isOpen) {
         setIsOpen(true);
       }
     },
-    [handleBlur, isOpen, value],
+    [handleBlur, isOpen, value, intl.locale]
   );
 
   return (
-    <div className={`relative ${className || ""}`}>
+    <div className={`relative ${className || ''}`}>
       {label && (
         <label className="block font-ui-serif text-sm font-semibold text-text-200 mb-1">
           {label}
@@ -1917,10 +1967,14 @@ function TimeInput({
           onFocus={() => setIsOpen(true)}
           onBlur={handleBlur}
           onKeyDown={handleKeyDown}
-          placeholder={intl.formatMessage({ defaultMessage: "e.g., 9:30 AM or 14:00", id: "gFAHXgACot" })}
+          lang={intl.locale}
+          placeholder={intl.formatMessage({
+            defaultMessage: 'e.g., 9:30 AM or 14:00',
+            id: 'time_input_placeholder'
+          })}
           className={
-            "w-full h-9 px-3 py-2 border rounded-lg bg-bg-000 text-text-100 text-sm transition-colors can-focus hover:border-border-200 " +
-            (error ? "border-danger-100" : "border-border-300")
+            'w-full h-9 px-3 pr-10 py-2 border rounded-lg bg-bg-000 text-text-100 text-sm transition-colors can-focus hover:border-border-200 ' +
+            (error ? 'border-danger-100' : 'border-border-300')
           }
         />
         <button
@@ -1950,8 +2004,8 @@ function TimeInput({
                 selectTime(opt.value);
               }}
               className={
-                "w-full text-left px-2 py-2 rounded-md transition-colors hover:bg-bg-200 text-sm " +
-                (opt.value === value ? "bg-bg-200 text-text-100" : "text-text-100")
+                'w-full text-left px-2 py-2 rounded-md transition-colors hover:bg-bg-200 text-sm ' +
+                (opt.value === value ? 'bg-bg-200 text-text-100' : 'text-text-100')
               }
             >
               {opt.label}
@@ -1968,10 +2022,10 @@ function TimeInput({
 // =============================================================================
 
 function getOrdinalSuffix(n: number): string {
-  if (n === 1 || n === 21 || n === 31) return "st";
-  if (n === 2 || n === 22) return "nd";
-  if (n === 3 || n === 23) return "rd";
-  return "th";
+  if (n === 1 || n === 21 || n === 31) return 'st';
+  if (n === 2 || n === 22) return 'nd';
+  if (n === 3 || n === 23) return 'rd';
+  return 'th';
 }
 
 // =============================================================================
@@ -2034,43 +2088,44 @@ function SchedulingFields({
   selectedModel,
   onModelChange,
   availableModels,
-  compact,
+  compact
 }: SchedulingFieldsProps) {
   const intl = useIntl();
 
   const repeatOptions = [
-    { value: "once", label: intl.formatMessage({ defaultMessage: "Once", id: "DqTQOpG2Me" }) },
-    { value: "daily", label: intl.formatMessage({ defaultMessage: "Daily", id: "zxvhnETmn2" }) },
-    { value: "weekly", label: intl.formatMessage({ defaultMessage: "Weekly", id: "/clOBUs/wZ" }) },
-    { value: "monthly", label: intl.formatMessage({ defaultMessage: "Monthly", id: "wYsv4ZHu+B" }) },
-    { value: "annually", label: intl.formatMessage({ defaultMessage: "Annually", id: "ZSCbZACJ+n" }) },
+    { value: 'once', label: intl.formatMessage({ defaultMessage: 'Once', id: 'once' }) },
+    { value: 'daily', label: intl.formatMessage({ defaultMessage: 'Daily', id: 'daily' }) },
+    { value: 'weekly', label: intl.formatMessage({ defaultMessage: 'Weekly', id: 'weekly' }) },
+    { value: 'monthly', label: intl.formatMessage({ defaultMessage: 'Monthly', id: 'monthly' }) },
+    { value: 'annually', label: intl.formatMessage({ defaultMessage: 'Annually', id: 'annually' }) }
   ];
 
   const dayOfMonthOptions = Array.from({ length: 31 }, (_, i) => i + 1).map((n) => ({
     value: String(n),
-    label: `${n}${getOrdinalSuffix(n)}`,
+    label: `${n}${getOrdinalSuffix(n)}`
   }));
 
   if (compact) {
     return (
       <div className="space-y-3">
-        <div className="flex gap-2 items-end">
-          <div className="flex-1">
+        <div className="flex flex-wrap gap-2 items-end">
+          <div className="flex-1 min-w-[140px]">
             <SimpleSelect value={repeatType} onChange={setRepeatType} options={repeatOptions} />
           </div>
-          {repeatType === "once" && (
-            <div className="flex-1">
+          {repeatType === 'once' && (
+            <div className="flex-1 min-w-[140px]">
               <input
                 type="date"
                 value={specificDate}
                 onChange={(e) => setSpecificDate(e.target.value)}
-                min={new Date(Date.now() - 864e5).toISOString().split("T")[0]}
+                min={new Date(Date.now() - 864e5).toISOString().split('T')[0]}
+                lang={intl.locale}
                 className="w-full bg-bg-000 border border-border-300 hover:border-border-200 transition-colors can-focus text-sm h-9 px-3 py-2 rounded-lg"
               />
             </div>
           )}
-          {repeatType === "weekly" && (
-            <div className="flex-1">
+          {repeatType === 'weekly' && (
+            <div className="flex-1 min-w-[140px]">
               <SimpleSelect
                 value={dayOfWeek.toString()}
                 onChange={(v) => setDayOfWeek(parseInt(v))}
@@ -2078,8 +2133,8 @@ function SchedulingFields({
               />
             </div>
           )}
-          {repeatType === "monthly" && (
-            <div className="flex-1">
+          {repeatType === 'monthly' && (
+            <div className="flex-1 min-w-[140px]">
               <SimpleSelect
                 value={dayOfMonth.toString()}
                 onChange={(v) => setDayOfMonth(parseInt(v))}
@@ -2087,16 +2142,16 @@ function SchedulingFields({
               />
             </div>
           )}
-          {repeatType === "annually" && (
+          {repeatType === 'annually' && (
             <>
-              <div className="flex-1">
+              <div className="flex-1 min-w-[140px]">
                 <SimpleSelect
                   value={month.toString()}
                   onChange={(v) => setMonth(parseInt(v))}
                   options={monthLabels.map((lbl, i) => ({ value: (i + 1).toString(), label: lbl }))}
                 />
               </div>
-              <div className="flex-1">
+              <div className="flex-1 min-w-[140px]">
                 <SimpleSelect
                   value={day.toString()}
                   onChange={(v) => setDay(parseInt(v))}
@@ -2105,7 +2160,7 @@ function SchedulingFields({
               </div>
             </>
           )}
-          <div className="flex-1">
+          <div className="flex-1 min-w-[140px]">
             <TimeInput value={specificTime} onChange={setSpecificTime} />
           </div>
         </div>
@@ -2118,7 +2173,10 @@ function SchedulingFields({
               value={selectedModel}
               onChange={onModelChange}
               options={availableModels.map((m: any) => ({ value: m.model, label: m.name }))}
-              placeholder={intl.formatMessage({ defaultMessage: "Select model", id: "select_model" })}
+              placeholder={intl.formatMessage({
+                defaultMessage: 'Select model',
+                id: 'select_model'
+              })}
             />
           </div>
         )}
@@ -2131,23 +2189,23 @@ function SchedulingFields({
     <div className="space-y-3">
       <div className="flex gap-2 items-end flex-wrap">
         <div className="flex-1">
-          <SimpleSelect value={repeatType || "once"} onChange={setRepeatType} options={repeatOptions} />
+          <SimpleSelect
+            value={repeatType || 'once'}
+            onChange={setRepeatType}
+            options={repeatOptions}
+          />
         </div>
-        {repeatType === "once" && (
+        {repeatType === 'once' && (
           <div className="flex-1">
-            <SimpleSelect
-              value={specificDate}
-              onChange={setSpecificDate}
-              options={[]}
-            />
+            <SimpleSelect value={specificDate} onChange={setSpecificDate} options={[]} />
           </div>
         )}
-        {repeatType === "daily" && (
+        {repeatType === 'daily' && (
           <div className="flex-1">
             <TimeInput value={specificTime} onChange={setSpecificTime} />
           </div>
         )}
-        {repeatType === "weekly" && (
+        {repeatType === 'weekly' && (
           <>
             <div className="flex-1">
               <SimpleSelect
@@ -2161,7 +2219,7 @@ function SchedulingFields({
             </div>
           </>
         )}
-        {repeatType === "monthly" && (
+        {repeatType === 'monthly' && (
           <>
             <div className="flex-1">
               <SimpleSelect
@@ -2175,7 +2233,7 @@ function SchedulingFields({
             </div>
           </>
         )}
-        {repeatType === "annually" && (
+        {repeatType === 'annually' && (
           <>
             <div className="flex-1">
               <SimpleSelect
@@ -2206,7 +2264,7 @@ function SchedulingFields({
             value={selectedModel}
             onChange={onModelChange}
             options={availableModels.map((m: any) => ({ value: m.model, label: m.name }))}
-            placeholder={intl.formatMessage({ defaultMessage: "Select model", id: "select_model" })}
+            placeholder={intl.formatMessage({ defaultMessage: 'Select model', id: 'select_model' })}
           />
         </div>
       )}
@@ -2224,19 +2282,23 @@ const EditIcon = PenIcon;
 // Modal (recovered from bundle TN/RN)
 // =============================================================================
 
-function ModalFooter({ children, layout = "right", className: cls }: {
+function ModalFooter({
+  children,
+  layout = 'right',
+  className: cls
+}: {
   children: React.ReactNode;
-  layout?: "left" | "center" | "right" | "between";
+  layout?: 'left' | 'center' | 'right' | 'between';
   className?: string;
 }) {
   return (
     <div
       className={cn(
-        "mt-4 flex flex-col gap-2",
-        layout === "left" && "sm:flex-row",
-        layout === "center" && "justify-center sm:flex-row",
-        layout === "right" && "sm:flex-row justify-end",
-        layout === "between" && "justify-between sm:flex-row",
+        'mt-4 flex flex-col gap-2',
+        layout === 'left' && 'sm:flex-row',
+        layout === 'center' && 'justify-center sm:flex-row',
+        layout === 'right' && 'sm:flex-row justify-end',
+        layout === 'between' && 'justify-between sm:flex-row',
         cls
       )}
     >
@@ -2253,9 +2315,9 @@ function Modal({
   children,
   onClose,
   icon,
-  modalSize = "md",
+  modalSize = 'md',
   hasCloseButton = false,
-  overlayClassName,
+  overlayClassName
 }: {
   title?: string;
   subtitle?: string;
@@ -2264,7 +2326,7 @@ function Modal({
   children: React.ReactNode;
   onClose: () => void;
   icon?: React.ReactNode;
-  modalSize?: "sm" | "md" | "lg" | "2lg" | "xl" | "2xl" | "3xl";
+  modalSize?: 'sm' | 'md' | 'lg' | '2lg' | 'xl' | '2xl' | '3xl';
   hasCloseButton?: boolean;
   overlayClassName?: string;
 }) {
@@ -2272,28 +2334,32 @@ function Modal({
   return (
     <div
       className={cn(
-        "fixed z-50 inset-0 grid items-center justify-items-center bg-always-black overflow-y-auto md:p-10 p-4",
-        "[background-color:hsl(var(--always-black)/0.5)]",
+        'fixed z-50 inset-0 grid items-center justify-items-center bg-always-black overflow-y-auto md:p-10 p-4',
+        '[background-color:hsl(var(--always-black)/0.5)]',
         overlayClassName
       )}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
       <div
         className={cn(
-          "flex flex-col focus:outline-none relative text-text-100 text-left shadow-xl border-0.5 border-border-300 rounded-2xl md:p-6 p-4 w-full min-w-0 bg-bg-100",
-          modalSize === "sm" && "max-w-sm",
-          modalSize === "md" && "max-w-md",
-          modalSize === "lg" && "max-w-lg",
-          modalSize === "2lg" && "max-w-xl",
-          modalSize === "xl" && "max-w-3xl",
-          modalSize === "2xl" && "max-w-5xl",
-          modalSize === "3xl" && "max-w-6xl",
+          'flex flex-col focus:outline-none relative text-text-100 text-left shadow-xl border-0.5 border-border-300 rounded-2xl md:p-6 p-4 w-full min-w-0 bg-bg-100',
+          modalSize === 'sm' && 'max-w-sm',
+          modalSize === 'md' && 'max-w-md',
+          modalSize === 'lg' && 'max-w-lg',
+          modalSize === '2lg' && 'max-w-xl',
+          modalSize === 'xl' && 'max-w-3xl',
+          modalSize === '2xl' && 'max-w-5xl',
+          modalSize === '3xl' && 'max-w-6xl',
           cls
         )}
       >
         <div className="min-h-full flex flex-col">
           {!!(title || hasCloseButton) && (
-            <div className={cn("flex items-center gap-4", title ? "justify-between" : "justify-end")}>
+            <div
+              className={cn('flex items-center gap-4', title ? 'justify-between' : 'justify-end')}
+            >
               {title && (
                 <h2 className="font-xl-bold text-text-100 flex w-full min-w-0 items-center leading-6 break-words">
                   {icon && <span className="mr-2">{icon}</span>}
@@ -2301,7 +2367,12 @@ function Modal({
                 </h2>
               )}
               {hasCloseButton && (
-                <Button size="icon_sm" variant="ghost" className="!text-text-500 hover:!text-text-400 -mx-2" onClick={onClose}>
+                <Button
+                  size="icon_sm"
+                  variant="ghost"
+                  className="!text-text-500 hover:!text-text-400 -mx-2"
+                  onClick={onClose}
+                >
                   <CloseIcon size={16} />
                 </Button>
               )}
@@ -2319,9 +2390,14 @@ function Modal({
 // DropdownMenu (recovered from bundle WN/JN)
 // =============================================================================
 
-const DROPDOWN_ITEM_BASE_CLASS = "font-base min-h-8 px-2 py-1.5 rounded-lg cursor-pointer whitespace-nowrap overflow-hidden text-ellipsis grid grid-cols-[minmax(0,_1fr)_auto] gap-2 items-center outline-none select-none hover:bg-bg-200 hover:text-text-000";
+const DROPDOWN_ITEM_BASE_CLASS =
+  'font-base min-h-8 px-2 py-1.5 rounded-lg cursor-pointer whitespace-nowrap overflow-hidden text-ellipsis grid grid-cols-[minmax(0,_1fr)_auto] gap-2 items-center outline-none select-none hover:bg-bg-200 hover:text-text-000';
 
-function DropdownMenu({ trigger, children, unstyledTrigger = false }: {
+function DropdownMenu({
+  trigger,
+  children,
+  unstyledTrigger = false
+}: {
   trigger: React.ReactNode;
   children: React.ReactNode;
   unstyledTrigger?: boolean;
@@ -2334,8 +2410,8 @@ function DropdownMenu({ trigger, children, unstyledTrigger = false }: {
     const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
   return (
@@ -2346,7 +2422,7 @@ function DropdownMenu({ trigger, children, unstyledTrigger = false }: {
           {React.Children.map(children, (child) =>
             React.isValidElement(child)
               ? React.cloneElement(child as React.ReactElement<any>, {
-                  __closeMenu: () => setOpen(false),
+                  __closeMenu: () => setOpen(false)
                 })
               : child
           )}
@@ -2356,7 +2432,14 @@ function DropdownMenu({ trigger, children, unstyledTrigger = false }: {
   );
 }
 
-function DropdownMenuItem({ icon, children, onSelect, danger, trailing, __closeMenu }: {
+function DropdownMenuItem({
+  icon,
+  children,
+  onSelect,
+  danger,
+  trailing,
+  __closeMenu
+}: {
   icon?: React.ReactNode;
   children: React.ReactNode;
   onSelect?: () => void;
@@ -2366,11 +2449,11 @@ function DropdownMenuItem({ icon, children, onSelect, danger, trailing, __closeM
 }) {
   return (
     <div
-      className={cn(
-        DROPDOWN_ITEM_BASE_CLASS,
-        danger && "!text-danger-000 hover:bg-danger-900"
-      )}
-      onClick={() => { onSelect?.(); __closeMenu?.(); }}
+      className={cn(DROPDOWN_ITEM_BASE_CLASS, danger && '!text-danger-000 hover:bg-danger-900')}
+      onClick={() => {
+        onSelect?.();
+        __closeMenu?.();
+      }}
     >
       {icon || trailing ? (
         <div className="flex items-center gap-2 w-full font-base group">
@@ -2476,5 +2559,5 @@ export {
   AnalyticsContext,
   AuthContext,
   PenIcon,
-  CookiesContext,
+  CookiesContext
 };

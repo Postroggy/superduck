@@ -719,6 +719,7 @@
   "menu": "菜单",
   "loading_more": "正在加载更多...",
   "system_prompts_and_metadata": "系统提示词和元数据",
+  "time_input_placeholder": "例如：09:30 或 14:00",
   "created_a_file": "已创建文件",
   "claude_wants_to_use": "SuperDuck 想要使用：",
   "revoke": "撤销",
