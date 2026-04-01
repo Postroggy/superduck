@@ -10040,15 +10040,26 @@ export function SidepanelApp() {
     return <OAuthGate authError={authError} onRetry={refreshAuth} />;
   }
 
+  const showHighRiskFrame = permissionMode === 'skip_all_permission_checks';
+
   return (
-    <div className="relative h-screen bg-bg-100 text-text-100 flex flex-col" data-theme="claude">
-      {permissionMode === 'skip_all_permission_checks' && (
-        <div
-          className="absolute inset-0 pointer-events-none z-[60]"
-          style={{ border: '2px solid #F7CE46', borderRadius: '16px', boxSizing: 'border-box' }}
-        />
-      )}
-      <header className="flex justify-between items-center px-4 pt-3 pb-3">
+    <div
+      className="relative h-screen bg-bg-100 text-text-100"
+      data-theme="claude"
+      style={
+        showHighRiskFrame
+          ? {
+              border: '1.7px dashed #F7CE46',
+              borderRadius: '16px',
+              boxSizing: 'border-box'
+            }
+          : undefined
+      }
+    >
+      <div
+        className="relative flex h-full min-h-0 flex-col"
+      >
+        <header className="flex justify-between items-center px-4 pt-3 pb-3">
         <div className="flex items-center gap-3">
           <div ref={modelMenuRef} className="relative">
             <button
@@ -11021,47 +11032,48 @@ export function SidepanelApp() {
         </div>
       ) : null}
 
-      {/* Create Shortcut Modal - shown when promptToSave or promptToEdit is set */}
-      {(promptToSave !== null || promptToEdit !== null) && (
-        <CreateShortcutModal
-          prompt={promptToEdit || promptToSave || undefined}
-          sessionId={activeSessionId}
-          currentModel={selectedModel}
-          onClose={() => {
-            setPromptToSave(null);
-            setPromptToEdit(null);
-          }}
-          onSave={(commandName) => {
-            if (promptToSave) {
-              // New shortcut saved from recording — show it in input and open command menu
+        {/* Create Shortcut Modal - shown when promptToSave or promptToEdit is set */}
+        {(promptToSave !== null || promptToEdit !== null) && (
+          <CreateShortcutModal
+            prompt={promptToEdit || promptToSave || undefined}
+            sessionId={activeSessionId}
+            currentModel={selectedModel}
+            onClose={() => {
               setPromptToSave(null);
-              setInput(`/${commandName}`);
-              setShowCommandMenu(true);
-              setCommandSearchTerm(commandName);
-              setTimeout(() => {
-                if (inputRef.current) {
-                  inputRef.current.focus();
-                }
-              }, 50);
-            } else {
-              // Editing existing shortcut — just close the modal
               setPromptToEdit(null);
-            }
-          }}
-          onDelete={() => setPromptToEdit(null)}
-          generateName={async (prompt) => {
-            try {
-              return await generateShortcutName(
-                prompt,
-                (params) => createAnthropicMessage(params),
-                intl.locale as SupportedLocale
-              );
-            } catch (error) {
-              return '';
-            }
-          }}
-        />
-      )}
+            }}
+            onSave={(commandName) => {
+              if (promptToSave) {
+                // New shortcut saved from recording — show it in input and open command menu
+                setPromptToSave(null);
+                setInput(`/${commandName}`);
+                setShowCommandMenu(true);
+                setCommandSearchTerm(commandName);
+                setTimeout(() => {
+                  if (inputRef.current) {
+                    inputRef.current.focus();
+                  }
+                }, 50);
+              } else {
+                // Editing existing shortcut — just close the modal
+                setPromptToEdit(null);
+              }
+            }}
+            onDelete={() => setPromptToEdit(null)}
+            generateName={async (prompt) => {
+              try {
+                return await generateShortcutName(
+                  prompt,
+                  (params) => createAnthropicMessage(params),
+                  intl.locale as SupportedLocale
+                );
+              } catch (error) {
+                return '';
+              }
+            }}
+          />
+        )}
+      </div>
     </div>
   );
 }

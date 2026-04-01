@@ -115,7 +115,7 @@ export function ScrollContainer({
   }, [innerRef, pinToBottomConfig.disabled, scrollToBottom]);
 
   return (
-    <div className={cn("overflow-y-scroll overflow-x-hidden", parentClassName)} ref={composedRef}>
+    <div className={cn("u-hidden-scrollbar overflow-y-auto overflow-x-hidden", parentClassName)} ref={composedRef}>
       <div className={cn("relative w-full min-h-full", innerClassName)} ref={innerRef}>
         {children}
       </div>
