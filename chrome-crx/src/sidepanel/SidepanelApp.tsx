@@ -9573,19 +9573,23 @@ export function SidepanelApp() {
       commandMenuDismissedRef.current = false;
     }
 
-    if (input.startsWith('/')) {
+    const hasShortcutChip = inputRef.current?.hasShortcutChips() ?? false;
+
+    if (input.startsWith('/') && !hasShortcutChip) {
       const commandName = input.slice(1).split(' ')[0];
       setCommandSearchTerm(commandName);
       if (!showCommandMenu && !commandMenuDismissedRef.current) {
         setShowCommandMenu(true);
       }
     } else {
-      // Input no longer starts with "/" — close menu and reset dismissed flag
+      // Only keep slash suggestions open for raw slash input, not inserted shortcut chips.
       if (showCommandMenu) {
         setShowCommandMenu(false);
         setCommandSearchTerm('');
       }
-      commandMenuDismissedRef.current = false;
+      if (!input.startsWith('/')) {
+        commandMenuDismissedRef.current = false;
+      }
     }
   }, [input, showCommandMenu, setShowCommandMenu, setCommandSearchTerm]);
 
@@ -10544,6 +10548,9 @@ export function SidepanelApp() {
                                   <ShortcutsMenu
                                     searchTerm={commandSearchTerm}
                                     onSelect={async (command, label) => {
+                                      commandMenuDismissedRef.current = true;
+                                      commandMenuDismissedInputRef.current = inputValueRef.current;
+
                                       // Close menu first to prevent reopening
                                       setShowCommandMenu(false);
                                       setCommandSearchTerm('');

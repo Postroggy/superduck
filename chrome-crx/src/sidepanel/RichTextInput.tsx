@@ -125,6 +125,7 @@ export interface RichTextInputHandle {
   focus: () => void;
   clear: () => void;
   insertShortcut: (command: string, label?: string) => void;
+  hasShortcutChips: () => boolean;
   getContent: () => string;
   setContent: (content: string) => void;
 }
@@ -209,6 +210,9 @@ export const RichTextInput = forwardRef<RichTextInputHandle, RichTextInputProps>
             const insertedChip = chips?.[chips.length - 1] ?? null;
             triggerShortcutChipFlash(insertedChip);
           });
+        },
+        hasShortcutChips: () => {
+          return !!editor?.view.dom.querySelector('[data-type="shortcut-chip"]');
         },
         getContent: () => {
           return getEditorContent(editor);
