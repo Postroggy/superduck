@@ -48,7 +48,9 @@ import {
   ThumbsUp,
   Workflow,
   X,
-  Zap
+  Zap,
+  ZoomIn,
+  ZoomOut
 } from 'lucide-react';
 import ReactDOM from 'react-dom';
 import {
@@ -1626,6 +1628,164 @@ function ImagePreviewModal({
         >
           <X size={16} />
         </button>
+      </div>
+    </div>
+  );
+}
+
+// --- ScreenshotLightbox — fullscreen-within-container image viewer with zoom ---
+
+const ZOOM_STEPS = [0.5, 0.75, 1, 1.5, 2, 3];
+
+function ScreenshotLightbox({
+  imageUrl,
+  onClose
+}: {
+  imageUrl: string;
+  onClose: () => void;
+}) {
+  const intl = useIntlSafe();
+  const [zoomIndex, setZoomIndex] = useState(2); // default 1x (index 2)
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
+
+  // Drag/pan state
+  const [translate, setTranslate] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStart = useRef({ x: 0, y: 0, tx: 0, ty: 0 });
+
+  const zoom = ZOOM_STEPS[zoomIndex];
+  const canZoomOut = zoomIndex > 0;
+  const canZoomIn = zoomIndex < ZOOM_STEPS.length - 1;
+
+  const zoomIn = useCallback(() => {
+    setZoomIndex((i) => Math.min(i + 1, ZOOM_STEPS.length - 1));
+  }, []);
+
+  const zoomOut = useCallback(() => {
+    setZoomIndex((i) => Math.max(i - 1, 0));
+  }, []);
+
+  // Reset pan when zoom changes
+  useEffect(() => {
+    setTranslate({ x: 0, y: 0 });
+  }, [zoomIndex]);
+
+  // Escape key
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [onClose]);
+
+  // Mouse wheel zoom — must use addEventListener for { passive: false }
+  useEffect(() => {
+    const el = overlayRef.current;
+    if (!el) return;
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      if (e.deltaY < 0) {
+        setZoomIndex((i) => Math.min(i + 1, ZOOM_STEPS.length - 1));
+      } else if (e.deltaY > 0) {
+        setZoomIndex((i) => Math.max(i - 1, 0));
+      }
+    };
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => el.removeEventListener('wheel', handleWheel);
+  }, []);
+
+  // Drag handlers
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      e.preventDefault();
+      setIsDragging(true);
+      dragStart.current = { x: e.clientX, y: e.clientY, tx: translate.x, ty: translate.y };
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    },
+    [translate]
+  );
+
+  const handlePointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (!isDragging) return;
+      const dx = e.clientX - dragStart.current.x;
+      const dy = e.clientY - dragStart.current.y;
+      setTranslate({ x: dragStart.current.tx + dx, y: dragStart.current.ty + dy });
+    },
+    [isDragging]
+  );
+
+  const handlePointerUp = useCallback(() => {
+    setIsDragging(false);
+  }, []);
+
+  return (
+    <div
+      ref={overlayRef}
+      className="absolute inset-0 z-[60] flex flex-col"
+      style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}
+    >
+      {/* Toolbar */}
+      <div className="shrink-0 flex items-center justify-end px-4 py-3">
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={zoomOut}
+            disabled={!canZoomOut}
+            className="p-1.5 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            aria-label={intl.formatMessage({ defaultMessage: 'Zoom out', id: 'screenshot_zoom_out' })}
+          >
+            <ZoomOut size={16} />
+          </button>
+          <span className="text-white/90 text-xs font-medium select-none min-w-[36px] text-center">
+            {Math.round(zoom * 100)}%
+          </span>
+          <button
+            type="button"
+            onClick={zoomIn}
+            disabled={!canZoomIn}
+            className="p-1.5 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            aria-label={intl.formatMessage({ defaultMessage: 'Zoom in', id: 'screenshot_zoom_in' })}
+          >
+            <ZoomIn size={16} />
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors ml-2"
+            aria-label={intl.formatMessage({ defaultMessage: 'Close preview', id: 'close_preview' })}
+          >
+            <X size={16} />
+          </button>
+        </div>
+      </div>
+
+      {/* Image area — fills all space below toolbar */}
+      <div
+        ref={wrapperRef}
+        className="flex-1 min-h-0 overflow-hidden flex items-center justify-center p-4 select-none"
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        style={{ touchAction: 'none' }}
+      >
+        <img
+          ref={imgRef}
+          src={imageUrl}
+          alt="Screenshot preview"
+          className="max-w-full max-h-full object-contain rounded-lg"
+          draggable={false}
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            transform: `scale(${zoom}) translate(${translate.x / zoom}px, ${translate.y / zoom}px)`,
+            transformOrigin: 'center center',
+            transition: isDragging ? 'none' : 'transform 0.2s ease',
+          }}
+        />
       </div>
     </div>
   );
@@ -5181,13 +5341,32 @@ const BrowserToolCell = React.memo(function BrowserToolCell({
   }, [toolName, input, toolResult]);
 
   // Create screenshot thumbnail element for secondaryElement
+  const setScreenshotPreviewUrl = useUIStore((state) => state.setScreenshotPreviewUrl);
+
   const screenshotThumbnail = screenshotData ? (
-    <img
-      src={screenshotData}
-      alt="Screenshot"
-      className="h-8 rounded border border-border-300"
-      style={{ objectFit: 'contain' }}
-    />
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={(e) => {
+        e.stopPropagation();
+        setScreenshotPreviewUrl(screenshotData);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.stopPropagation();
+          e.preventDefault();
+          setScreenshotPreviewUrl(screenshotData);
+        }
+      }}
+      className="cursor-pointer hover:opacity-80 transition-opacity"
+    >
+      <img
+        src={screenshotData}
+        alt="Screenshot"
+        className="h-8 rounded border border-border-300"
+        style={{ objectFit: 'contain' }}
+      />
+    </div>
   ) : undefined;
 
   return (
@@ -7283,6 +7462,8 @@ export function SidepanelApp() {
   const setShowCommandMenu = useUIStore((state) => state.setShowCommandMenu);
   const commandSearchTerm = useUIStore((state) => state.commandSearchTerm);
   const setCommandSearchTerm = useUIStore((state) => state.setCommandSearchTerm);
+  const screenshotPreviewUrl = useUIStore((state) => state.screenshotPreviewUrl);
+  const setScreenshotPreviewUrl = useUIStore((state) => state.setScreenshotPreviewUrl);
 
   // Track when the user explicitly dismissed the command menu (Escape / click-outside)
   // so the useEffect watching `input` doesn't immediately re-open it.
@@ -11234,6 +11415,13 @@ export function SidepanelApp() {
                 return '';
               }
             }}
+          />
+        )}
+
+        {screenshotPreviewUrl && (
+          <ScreenshotLightbox
+            imageUrl={screenshotPreviewUrl}
+            onClose={() => setScreenshotPreviewUrl(null)}
           />
         )}
       </div>
