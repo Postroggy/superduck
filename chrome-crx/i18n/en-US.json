@@ -879,5 +879,17 @@
   "workflow_click_id": "Click on {target}",
   "workflow_click_tag_element": "Click on {tagName} element",
   "workflow_note": "Note: \"{text}\"",
-  "page": "page"
+  "page": "page",
+  "action_navigate_to": "navigate to",
+  "action_read_page_content_on": "read page content on",
+  "action_read_debugging_information_on": "read debugging information on",
+  "action_click_on": "click on",
+  "action_type_text_into": "type text into",
+  "action_upload_an_image_to": "upload an image to",
+  "action_navigate_from": "navigate from",
+  "action_execute_javascript_on": "execute JavaScript on",
+  "superduck_wants_to_use_an_mcp_tool": "SuperDuck wants to use an MCP tool",
+  "server_wants_to_use_tool": "{serverName} wants to use {toolName}",
+  "superduck_will_not_purchase_items_create_accounts": "SuperDuck will not purchase items, create accounts, or attempt to bypass CAPTCHAs.",
+  "superduck_wants_to_navigate_from_to": "SuperDuck wants to navigate from {fromDomain} to {toDomain}"
 }

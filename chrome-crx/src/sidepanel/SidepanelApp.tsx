@@ -4817,6 +4817,7 @@ function PlanApprovalModal({
   isReadOnly?: boolean;
   onClose?: () => void;
 }) {
+  const intl = useIntlSafe();
   const [activeButton, setActiveButton] = useState<string | null>(null);
 
   const handleApprove = useCallback(() => {
@@ -4874,7 +4875,9 @@ function PlanApprovalModal({
       <div className="flex items-center justify-between py-[10px] px-4">
         <div className="flex items-center gap-2">
           <ChecklistIcon size={20} className="text-text-100" />
-          <h3 className="font-base text-text-100">SuperDuck's plan</h3>
+          <h3 className="font-base text-text-100">
+            <MemoizedFormattedMessage id="claudes_plan" defaultMessage="SuperDuck's plan" />
+          </h3>
         </div>
         {isReadOnly && onClose && (
           <button
@@ -4908,7 +4911,12 @@ function PlanApprovalModal({
         {/* Domains section */}
         {domains.length > 0 && (
           <div>
-            <p className="font-small text-text-400 mb-2">Allow actions on these sites</p>
+            <p className="font-small text-text-400 mb-2">
+              <MemoizedFormattedMessage
+                id="allow_actions_on_these_sites"
+                defaultMessage="Allow actions on these sites"
+              />
+            </p>
             <div className="space-y-2">
               {domains.map((domain, index) => {
                 const name = getDomainDisplayName(domain);
@@ -4921,7 +4929,10 @@ function PlanApprovalModal({
                     <span className="font-base text-text-100">{name}</span>
                     {isForceAsk && (
                       <Tooltip
-                        tooltipContent="You must approve any SuperDuck action on this site"
+                        tooltipContent={intl.formatMessage({
+                          id: 'you_must_approve_any_claude_action_on_this',
+                          defaultMessage: 'You must approve any SuperDuck action on this site'
+                        })}
                         side="top"
                       >
                         <span className="flex-shrink-0 cursor-help">
@@ -4939,7 +4950,12 @@ function PlanApprovalModal({
         {/* Approach section */}
         {approach.length > 0 && (
           <div>
-            <p className="font-small text-text-400 mb-2">Approach to follow</p>
+            <p className="font-small text-text-400 mb-2">
+              <MemoizedFormattedMessage
+                id="approach_to_follow"
+                defaultMessage="Approach to follow"
+              />
+            </p>
             <div className="space-y-2">
               {approach.map((step, index) => (
                 <div key={index} className="flex items-start gap-2">
@@ -4962,19 +4978,25 @@ function PlanApprovalModal({
             isPrimary
             isActive={activeButton === 'approve'}
           >
-            <span>Approve plan</span>
+            <span>
+              <MemoizedFormattedMessage id="approve_plan" defaultMessage="Approve plan" />
+            </span>
             <ReturnKeyIcon className="text-text-500" />
           </PermissionActionButton>
           <PermissionActionButton onClick={handleReject} isActive={activeButton === 'reject'}>
-            <span>Make changes</span>
+            <span>
+              <MemoizedFormattedMessage id="make_changes" defaultMessage="Make changes" />
+            </span>
             <span className="flex items-center gap-0.5">
               <PlatformModifierKey className="text-text-500" />
               <ReturnKeyIcon className="text-text-500" />
             </span>
           </PermissionActionButton>
           <p className="font-small text-text-500 pt-1 px-1">
-            SuperDuck will only use the sites listed. You'll be asked before accessing anything
-            else.
+            <MemoizedFormattedMessage
+              id="claude_will_only_use_the_sites_listed_youll"
+              defaultMessage="SuperDuck will only use the sites listed. You'll be asked before accessing anything else."
+            />
           </p>
         </div>
       )}
@@ -6993,6 +7015,7 @@ function InlinePermissionPrompt({
   onDeny: () => void;
   disableAlwaysAllow?: boolean;
 }) {
+  const intl = useIntlSafe();
   const [activeButton, setActiveButton] = useState<string | null>(null);
 
   const hostname = useMemo(() => {
@@ -7003,7 +7026,26 @@ function InlinePermissionPrompt({
     }
   }, [prompt.url]);
 
-  const actionText = getPermissionActionText(prompt.tool) || 'perform an action on';
+  const getActionTextKey = (action: PermissionActionType): string => {
+    const keyMap: Record<string, string> = {
+      [PermissionActionType.NAVIGATE]: 'action_navigate_to',
+      [PermissionActionType.READ_PAGE_CONTENT]: 'action_read_page_content_on',
+      [PermissionActionType.READ_CONSOLE_MESSAGES]: 'action_read_debugging_information_on',
+      [PermissionActionType.READ_NETWORK_REQUESTS]: 'action_read_debugging_information_on',
+      [PermissionActionType.CLICK]: 'action_click_on',
+      [PermissionActionType.TYPE]: 'action_type_text_into',
+      [PermissionActionType.UPLOAD_IMAGE]: 'action_upload_an_image_to',
+      [PermissionActionType.DOMAIN_TRANSITION]: 'action_navigate_from',
+      [PermissionActionType.EXECUTE_JAVASCRIPT]: 'action_execute_javascript_on'
+    };
+    return keyMap[action] || 'action_navigate_to';
+  };
+
+  const actionText =
+    intl.formatMessage({
+      id: getActionTextKey(prompt.tool),
+      defaultMessage: getPermissionActionText(prompt.tool) || 'perform an action on'
+    }) || 'perform an action on';
 
   const handleAllow = useCallback(
     (duration: PermissionDuration) => {
@@ -7049,9 +7091,22 @@ function InlinePermissionPrompt({
     return (
       <div className="p-4">
         <div className="text-sm text-text-300 mb-3">
-          SuperDuck wants to navigate from{' '}
-          <span className="font-medium text-text-100">{prompt.actionData?.fromDomain || '?'}</span>{' '}
-          to <span className="font-medium text-text-100">{prompt.actionData?.toDomain || '?'}</span>
+          <MemoizedFormattedMessage
+            id="superduck_wants_to_navigate_from_to"
+            defaultMessage="SuperDuck wants to navigate from {fromDomain} to {toDomain}"
+            values={{
+              fromDomain: (
+                <span className="font-medium text-text-100">
+                  {prompt.actionData?.fromDomain || '?'}
+                </span>
+              ),
+              toDomain: (
+                <span className="font-medium text-text-100">
+                  {prompt.actionData?.toDomain || '?'}
+                </span>
+              )
+            }}
+          />
         </div>
         <div className="flex flex-col gap-2">
           <PermissionActionButton
@@ -7059,11 +7114,15 @@ function InlinePermissionPrompt({
             isPrimary
             isActive={activeButton === 'allow'}
           >
-            <span>Continue</span>
+            <span>
+              <MemoizedFormattedMessage id="continue" defaultMessage="Continue" />
+            </span>
             <span className="text-xs opacity-60">Enter</span>
           </PermissionActionButton>
           <PermissionActionButton onClick={handleDeny} isActive={activeButton === 'deny'}>
-            <span>Stop</span>
+            <span>
+              <MemoizedFormattedMessage id="stop" defaultMessage="Stop" />
+            </span>
             <span className="text-xs opacity-60">Esc</span>
           </PermissionActionButton>
           {!disableAlwaysAllow && (
@@ -7073,7 +7132,9 @@ function InlinePermissionPrompt({
                 onClick={() => handleAllow(PermissionDuration.ALWAYS)}
                 isActive={activeButton === 'always'}
               >
-                <span>Always continue</span>
+                <span>
+                  <MemoizedFormattedMessage id="always_continue" defaultMessage="Always continue" />
+                </span>
                 <span className="text-xs opacity-60">
                   {navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+Enter
                 </span>
@@ -7105,12 +7166,19 @@ function InlinePermissionPrompt({
       <div className="p-4">
         <div className="text-sm text-text-300 mb-3">
           {mcp ? (
-            <>
-              <span className="font-medium text-text-100">{mcp.serverName}</span> wants to use{' '}
-              <span className="font-medium text-text-100">{mcp.toolDisplayName}</span>
-            </>
+            <MemoizedFormattedMessage
+              id="server_wants_to_use_tool"
+              defaultMessage="{serverName} wants to use {toolName}"
+              values={{
+                serverName: <span className="font-medium text-text-100">{mcp.serverName}</span>,
+                toolName: <span className="font-medium text-text-100">{mcp.toolDisplayName}</span>
+              }}
+            />
           ) : (
-            'SuperDuck wants to use an MCP tool'
+            <MemoizedFormattedMessage
+              id="superduck_wants_to_use_an_mcp_tool"
+              defaultMessage="SuperDuck wants to use an MCP tool"
+            />
           )}
         </div>
         <div className="flex flex-col gap-2">
@@ -7119,11 +7187,15 @@ function InlinePermissionPrompt({
             isPrimary
             isActive={activeButton === 'allow'}
           >
-            <span>Allow once</span>
+            <span>
+              <MemoizedFormattedMessage id="allow_once" defaultMessage="Allow once" />
+            </span>
             <span className="text-xs opacity-60">Enter</span>
           </PermissionActionButton>
           <PermissionActionButton onClick={handleDeny} isActive={activeButton === 'deny'}>
-            <span>Decline</span>
+            <span>
+              <MemoizedFormattedMessage id="decline" defaultMessage="Decline" />
+            </span>
             <span className="text-xs opacity-60">Esc</span>
           </PermissionActionButton>
           {!disableAlwaysAllow && (
@@ -7133,7 +7205,12 @@ function InlinePermissionPrompt({
                 onClick={() => handleAllow(PermissionDuration.ALWAYS)}
                 isActive={activeButton === 'always'}
               >
-                <span>Allow for all chats</span>
+                <span>
+                  <MemoizedFormattedMessage
+                    id="allow_for_all_chats"
+                    defaultMessage="Allow for all chats"
+                  />
+                </span>
                 <span className="text-xs opacity-60">
                   {navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+Enter
                 </span>
@@ -7149,7 +7226,13 @@ function InlinePermissionPrompt({
   return (
     <div className="p-4">
       <div className="text-sm text-text-300 mb-1">
-        SuperDuck wants to <span className="font-medium text-text-100">{actionText}</span>
+        <MemoizedFormattedMessage
+          id="claude_wants_to"
+          defaultMessage="SuperDuck wants to {toolAction}:"
+          values={{
+            toolAction: <span className="font-medium text-text-100">{actionText}</span>
+          }}
+        />
       </div>
       <div className="text-sm text-text-100 font-medium mb-3 truncate">{hostname}</div>
       {prompt.actionData?.screenshot && (
@@ -7181,11 +7264,15 @@ function InlinePermissionPrompt({
           isPrimary
           isActive={activeButton === 'allow'}
         >
-          <span>Allow this action</span>
+          <span>
+            <MemoizedFormattedMessage id="allow_this_action" defaultMessage="Allow this action" />
+          </span>
           <span className="text-xs opacity-60">Enter</span>
         </PermissionActionButton>
         <PermissionActionButton onClick={handleDeny} isActive={activeButton === 'deny'}>
-          <span>Decline</span>
+          <span>
+            <MemoizedFormattedMessage id="decline" defaultMessage="Decline" />
+          </span>
           <span className="text-xs opacity-60">Esc</span>
         </PermissionActionButton>
         {!disableAlwaysAllow && (
@@ -7195,7 +7282,12 @@ function InlinePermissionPrompt({
               onClick={() => handleAllow(PermissionDuration.ALWAYS)}
               isActive={activeButton === 'always'}
             >
-              <span>Always allow actions on this site</span>
+              <span>
+                <MemoizedFormattedMessage
+                  id="always_allow_actions_on_this_site"
+                  defaultMessage="Always allow actions on this site"
+                />
+              </span>
               <span className="text-xs opacity-60">
                 {navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+Enter
               </span>
@@ -7204,7 +7296,10 @@ function InlinePermissionPrompt({
         )}
       </div>
       <div className="mt-3 text-[11px] text-text-400 leading-relaxed">
-        SuperDuck will not purchase items, create accounts, or attempt to bypass CAPTCHAs.
+        <MemoizedFormattedMessage
+          id="superduck_will_not_purchase_items_create_accounts"
+          defaultMessage="SuperDuck will not purchase items, create accounts, or attempt to bypass CAPTCHAs."
+        />
       </div>
     </div>
   );
