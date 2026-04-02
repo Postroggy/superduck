@@ -3,6 +3,7 @@ import { FeatureProvider } from '../SavedPromptsService';
 import { IntlMessageLoaderProvider } from '../index-react-dom-intl';
 import { SidepanelApp } from './SidepanelApp';
 import 'katex/dist/katex.min.css';
+import '../styles/scheduling.css';
 
 // Telemetry disabled — Sentry and Honeycomb are Anthropic's production
 // telemetry. They install MutationObservers, PerformanceObservers, and XHR

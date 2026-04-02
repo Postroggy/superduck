@@ -17,6 +17,7 @@
   "claude_content": "SuperDuck 内容",
   "other_6": "其他",
   "read_console_messages": "读取控制台消息",
+  "select_date": "选择日期",
   "weekly": "每周",
   "please_check_the_file_name_and_try_again": "请检查文件名后重试。",
   "kb": "{size} KB",

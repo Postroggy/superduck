@@ -17,6 +17,7 @@
   "claude_content": "SuperDuck content",
   "other_6": "Other",
   "read_console_messages": "Read console messages",
+  "select_date": "Select date",
   "weekly": "Weekly",
   "please_check_the_file_name_and_try_again": "Please check the file name and try again.",
   "kb": "{size} KB",

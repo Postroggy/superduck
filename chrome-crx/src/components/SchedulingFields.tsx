@@ -1800,6 +1800,114 @@ function SimpleSelect({
 }
 
 // =============================================================================
+// DatePicker component
+// =============================================================================
+
+function DatePicker({
+  value,
+  onChange,
+  label,
+  className,
+  minDate
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  label?: string;
+  className?: string;
+  minDate?: Date;
+}) {
+  const intl = useIntl();
+  const [isOpen, setIsOpen] = useState(false);
+  const [position, setPosition] = useState<'bottom' | 'top'>('bottom');
+  const containerRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  const dateValue = value ? new Date(value) : null;
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node))
+        setIsOpen(false);
+    };
+    if (isOpen) document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [isOpen]);
+
+  const formatDisplayDate = (dateStr: string) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    return date.toLocaleDateString(intl.locale, {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  };
+
+  return (
+    <div className={className}>
+      {label && <label className="block font-base text-text-200 mb-1">{label}</label>}
+      <div ref={containerRef} className="relative">
+        <button
+          ref={buttonRef}
+          type="button"
+          onClick={() => {
+            if (buttonRef.current) {
+              const rect = buttonRef.current.getBoundingClientRect();
+              const spaceBelow = window.innerHeight - rect.bottom;
+              const spaceAbove = rect.top;
+              const menuHeight = 320;
+              setPosition(spaceBelow < menuHeight && spaceAbove > spaceBelow ? 'top' : 'bottom');
+            }
+            setIsOpen(!isOpen);
+          }}
+          className={cn(
+            'w-full h-9 px-3 py-2 text-left',
+            'border border-border-300 rounded-lg',
+            'bg-bg-000 text-text-100 text-sm',
+            'flex items-center justify-between gap-2',
+            'transition-all duration-200 can-focus',
+            'hover:border-border-200 hover:shadow-sm cursor-pointer',
+            isOpen && 'border-border-200 shadow-sm'
+          )}
+        >
+          <span className={value ? '' : 'text-text-400'}>
+            {value ? formatDisplayDate(value) : intl.formatMessage({ defaultMessage: 'Select date', id: 'select_date' })}
+          </span>
+          <CalendarIcon size={16} className="text-text-400 shrink-0" />
+        </button>
+        {isOpen && (
+          <div
+            className={cn(
+              'absolute z-dropdown min-w-[280px] bg-bg-000 border-0.5 border-border-200 rounded-xl backdrop-blur-xl shadow-[0px_4px_16px_0px_hsl(var(--always-black)/12%)] dark:shadow-[0px_4px_16px_0px_hsl(var(--always-black)/32%)] p-3',
+              position === 'bottom' ? 'mt-1 top-full' : 'mb-1 bottom-full'
+            )}
+          >
+            <Calendar
+              value={dateValue}
+              onChange={(date: any) => {
+                if (date instanceof Date) {
+                  onChange(date.toISOString().split('T')[0]);
+                  setIsOpen(false);
+                }
+              }}
+              minDate={minDate}
+              locale={intl.locale}
+              className="datetime-input-calendar"
+              formatDay={(locale, date) => date.getDate().toString()}
+              formatShortWeekday={(locale, date) => {
+                const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
+                const weekdaysEn = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+                return isChineseLocale(locale) ? weekdays[date.getDay()] : weekdaysEn[date.getDay()];
+              }}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
 // TimeInput helpers
 // =============================================================================
 
@@ -1870,6 +1978,7 @@ function TimeInput({
   const [display, setDisplay] = useState(formatTimeForLocale(value, intl.locale));
   const [isOpen, setIsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [position, setPosition] = useState<'bottom' | 'top'>('bottom');
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -1964,7 +2073,16 @@ function TimeInput({
           type="text"
           value={display}
           onChange={handleInputChange}
-          onFocus={() => setIsOpen(true)}
+          onFocus={() => {
+            if (inputRef.current) {
+              const rect = inputRef.current.getBoundingClientRect();
+              const spaceBelow = window.innerHeight - rect.bottom;
+              const spaceAbove = rect.top;
+              const menuHeight = Math.min(192, 40 * timeOptions.length + 16);
+              setPosition(spaceBelow < menuHeight && spaceAbove > spaceBelow ? 'top' : 'bottom');
+            }
+            setIsOpen(true);
+          }}
           onBlur={handleBlur}
           onKeyDown={handleKeyDown}
           lang={intl.locale}
@@ -1979,7 +2097,16 @@ function TimeInput({
         />
         <button
           type="button"
-          onClick={() => setIsOpen(!isOpen)}
+          onClick={() => {
+            if (inputRef.current) {
+              const rect = inputRef.current.getBoundingClientRect();
+              const spaceBelow = window.innerHeight - rect.bottom;
+              const spaceAbove = rect.top;
+              const menuHeight = Math.min(192, 40 * timeOptions.length + 16);
+              setPosition(spaceBelow < menuHeight && spaceAbove > spaceBelow ? 'top' : 'bottom');
+            }
+            setIsOpen(!isOpen);
+          }}
           className="absolute right-2 top-1/2 -translate-y-1/2 text-text-300 hover:text-text-100"
           tabIndex={-1}
         >
@@ -1992,7 +2119,10 @@ function TimeInput({
       {isOpen && (
         <div
           ref={dropdownRef}
-          className="absolute z-dropdown w-full mt-1 max-h-48 overflow-auto bg-bg-000 border-0.5 border-border-200 rounded-xl backdrop-blur-xl shadow-[0px_2px_8px_0px_hsl(var(--always-black)/8%)] dark:shadow-[0px_2px_8px_0px_hsl(var(--always-black)/24%)] p-1.5"
+          className={cn(
+            'absolute z-dropdown w-full max-h-48 overflow-auto bg-bg-000 border-0.5 border-border-200 rounded-xl backdrop-blur-xl shadow-[0px_2px_8px_0px_hsl(var(--always-black)/8%)] dark:shadow-[0px_2px_8px_0px_hsl(var(--always-black)/24%)] p-1.5',
+            position === 'bottom' ? 'mt-1 top-full' : 'mb-1 bottom-full'
+          )}
         >
           {timeOptions.map((opt) => (
             <button
@@ -2018,14 +2148,15 @@ function TimeInput({
 }
 
 // =============================================================================
-// getOrdinalSuffix
+// getOrdinalLabel
 // =============================================================================
 
-function getOrdinalSuffix(n: number): string {
-  if (n === 1 || n === 21 || n === 31) return 'st';
-  if (n === 2 || n === 22) return 'nd';
-  if (n === 3 || n === 23) return 'rd';
-  return 'th';
+function getOrdinalLabel(n: number, locale: string): string {
+  if (isChineseLocale(locale)) return `${n}号`;
+  if (n === 1 || n === 21 || n === 31) return `${n}st`;
+  if (n === 2 || n === 22) return `${n}nd`;
+  if (n === 3 || n === 23) return `${n}rd`;
+  return `${n}th`;
 }
 
 // =============================================================================
@@ -2102,7 +2233,7 @@ function SchedulingFields({
 
   const dayOfMonthOptions = Array.from({ length: 31 }, (_, i) => i + 1).map((n) => ({
     value: String(n),
-    label: `${n}${getOrdinalSuffix(n)}`
+    label: getOrdinalLabel(n, intl.locale)
   }));
 
   if (compact) {
@@ -2114,13 +2245,10 @@ function SchedulingFields({
           </div>
           {repeatType === 'once' && (
             <div className="flex-1 min-w-[140px]">
-              <input
-                type="date"
+              <DatePicker
                 value={specificDate}
-                onChange={(e) => setSpecificDate(e.target.value)}
-                min={new Date(Date.now() - 864e5).toISOString().split('T')[0]}
-                lang={intl.locale}
-                className="w-full bg-bg-000 border border-border-300 hover:border-border-200 transition-colors can-focus text-sm h-9 px-3 py-2 rounded-lg"
+                onChange={setSpecificDate}
+                minDate={new Date(Date.now() - 864e5)}
               />
             </div>
           )}
@@ -2544,6 +2672,7 @@ export {
   SegmentedControl,
   SimpleSelect,
   TimeInput,
+  DatePicker,
   SchedulingFields,
 
   // Model helpers
