@@ -2184,7 +2184,7 @@ interface SchedulingFieldsProps {
   daysOfWeekLabels: string[];
   url: string;
   setUrl: (v: string) => void;
-  urlError: string;
+  urlError?: string;
   selectedModel?: string;
   onModelChange?: (v: string) => void;
   availableModels?: any[];
@@ -2219,7 +2219,10 @@ function SchedulingFields({
   selectedModel,
   onModelChange,
   availableModels,
-  compact
+  compact,
+  model,
+  setModel,
+  modelConfig
 }: SchedulingFieldsProps) {
   const intl = useIntl();
 
@@ -2236,166 +2239,145 @@ function SchedulingFields({
     label: getOrdinalLabel(n, intl.locale)
   }));
 
+  // Resolve model props: prefer selectedModel/onModelChange, fall back to model/setModel/modelConfig
+  const resolvedModel = selectedModel ?? model;
+  const resolvedOnModelChange = onModelChange ?? setModel;
+  const resolvedModels = availableModels ?? (modelConfig?.options as any[] | undefined);
+
+  const renderUrlField = () => (
+    <div>
+      <span className="font-base text-text-200 block mb-1">
+        <FormattedMessage defaultMessage="Start from" id="start_from" />
+      </span>
+      <TextInput
+        type="text"
+        value={url}
+        onChange={(e: any) => setUrl(e.target.value)}
+        placeholder={intl.formatMessage({ defaultMessage: 'https://example.com', id: 'url_placeholder' })}
+        className="w-full text-sm"
+        error={!!urlError}
+      />
+      {urlError && <ErrorMessage className="mt-1">{urlError}</ErrorMessage>}
+    </div>
+  );
+
+  const renderScheduleToggle = () => (
+    <div className="flex items-center justify-between">
+      <span className="font-base text-text-200">
+        <FormattedMessage defaultMessage="Schedule" id="schedule" />
+      </span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={scheduleEnabled}
+        onClick={() => setScheduleEnabled(!scheduleEnabled)}
+        className={cn(
+          'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out can-focus',
+          scheduleEnabled ? 'bg-accent-secondary-100' : 'bg-bg-400'
+        )}
+      >
+        <span
+          className={cn(
+            'pointer-events-none inline-block h-4 w-4 rounded-full bg-bg-000 shadow-sm ring-0 transition-transform duration-200 ease-in-out mt-0.5',
+            scheduleEnabled ? 'translate-x-[18px]' : 'translate-x-0.5'
+          )}
+        />
+      </button>
+    </div>
+  );
+
+  const renderModelField = () => {
+    if (!resolvedOnModelChange || !resolvedModel || !resolvedModels) return null;
+    return (
+      <div>
+        <span className="font-base text-text-200 block mb-1">
+          <FormattedMessage defaultMessage="Model" id="model" />
+        </span>
+        <SimpleSelect
+          value={resolvedModel}
+          onChange={resolvedOnModelChange}
+          options={resolvedModels.map((m: any) => ({
+            value: m.model ?? m.value,
+            label: m.name ?? m.label
+          }))}
+          placeholder={intl.formatMessage({ defaultMessage: 'Select model', id: 'select_model' })}
+        />
+      </div>
+    );
+  };
+
+  const renderScheduleFields = () => (
+    <div className="flex gap-2 items-end flex-wrap">
+      <div className="flex-1 min-w-[140px]">
+        <SimpleSelect value={repeatType || 'once'} onChange={setRepeatType} options={repeatOptions} />
+      </div>
+      {repeatType === 'once' && (
+        <div className="flex-1 min-w-[140px]">
+          <DatePicker
+            value={specificDate}
+            onChange={setSpecificDate}
+            minDate={new Date(Date.now() - 864e5)}
+          />
+        </div>
+      )}
+      {repeatType === 'weekly' && (
+        <div className="flex-1 min-w-[140px]">
+          <SimpleSelect
+            value={dayOfWeek.toString()}
+            onChange={(v) => setDayOfWeek(parseInt(v))}
+            options={daysOfWeekLabels.map((lbl, i) => ({ value: i.toString(), label: lbl }))}
+          />
+        </div>
+      )}
+      {repeatType === 'monthly' && (
+        <div className="flex-1 min-w-[140px]">
+          <SimpleSelect
+            value={dayOfMonth.toString()}
+            onChange={(v) => setDayOfMonth(parseInt(v))}
+            options={dayOfMonthOptions}
+          />
+        </div>
+      )}
+      {repeatType === 'annually' && (
+        <>
+          <div className="flex-1 min-w-[140px]">
+            <SimpleSelect
+              value={month.toString()}
+              onChange={(v) => setMonth(parseInt(v))}
+              options={monthLabels.map((lbl, i) => ({ value: (i + 1).toString(), label: lbl }))}
+            />
+          </div>
+          <div className="flex-1 min-w-[140px]">
+            <SimpleSelect
+              value={day.toString()}
+              onChange={(v) => setDay(parseInt(v))}
+              options={dayOfMonthOptions}
+            />
+          </div>
+        </>
+      )}
+      <div className="flex-1 min-w-[140px]">
+        <TimeInput value={specificTime} onChange={setSpecificTime} />
+      </div>
+    </div>
+  );
+
   if (compact) {
     return (
       <div className="space-y-3">
-        <div className="flex flex-wrap gap-2 items-end">
-          <div className="flex-1 min-w-[140px]">
-            <SimpleSelect value={repeatType} onChange={setRepeatType} options={repeatOptions} />
-          </div>
-          {repeatType === 'once' && (
-            <div className="flex-1 min-w-[140px]">
-              <DatePicker
-                value={specificDate}
-                onChange={setSpecificDate}
-                minDate={new Date(Date.now() - 864e5)}
-              />
-            </div>
-          )}
-          {repeatType === 'weekly' && (
-            <div className="flex-1 min-w-[140px]">
-              <SimpleSelect
-                value={dayOfWeek.toString()}
-                onChange={(v) => setDayOfWeek(parseInt(v))}
-                options={daysOfWeekLabels.map((lbl, i) => ({ value: i.toString(), label: lbl }))}
-              />
-            </div>
-          )}
-          {repeatType === 'monthly' && (
-            <div className="flex-1 min-w-[140px]">
-              <SimpleSelect
-                value={dayOfMonth.toString()}
-                onChange={(v) => setDayOfMonth(parseInt(v))}
-                options={dayOfMonthOptions}
-              />
-            </div>
-          )}
-          {repeatType === 'annually' && (
-            <>
-              <div className="flex-1 min-w-[140px]">
-                <SimpleSelect
-                  value={month.toString()}
-                  onChange={(v) => setMonth(parseInt(v))}
-                  options={monthLabels.map((lbl, i) => ({ value: (i + 1).toString(), label: lbl }))}
-                />
-              </div>
-              <div className="flex-1 min-w-[140px]">
-                <SimpleSelect
-                  value={day.toString()}
-                  onChange={(v) => setDay(parseInt(v))}
-                  options={dayOfMonthOptions}
-                />
-              </div>
-            </>
-          )}
-          <div className="flex-1 min-w-[140px]">
-            <TimeInput value={specificTime} onChange={setSpecificTime} />
-          </div>
-        </div>
-        {onModelChange && selectedModel && availableModels && (
-          <div className="mt-2">
-            <span className="font-base text-text-200 block mb-1">
-              <FormattedMessage defaultMessage="Model" id="model" />
-            </span>
-            <SimpleSelect
-              value={selectedModel}
-              onChange={onModelChange}
-              options={availableModels.map((m: any) => ({ value: m.model, label: m.name }))}
-              placeholder={intl.formatMessage({
-                defaultMessage: 'Select model',
-                id: 'select_model'
-              })}
-            />
-          </div>
-        )}
+        {scheduleEnabled && renderScheduleFields()}
+        {scheduleEnabled && renderModelField()}
       </div>
     );
   }
 
   // Full layout
   return (
-    <div className="space-y-3">
-      <div className="flex gap-2 items-end flex-wrap">
-        <div className="flex-1">
-          <SimpleSelect
-            value={repeatType || 'once'}
-            onChange={setRepeatType}
-            options={repeatOptions}
-          />
-        </div>
-        {repeatType === 'once' && (
-          <div className="flex-1">
-            <SimpleSelect value={specificDate} onChange={setSpecificDate} options={[]} />
-          </div>
-        )}
-        {repeatType === 'daily' && (
-          <div className="flex-1">
-            <TimeInput value={specificTime} onChange={setSpecificTime} />
-          </div>
-        )}
-        {repeatType === 'weekly' && (
-          <>
-            <div className="flex-1">
-              <SimpleSelect
-                value={dayOfWeek.toString()}
-                onChange={(v) => setDayOfWeek(parseInt(v))}
-                options={daysOfWeekLabels.map((lbl, i) => ({ value: i.toString(), label: lbl }))}
-              />
-            </div>
-            <div className="flex-1">
-              <TimeInput value={specificTime} onChange={setSpecificTime} />
-            </div>
-          </>
-        )}
-        {repeatType === 'monthly' && (
-          <>
-            <div className="flex-1">
-              <SimpleSelect
-                value={String(dayOfMonth)}
-                onChange={(v) => setDayOfMonth(Number(v))}
-                options={dayOfMonthOptions}
-              />
-            </div>
-            <div className="flex-1">
-              <TimeInput value={specificTime} onChange={setSpecificTime} />
-            </div>
-          </>
-        )}
-        {repeatType === 'annually' && (
-          <>
-            <div className="flex-1">
-              <SimpleSelect
-                value={String(month)}
-                onChange={(v) => setMonth(Number(v))}
-                options={monthLabels.map((lbl, i) => ({ value: (i + 1).toString(), label: lbl }))}
-              />
-            </div>
-            <div className="flex-1">
-              <SimpleSelect
-                value={String(day)}
-                onChange={(v) => setDay(Number(v))}
-                options={dayOfMonthOptions}
-              />
-            </div>
-            <div className="flex-1">
-              <TimeInput value={specificTime} onChange={setSpecificTime} />
-            </div>
-          </>
-        )}
-      </div>
-      {onModelChange && selectedModel && availableModels && (
-        <div className="mt-2">
-          <span className="font-base text-text-200 block mb-1">
-            <FormattedMessage defaultMessage="Model" id="model" />
-          </span>
-          <SimpleSelect
-            value={selectedModel}
-            onChange={onModelChange}
-            options={availableModels.map((m: any) => ({ value: m.model, label: m.name }))}
-            placeholder={intl.formatMessage({ defaultMessage: 'Select model', id: 'select_model' })}
-          />
-        </div>
-      )}
+    <div className="space-y-4">
+      {renderUrlField()}
+      {renderScheduleToggle()}
+      {scheduleEnabled && renderScheduleFields()}
+      {scheduleEnabled && renderModelField()}
     </div>
   );
 }

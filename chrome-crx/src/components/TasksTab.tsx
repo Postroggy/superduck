@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { DEFAULT_MODEL } from '../constants/models';
 import { useIntl, FormattedMessage } from "react-intl";
+import runShortcutSvg from '../assets/IconRunShortcut.svg?raw';
 import {
   IconBase,
   cn,
@@ -90,6 +91,15 @@ declare global {
   interface Window {
     showToast?: (message: string, type?: "success" | "error") => void;
   }
+}
+
+function getRunShortcutSvgMarkup(size: number, viewBox = "3 3 18 18") {
+  return runShortcutSvg
+    .replace(
+      "<svg",
+      `<svg style="width:${size}px;height:${size}px;color:currentColor;display:block;flex-shrink:0;"`
+    )
+    .replace(/viewBox="[^"]+"/, `viewBox="${viewBox}"`);
 }
 
 // =============================================================================
@@ -193,8 +203,6 @@ function PromptCard({
   onEdit: () => void;
   onDelete: () => void;
 }) {
-  const intl = useIntl();
-
   return (
     <div
       onClick={onEdit}
@@ -204,11 +212,13 @@ function PromptCard({
         <div className="flex-1 min-w-0 text-left">
           {prompt.command && (
             <div className="font-large-bold text-text-200 relative overflow-hidden">
-              <div className="whitespace-nowrap">
-                <span className="text-text-500/50 font-mono">
-                  <FormattedMessage defaultMessage="/" id="label_2" />
-                </span>
-                <span className="ml-0.5">{prompt.command}</span>
+              <div className="whitespace-nowrap flex min-h-6 min-w-0 items-center gap-1 leading-tight">
+                <span
+                  aria-hidden="true"
+                  className="inline-flex h-[14px] w-[14px] items-center justify-center shrink-0 text-text-500/50"
+                  dangerouslySetInnerHTML={{ __html: getRunShortcutSvgMarkup(14) }}
+                />
+                <span className="block min-w-0">{prompt.command}</span>
               </div>
               <div className="absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-bg-000 to-transparent pointer-events-none" />
             </div>
@@ -306,16 +316,21 @@ function EditPromptModal({
       nameInputRef.current?.focus();
     }, 100);
     if (editingPrompt && !isNew) return;
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      if (tabs[0]?.url) {
-        try {
-          const origin = new URL(tabs[0].url).origin;
-          if (origin.startsWith("http")) setUrl(origin);
-        } catch {
-          // ignore
+    try {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (chrome.runtime.lastError) return;
+        if (tabs[0]?.url) {
+          try {
+            const origin = new URL(tabs[0].url).origin;
+            if (origin.startsWith("http")) setUrl(origin);
+          } catch {
+            // ignore
+          }
         }
-      }
-    });
+      });
+    } catch {
+      // chrome.tabs may not be available in all contexts
+    }
   }, [editingPrompt, isNew]);
 
   useEffect(() => {
@@ -438,9 +453,11 @@ function EditPromptModal({
               if (error) setError("");
             }}
             prepend={
-              <span className="text-text-300">
-                <FormattedMessage defaultMessage="/" id="label_2" />
-              </span>
+              <span
+                aria-hidden="true"
+                className="inline-flex h-4 w-4 items-center justify-center shrink-0 text-text-300"
+                dangerouslySetInnerHTML={{ __html: getRunShortcutSvgMarkup(13) }}
+              />
             }
             placeholder={intl.formatMessage({ defaultMessage: "task-name", id: "zfW5u5DbnY" })}
             className="w-full text-sm"

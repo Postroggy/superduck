@@ -578,6 +578,7 @@
   "the_side_panel_reads_this_data_on_initialization": "The side panel reads this data on initialization",
   "read_page": "Read page",
   "start_from": "Start from",
+  "url_placeholder": "https://example.com",
   "tasks_illustration": "Tasks illustration",
   "claude_in_chrome_requires_a_paid_plan": "SuperDuck in Chrome requires a paid plan",
   "create_new_tab": "Create new tab",

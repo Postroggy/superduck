@@ -578,6 +578,7 @@
   "the_side_panel_reads_this_data_on_initialization": "侧边栏在初始化时读取此数据",
   "read_page": "读取页面",
   "start_from": "开始于",
+  "url_placeholder": "https://example.com",
   "tasks_illustration": "任务插图",
   "claude_in_chrome_requires_a_paid_plan": "Chrome 版 SuperDuck 需要付费计划",
   "create_new_tab": "创建新标签页",
