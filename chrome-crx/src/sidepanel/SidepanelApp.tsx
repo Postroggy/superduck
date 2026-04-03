@@ -102,6 +102,7 @@ import {
   parseModelTag,
   getBaseModel
 } from './sessionPool';
+import { getCompactionPrompts, detectConversationLanguage } from './compactionPrompts';
 import { useAnalytics, getModelsConfig, AnalyticsContext } from '../components/SchedulingFields';
 import {
   mapModelName,
@@ -1135,9 +1136,11 @@ function useQueryState() {
 
 class ConversationCompactor {
   private createMessage: (params: any) => Promise<any>;
+  private locale?: string;
 
-  constructor(createMessage: (params: any) => Promise<any>) {
+  constructor(createMessage: (params: any) => Promise<any>, locale?: string) {
     this.createMessage = createMessage;
+    this.locale = locale;
   }
 
   async compactConversation(messages: any[], maxTokens: number, continueWithoutPrompt: boolean) {
@@ -1145,24 +1148,22 @@ class ConversationCompactor {
       throw new Error('No messages to compact');
     }
 
+    // 检测或使用提供的 locale
+    const effectiveLocale = this.locale || detectConversationLanguage(messages);
+    const prompts = getCompactionPrompts(effectiveLocale);
+
     const metrics = this.calculateMetricsFromMessages(messages, maxTokens);
     const preCompactTokenCount = metrics?.totalTokens || 0;
     const prepared = this.prepareMessages(messages);
     prepared.push({
       role: 'user',
-      content: [
-        'Create a detailed conversation summary with strong emphasis on preserving:',
-        '- user instructions and constraints',
-        '- corrections and process changes',
-        '- current browser context',
-        '- what to do next'
-      ].join('\n')
+      content: prompts.userPrompt
     });
 
     const response = await this.createMessage({
       max_tokens: MAX_TOKENS,
       messages: prepared,
-      system: [{ type: 'text', text: 'You summarize browser automation conversations faithfully.' }]
+      system: [{ type: 'text', text: prompts.systemPrompt }]
     });
 
     const summary = this.extractText(response);
@@ -1172,7 +1173,7 @@ class ConversationCompactor {
     const messagesAfterCompacting = [
       {
         role: 'assistant',
-        content: 'This conversation has been summarized so we can keep going.',
+        content: prompts.compactionNotice,
         isCompactionMessage: true
       },
       summaryMessage,
@@ -1238,15 +1239,17 @@ class ConversationCompactor {
   }
 
   private formatSummary(summary: string, continueWithoutPrompt: boolean) {
+    const effectiveLocale = this.locale || 'en-US';
+    const prompts = getCompactionPrompts(effectiveLocale);
+
     const cleaned = summary
       .replace(/<analysis>[\s\S]*?<\/analysis>/gi, '')
       .replace(/<summary>([\s\S]*?)<\/summary>/gi, '$1')
       .replace(/\n\n+/g, '\n\n')
       .trim();
-    const base = `The conversation history was compressed to save context space. Here's a summary of what we discussed:\n\n${cleaned}`;
-    return continueWithoutPrompt
-      ? `${base}\n\nI'll continue from where we left off without asking additional questions.`
-      : `${base}\n\nHow would you like to proceed?`;
+
+    const template = prompts.summaryPrefix(continueWithoutPrompt);
+    return template.replace('{summary}', cleaned);
   }
 
   private preserveRecentContext(messages: any[]) {
@@ -1576,7 +1579,9 @@ function ConversationSummary({ message }: { message: any }) {
         onClick={() => setExpanded(!expanded)}
         className={`w-full px-4 py-2 transition-colors flex items-center justify-between text-left cursor-pointer ${expanded ? 'bg-bg-000' : 'bg-bg-100 hover:bg-bg-200'}`}
       >
-        <span className="font-small text-text-300">Conversation summary</span>
+        <span className="font-small text-text-300">
+          <MemoizedFormattedMessage defaultMessage="Conversation summary" id="conversation_summary" />
+        </span>
         <ChevronRight
           className={`w-4 h-4 text-text-400 transition-transform ${expanded ? 'rotate-90' : ''}`}
         />
@@ -8294,8 +8299,9 @@ export function SidepanelApp() {
 
       setIsCompacting(true);
       try {
-        const compactor = new ConversationCompactor(async (params) =>
-          createAnthropicMessage(params)
+        const compactor = new ConversationCompactor(
+          async (params) => createAnthropicMessage(params),
+          intl.locale
         );
         const result = await compactor.compactConversation(messagesToCompact, MAX_TOKENS, !manual);
         setMessageHistory(messagesToCompact);
