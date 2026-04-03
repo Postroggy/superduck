@@ -48,7 +48,9 @@ import {
   ThumbsUp,
   Workflow,
   X,
-  Zap
+  Zap,
+  ZoomIn,
+  ZoomOut
 } from 'lucide-react';
 import ReactDOM from 'react-dom';
 import {
@@ -1626,6 +1628,164 @@ function ImagePreviewModal({
         >
           <X size={16} />
         </button>
+      </div>
+    </div>
+  );
+}
+
+// --- ScreenshotLightbox — fullscreen-within-container image viewer with zoom ---
+
+const ZOOM_STEPS = [0.5, 0.75, 1, 1.5, 2, 3];
+
+function ScreenshotLightbox({
+  imageUrl,
+  onClose
+}: {
+  imageUrl: string;
+  onClose: () => void;
+}) {
+  const intl = useIntlSafe();
+  const [zoomIndex, setZoomIndex] = useState(2); // default 1x (index 2)
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
+
+  // Drag/pan state
+  const [translate, setTranslate] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStart = useRef({ x: 0, y: 0, tx: 0, ty: 0 });
+
+  const zoom = ZOOM_STEPS[zoomIndex];
+  const canZoomOut = zoomIndex > 0;
+  const canZoomIn = zoomIndex < ZOOM_STEPS.length - 1;
+
+  const zoomIn = useCallback(() => {
+    setZoomIndex((i) => Math.min(i + 1, ZOOM_STEPS.length - 1));
+  }, []);
+
+  const zoomOut = useCallback(() => {
+    setZoomIndex((i) => Math.max(i - 1, 0));
+  }, []);
+
+  // Reset pan when zoom changes
+  useEffect(() => {
+    setTranslate({ x: 0, y: 0 });
+  }, [zoomIndex]);
+
+  // Escape key
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [onClose]);
+
+  // Mouse wheel zoom — must use addEventListener for { passive: false }
+  useEffect(() => {
+    const el = overlayRef.current;
+    if (!el) return;
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      if (e.deltaY < 0) {
+        setZoomIndex((i) => Math.min(i + 1, ZOOM_STEPS.length - 1));
+      } else if (e.deltaY > 0) {
+        setZoomIndex((i) => Math.max(i - 1, 0));
+      }
+    };
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => el.removeEventListener('wheel', handleWheel);
+  }, []);
+
+  // Drag handlers
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      e.preventDefault();
+      setIsDragging(true);
+      dragStart.current = { x: e.clientX, y: e.clientY, tx: translate.x, ty: translate.y };
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    },
+    [translate]
+  );
+
+  const handlePointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (!isDragging) return;
+      const dx = e.clientX - dragStart.current.x;
+      const dy = e.clientY - dragStart.current.y;
+      setTranslate({ x: dragStart.current.tx + dx, y: dragStart.current.ty + dy });
+    },
+    [isDragging]
+  );
+
+  const handlePointerUp = useCallback(() => {
+    setIsDragging(false);
+  }, []);
+
+  return (
+    <div
+      ref={overlayRef}
+      className="absolute inset-0 z-[60] flex flex-col"
+      style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}
+    >
+      {/* Toolbar */}
+      <div className="shrink-0 flex items-center justify-end px-4 py-3">
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={zoomOut}
+            disabled={!canZoomOut}
+            className="p-1.5 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            aria-label={intl.formatMessage({ defaultMessage: 'Zoom out', id: 'screenshot_zoom_out' })}
+          >
+            <ZoomOut size={16} />
+          </button>
+          <span className="text-white/90 text-xs font-medium select-none min-w-[36px] text-center">
+            {Math.round(zoom * 100)}%
+          </span>
+          <button
+            type="button"
+            onClick={zoomIn}
+            disabled={!canZoomIn}
+            className="p-1.5 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            aria-label={intl.formatMessage({ defaultMessage: 'Zoom in', id: 'screenshot_zoom_in' })}
+          >
+            <ZoomIn size={16} />
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors ml-2"
+            aria-label={intl.formatMessage({ defaultMessage: 'Close preview', id: 'close_preview' })}
+          >
+            <X size={16} />
+          </button>
+        </div>
+      </div>
+
+      {/* Image area — fills all space below toolbar */}
+      <div
+        ref={wrapperRef}
+        className="flex-1 min-h-0 overflow-hidden flex items-center justify-center p-4 select-none"
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        style={{ touchAction: 'none' }}
+      >
+        <img
+          ref={imgRef}
+          src={imageUrl}
+          alt="Screenshot preview"
+          className="max-w-full max-h-full object-contain rounded-lg"
+          draggable={false}
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            transform: `scale(${zoom}) translate(${translate.x / zoom}px, ${translate.y / zoom}px)`,
+            transformOrigin: 'center center',
+            transition: isDragging ? 'none' : 'transform 0.2s ease',
+          }}
+        />
       </div>
     </div>
   );
@@ -4657,6 +4817,7 @@ function PlanApprovalModal({
   isReadOnly?: boolean;
   onClose?: () => void;
 }) {
+  const intl = useIntlSafe();
   const [activeButton, setActiveButton] = useState<string | null>(null);
 
   const handleApprove = useCallback(() => {
@@ -4714,7 +4875,9 @@ function PlanApprovalModal({
       <div className="flex items-center justify-between py-[10px] px-4">
         <div className="flex items-center gap-2">
           <ChecklistIcon size={20} className="text-text-100" />
-          <h3 className="font-base text-text-100">SuperDuck's plan</h3>
+          <h3 className="font-base text-text-100">
+            <MemoizedFormattedMessage id="claudes_plan" defaultMessage="SuperDuck's plan" />
+          </h3>
         </div>
         {isReadOnly && onClose && (
           <button
@@ -4748,7 +4911,12 @@ function PlanApprovalModal({
         {/* Domains section */}
         {domains.length > 0 && (
           <div>
-            <p className="font-small text-text-400 mb-2">Allow actions on these sites</p>
+            <p className="font-small text-text-400 mb-2">
+              <MemoizedFormattedMessage
+                id="allow_actions_on_these_sites"
+                defaultMessage="Allow actions on these sites"
+              />
+            </p>
             <div className="space-y-2">
               {domains.map((domain, index) => {
                 const name = getDomainDisplayName(domain);
@@ -4761,7 +4929,10 @@ function PlanApprovalModal({
                     <span className="font-base text-text-100">{name}</span>
                     {isForceAsk && (
                       <Tooltip
-                        tooltipContent="You must approve any SuperDuck action on this site"
+                        tooltipContent={intl.formatMessage({
+                          id: 'you_must_approve_any_claude_action_on_this',
+                          defaultMessage: 'You must approve any SuperDuck action on this site'
+                        })}
                         side="top"
                       >
                         <span className="flex-shrink-0 cursor-help">
@@ -4779,7 +4950,12 @@ function PlanApprovalModal({
         {/* Approach section */}
         {approach.length > 0 && (
           <div>
-            <p className="font-small text-text-400 mb-2">Approach to follow</p>
+            <p className="font-small text-text-400 mb-2">
+              <MemoizedFormattedMessage
+                id="approach_to_follow"
+                defaultMessage="Approach to follow"
+              />
+            </p>
             <div className="space-y-2">
               {approach.map((step, index) => (
                 <div key={index} className="flex items-start gap-2">
@@ -4802,19 +4978,25 @@ function PlanApprovalModal({
             isPrimary
             isActive={activeButton === 'approve'}
           >
-            <span>Approve plan</span>
+            <span>
+              <MemoizedFormattedMessage id="approve_plan" defaultMessage="Approve plan" />
+            </span>
             <ReturnKeyIcon className="text-text-500" />
           </PermissionActionButton>
           <PermissionActionButton onClick={handleReject} isActive={activeButton === 'reject'}>
-            <span>Make changes</span>
+            <span>
+              <MemoizedFormattedMessage id="make_changes" defaultMessage="Make changes" />
+            </span>
             <span className="flex items-center gap-0.5">
               <PlatformModifierKey className="text-text-500" />
               <ReturnKeyIcon className="text-text-500" />
             </span>
           </PermissionActionButton>
           <p className="font-small text-text-500 pt-1 px-1">
-            SuperDuck will only use the sites listed. You'll be asked before accessing anything
-            else.
+            <MemoizedFormattedMessage
+              id="claude_will_only_use_the_sites_listed_youll"
+              defaultMessage="SuperDuck will only use the sites listed. You'll be asked before accessing anything else."
+            />
           </p>
         </div>
       )}
@@ -5181,13 +5363,32 @@ const BrowserToolCell = React.memo(function BrowserToolCell({
   }, [toolName, input, toolResult]);
 
   // Create screenshot thumbnail element for secondaryElement
+  const setScreenshotPreviewUrl = useUIStore((state) => state.setScreenshotPreviewUrl);
+
   const screenshotThumbnail = screenshotData ? (
-    <img
-      src={screenshotData}
-      alt="Screenshot"
-      className="h-8 rounded border border-border-300"
-      style={{ objectFit: 'contain' }}
-    />
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={(e) => {
+        e.stopPropagation();
+        setScreenshotPreviewUrl(screenshotData);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.stopPropagation();
+          e.preventDefault();
+          setScreenshotPreviewUrl(screenshotData);
+        }
+      }}
+      className="cursor-pointer hover:opacity-80 transition-opacity"
+    >
+      <img
+        src={screenshotData}
+        alt="Screenshot"
+        className="h-8 rounded border border-border-300"
+        style={{ objectFit: 'contain' }}
+      />
+    </div>
   ) : undefined;
 
   return (
@@ -6814,6 +7015,7 @@ function InlinePermissionPrompt({
   onDeny: () => void;
   disableAlwaysAllow?: boolean;
 }) {
+  const intl = useIntlSafe();
   const [activeButton, setActiveButton] = useState<string | null>(null);
 
   const hostname = useMemo(() => {
@@ -6824,7 +7026,26 @@ function InlinePermissionPrompt({
     }
   }, [prompt.url]);
 
-  const actionText = getPermissionActionText(prompt.tool) || 'perform an action on';
+  const getActionTextKey = (action: PermissionActionType): string => {
+    const keyMap: Record<string, string> = {
+      [PermissionActionType.NAVIGATE]: 'action_navigate_to',
+      [PermissionActionType.READ_PAGE_CONTENT]: 'action_read_page_content_on',
+      [PermissionActionType.READ_CONSOLE_MESSAGES]: 'action_read_debugging_information_on',
+      [PermissionActionType.READ_NETWORK_REQUESTS]: 'action_read_debugging_information_on',
+      [PermissionActionType.CLICK]: 'action_click_on',
+      [PermissionActionType.TYPE]: 'action_type_text_into',
+      [PermissionActionType.UPLOAD_IMAGE]: 'action_upload_an_image_to',
+      [PermissionActionType.DOMAIN_TRANSITION]: 'action_navigate_from',
+      [PermissionActionType.EXECUTE_JAVASCRIPT]: 'action_execute_javascript_on'
+    };
+    return keyMap[action] || 'action_navigate_to';
+  };
+
+  const actionText =
+    intl.formatMessage({
+      id: getActionTextKey(prompt.tool),
+      defaultMessage: getPermissionActionText(prompt.tool) || 'perform an action on'
+    }) || 'perform an action on';
 
   const handleAllow = useCallback(
     (duration: PermissionDuration) => {
@@ -6870,9 +7091,22 @@ function InlinePermissionPrompt({
     return (
       <div className="p-4">
         <div className="text-sm text-text-300 mb-3">
-          SuperDuck wants to navigate from{' '}
-          <span className="font-medium text-text-100">{prompt.actionData?.fromDomain || '?'}</span>{' '}
-          to <span className="font-medium text-text-100">{prompt.actionData?.toDomain || '?'}</span>
+          <MemoizedFormattedMessage
+            id="superduck_wants_to_navigate_from_to"
+            defaultMessage="SuperDuck wants to navigate from {fromDomain} to {toDomain}"
+            values={{
+              fromDomain: (
+                <span className="font-medium text-text-100">
+                  {prompt.actionData?.fromDomain || '?'}
+                </span>
+              ),
+              toDomain: (
+                <span className="font-medium text-text-100">
+                  {prompt.actionData?.toDomain || '?'}
+                </span>
+              )
+            }}
+          />
         </div>
         <div className="flex flex-col gap-2">
           <PermissionActionButton
@@ -6880,11 +7114,15 @@ function InlinePermissionPrompt({
             isPrimary
             isActive={activeButton === 'allow'}
           >
-            <span>Continue</span>
+            <span>
+              <MemoizedFormattedMessage id="continue" defaultMessage="Continue" />
+            </span>
             <span className="text-xs opacity-60">Enter</span>
           </PermissionActionButton>
           <PermissionActionButton onClick={handleDeny} isActive={activeButton === 'deny'}>
-            <span>Stop</span>
+            <span>
+              <MemoizedFormattedMessage id="stop" defaultMessage="Stop" />
+            </span>
             <span className="text-xs opacity-60">Esc</span>
           </PermissionActionButton>
           {!disableAlwaysAllow && (
@@ -6894,7 +7132,9 @@ function InlinePermissionPrompt({
                 onClick={() => handleAllow(PermissionDuration.ALWAYS)}
                 isActive={activeButton === 'always'}
               >
-                <span>Always continue</span>
+                <span>
+                  <MemoizedFormattedMessage id="always_continue" defaultMessage="Always continue" />
+                </span>
                 <span className="text-xs opacity-60">
                   {navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+Enter
                 </span>
@@ -6926,12 +7166,19 @@ function InlinePermissionPrompt({
       <div className="p-4">
         <div className="text-sm text-text-300 mb-3">
           {mcp ? (
-            <>
-              <span className="font-medium text-text-100">{mcp.serverName}</span> wants to use{' '}
-              <span className="font-medium text-text-100">{mcp.toolDisplayName}</span>
-            </>
+            <MemoizedFormattedMessage
+              id="server_wants_to_use_tool"
+              defaultMessage="{serverName} wants to use {toolName}"
+              values={{
+                serverName: <span className="font-medium text-text-100">{mcp.serverName}</span>,
+                toolName: <span className="font-medium text-text-100">{mcp.toolDisplayName}</span>
+              }}
+            />
           ) : (
-            'SuperDuck wants to use an MCP tool'
+            <MemoizedFormattedMessage
+              id="superduck_wants_to_use_an_mcp_tool"
+              defaultMessage="SuperDuck wants to use an MCP tool"
+            />
           )}
         </div>
         <div className="flex flex-col gap-2">
@@ -6940,11 +7187,15 @@ function InlinePermissionPrompt({
             isPrimary
             isActive={activeButton === 'allow'}
           >
-            <span>Allow once</span>
+            <span>
+              <MemoizedFormattedMessage id="allow_once" defaultMessage="Allow once" />
+            </span>
             <span className="text-xs opacity-60">Enter</span>
           </PermissionActionButton>
           <PermissionActionButton onClick={handleDeny} isActive={activeButton === 'deny'}>
-            <span>Decline</span>
+            <span>
+              <MemoizedFormattedMessage id="decline" defaultMessage="Decline" />
+            </span>
             <span className="text-xs opacity-60">Esc</span>
           </PermissionActionButton>
           {!disableAlwaysAllow && (
@@ -6954,7 +7205,12 @@ function InlinePermissionPrompt({
                 onClick={() => handleAllow(PermissionDuration.ALWAYS)}
                 isActive={activeButton === 'always'}
               >
-                <span>Allow for all chats</span>
+                <span>
+                  <MemoizedFormattedMessage
+                    id="allow_for_all_chats"
+                    defaultMessage="Allow for all chats"
+                  />
+                </span>
                 <span className="text-xs opacity-60">
                   {navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+Enter
                 </span>
@@ -6970,7 +7226,13 @@ function InlinePermissionPrompt({
   return (
     <div className="p-4">
       <div className="text-sm text-text-300 mb-1">
-        SuperDuck wants to <span className="font-medium text-text-100">{actionText}</span>
+        <MemoizedFormattedMessage
+          id="claude_wants_to"
+          defaultMessage="SuperDuck wants to {toolAction}:"
+          values={{
+            toolAction: <span className="font-medium text-text-100">{actionText}</span>
+          }}
+        />
       </div>
       <div className="text-sm text-text-100 font-medium mb-3 truncate">{hostname}</div>
       {prompt.actionData?.screenshot && (
@@ -7002,11 +7264,15 @@ function InlinePermissionPrompt({
           isPrimary
           isActive={activeButton === 'allow'}
         >
-          <span>Allow this action</span>
+          <span>
+            <MemoizedFormattedMessage id="allow_this_action" defaultMessage="Allow this action" />
+          </span>
           <span className="text-xs opacity-60">Enter</span>
         </PermissionActionButton>
         <PermissionActionButton onClick={handleDeny} isActive={activeButton === 'deny'}>
-          <span>Decline</span>
+          <span>
+            <MemoizedFormattedMessage id="decline" defaultMessage="Decline" />
+          </span>
           <span className="text-xs opacity-60">Esc</span>
         </PermissionActionButton>
         {!disableAlwaysAllow && (
@@ -7016,7 +7282,12 @@ function InlinePermissionPrompt({
               onClick={() => handleAllow(PermissionDuration.ALWAYS)}
               isActive={activeButton === 'always'}
             >
-              <span>Always allow actions on this site</span>
+              <span>
+                <MemoizedFormattedMessage
+                  id="always_allow_actions_on_this_site"
+                  defaultMessage="Always allow actions on this site"
+                />
+              </span>
               <span className="text-xs opacity-60">
                 {navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+Enter
               </span>
@@ -7025,7 +7296,10 @@ function InlinePermissionPrompt({
         )}
       </div>
       <div className="mt-3 text-[11px] text-text-400 leading-relaxed">
-        SuperDuck will not purchase items, create accounts, or attempt to bypass CAPTCHAs.
+        <MemoizedFormattedMessage
+          id="superduck_will_not_purchase_items_create_accounts"
+          defaultMessage="SuperDuck will not purchase items, create accounts, or attempt to bypass CAPTCHAs."
+        />
       </div>
     </div>
   );
@@ -7283,6 +7557,8 @@ export function SidepanelApp() {
   const setShowCommandMenu = useUIStore((state) => state.setShowCommandMenu);
   const commandSearchTerm = useUIStore((state) => state.commandSearchTerm);
   const setCommandSearchTerm = useUIStore((state) => state.setCommandSearchTerm);
+  const screenshotPreviewUrl = useUIStore((state) => state.screenshotPreviewUrl);
+  const setScreenshotPreviewUrl = useUIStore((state) => state.setScreenshotPreviewUrl);
 
   // Track when the user explicitly dismissed the command menu (Escape / click-outside)
   // so the useEffect watching `input` doesn't immediately re-open it.
@@ -10163,13 +10439,14 @@ export function SidepanelApp() {
           ? {
               border: '1.7px dashed #F7CE46',
               borderRadius: '16px',
-              boxSizing: 'border-box'
+              boxSizing: 'border-box',
+              overflow: 'hidden'
             }
           : undefined
       }
     >
       <div className="relative flex h-full min-h-0 flex-col">
-        <header className="flex justify-between items-center px-4 pt-3 pb-3">
+        <header className="shrink-0 flex justify-between items-center px-4 pt-3 pb-3">
           <div className="flex items-center gap-3">
             <div ref={modelMenuRef} className="relative">
               <button
@@ -10361,10 +10638,12 @@ export function SidepanelApp() {
           />
         )}
 
-        <div className="flex-1 flex flex-col overflow-hidden relative">
+        <div className="flex-1 min-h-0 flex flex-col overflow-hidden relative">
           <ScrollContainer
             ref={autoScrollRef}
-            parentClassName={'flex-1 ' + (anthropicMessages.length === 0 ? '!overflow-hidden' : '')}
+            parentClassName={
+              'flex-1 min-h-0 ' + (anthropicMessages.length === 0 ? '!overflow-hidden' : '')
+            }
             innerClassName="h-full"
             pinToBottomConfig={{ disabled: false, initialValue: false }}
           >
@@ -11231,6 +11510,13 @@ export function SidepanelApp() {
                 return '';
               }
             }}
+          />
+        )}
+
+        {screenshotPreviewUrl && (
+          <ScreenshotLightbox
+            imageUrl={screenshotPreviewUrl}
+            onClose={() => setScreenshotPreviewUrl(null)}
           />
         )}
       </div>

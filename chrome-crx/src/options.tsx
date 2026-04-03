@@ -12,7 +12,7 @@ import {
   MicrophoneIcon,
   useStorageState
 } from '@/components/useStorageState';
-import { StorageKeys, getStorageValue, loginWithAnthropic } from './SavedPromptsService';
+import { StorageKeys, getStorageValue, loginWithAnthropic, FeatureProvider } from './SavedPromptsService';
 import { T as TasksTab } from '@/components/TasksTab';
 import { IntlMessageLoaderProvider } from './index-react-dom-intl';
 import { MODEL_MAPPING_KEYS } from './utils/modelMapping';
@@ -1218,11 +1218,13 @@ const DevAppWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   }, []);
   return (
     <IntlMessageLoaderProvider>
-      <AuthContext.Provider value={{ userProfile: null, isAuthenticated: false, isLoading: false }}>
-        <AnalyticsContext.Provider value={{ analytics: null, resetAnalytics: async () => {} }}>
-          {children}
-        </AnalyticsContext.Provider>
-      </AuthContext.Provider>
+      <FeatureProvider>
+        <AuthContext.Provider value={{ userProfile: null, isAuthenticated: false, isLoading: false }}>
+          <AnalyticsContext.Provider value={{ analytics: null, resetAnalytics: async () => {} }}>
+            {children}
+          </AnalyticsContext.Provider>
+        </AuthContext.Provider>
+      </FeatureProvider>
     </IntlMessageLoaderProvider>
   );
 };

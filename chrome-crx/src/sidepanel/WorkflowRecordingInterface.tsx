@@ -120,6 +120,14 @@ export function WorkflowRecordingInterface({
 
   // Handle save/done
   const handleSave = useCallback(async () => {
+    // Pause recording and mute speech since we're done
+    if (!recordingState.isPaused) {
+      onTogglePause();
+    }
+    if (isSpeechRecording) {
+      onToggleSpeech();
+    }
+
     setIsGeneratingSummary(true);
     let summary = '';
 
@@ -172,6 +180,10 @@ export function WorkflowRecordingInterface({
     onSave(stepsWithoutScreenshots, summary, workflowTitle.trim() || fallbackTitle);
   }, [
     recordingState.steps,
+    recordingState.isPaused,
+    isSpeechRecording,
+    onTogglePause,
+    onToggleSpeech,
     createMessage,
     currentInterimTranscript,
     setIsGeneratingSummary,

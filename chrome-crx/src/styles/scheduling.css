@@ -439,7 +439,8 @@
     background: none !important;
     text-align: center;
     flex-grow: 1;
-    pointer-events: none
+    pointer-events: none;
+    white-space: nowrap
 }
 
 .datetime-input-calendar .react-calendar__navigation__arrow {

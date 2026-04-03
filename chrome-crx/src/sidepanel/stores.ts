@@ -90,6 +90,7 @@ interface UIState {
   lastGroupAnimationCompletedAt: number;
   promptToSave: { prompt: string; command?: string } | null;
   promptToEdit: { prompt: string; command?: string; name?: string; id?: string } | null;
+  screenshotPreviewUrl: string | null;
   setShowCommandMenu: (show: boolean) => void;
   setShowWorkflowModeSelectionModal: (show: boolean) => void;
   setShowSkipPermissionsOverlay: (show: boolean) => void;
@@ -111,6 +112,7 @@ interface UIState {
   setPromptToEdit: (
     data: { prompt: string; command?: string; name?: string; id?: string } | null
   ) => void;
+  setScreenshotPreviewUrl: (url: string | null) => void;
   resetOnSessionClear: () => void;
 }
 
@@ -134,6 +136,7 @@ export const useUIStore = create<UIState>((set) => ({
   lastGroupAnimationCompletedAt: 0,
   promptToSave: null,
   promptToEdit: null,
+  screenshotPreviewUrl: null,
 
   setShowCommandMenu: (showCommandMenu) => set({ showCommandMenu }),
   setShowWorkflowModeSelectionModal: (showWorkflowModeSelectionModal) =>
@@ -159,6 +162,7 @@ export const useUIStore = create<UIState>((set) => ({
     set({ lastGroupAnimationCompletedAt }),
   setPromptToSave: (promptToSave) => set({ promptToSave }),
   setPromptToEdit: (promptToEdit) => set({ promptToEdit }),
+  setScreenshotPreviewUrl: (screenshotPreviewUrl) => set({ screenshotPreviewUrl }),
 
   resetOnSessionClear: () =>
     set({

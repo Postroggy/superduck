@@ -114,6 +114,7 @@ export const useWorkflowRecording = ({
   );
   const injectionPendingTabsRef = useRef<Set<number>>(new Set());
   const lastSpeechTimestampRef = useRef<number>(0);
+  const speechWasRecordingBeforePauseRef = useRef<boolean>(false);
 
   // Interim transcript
   const [currentInterimTranscript, setCurrentInterimTranscript] = useState<string>('');
@@ -957,6 +958,10 @@ export const useWorkflowRecording = ({
             injectionPendingTabsRef.current.delete(activeTabId);
           });
       }
+      // Resume speech recording only if it was active before pause
+      if (speechWasRecordingBeforePauseRef.current && !isSpeechRecording) {
+        startSpeechRecording();
+      }
     } else {
       // Pause: cancel element selectors
       injectionPendingTabsRef.current.clear();
@@ -965,8 +970,13 @@ export const useWorkflowRecording = ({
           chrome.tabs.sendMessage(tid, { type: 'CANCEL_ELEMENT_SELECTOR' }).catch(() => {});
         });
       }
+      // Remember speech recording state and stop it during pause
+      speechWasRecordingBeforePauseRef.current = isSpeechRecording;
+      if (isSpeechRecording) {
+        stopSpeechRecording();
+      }
     }
-  }, [recordingState.isPaused, activeTabs, currentTabId, tabId, handleCapturedEvent]);
+  }, [recordingState.isPaused, activeTabs, currentTabId, tabId, handleCapturedEvent, isSpeechRecording, startSpeechRecording, stopSpeechRecording]);
 
   // Toggle speech recording
   const toggleSpeechRecording = useCallback(async () => {

@@ -35,7 +35,10 @@ export const AutoScrollSpacer: React.FC<AutoScrollSpacerProps> = ({
     const lastHumanHeight = scrollRefs.lastHumanMessage.current?.clientHeight || 0;
     const chatInputHeight = scrollRefs.chatInput?.current?.clientHeight || 0;
     const extrasHeight = scrollRefs.extras.current?.clientHeight || 0;
-    const containerHeight = parentContainerRef?.current?.clientHeight || window.innerHeight;
+    const containerHeight =
+      parentContainerRef?.current?.clientHeight ||
+      autoScrollRef.current?.getScrollContainer()?.clientHeight ||
+      window.innerHeight;
     const buffer = additionalBuffer || 62;
 
     const spaceNeeded = Math.max(
@@ -52,6 +55,7 @@ export const AutoScrollSpacer: React.FC<AutoScrollSpacerProps> = ({
     scrollRefs.chatInput,
     scrollRefs.extras,
     scrollRefs.extraSpace,
+    autoScrollRef,
     parentContainerRef,
     additionalBuffer,
   ]);
