@@ -392,8 +392,10 @@ function getModelDisplayName(model: string, config: any): string {
   }
   const match = model.match(/claude-(sonnet|opus|haiku)-(\d+(?:\.\d+)?)/i);
   if (match) {
-    const family = match[1].charAt(0).toUpperCase() + match[1].slice(1);
-    return `Claude ${family} ${match[2]}`;
+    const family = match[1].toLowerCase();
+    if (family === 'opus') return `Deep (${match[2]})`;
+    if (family === 'haiku') return `Flash (${match[2]})`;
+    return `Claude Sonnet ${match[2]}`;
   }
   return model;
 }
@@ -889,7 +891,7 @@ function getMessageLimitBannerState(
   const windowLabelMap: Record<string, string> = {
     '5h': '5-hour',
     '7d': 'Weekly',
-    '7d_opus': 'Opus'
+    '7d_opus': 'Deep'
   };
   const selectedWindow = pickLimitWindow(messageLimit, currentModel);
   const selectedWindowName = selectedWindow?.name || '';
@@ -10051,8 +10053,14 @@ export function SidepanelApp() {
       // Add mapped model name if configured
       const mappedModelName = getMappedModelName(trimmedValue, modelMapping);
 
-      // Append mapped model name to label if exists
-      const finalLabel = mappedModelName ? `${baseLabel} (${mappedModelName})` : baseLabel;
+      // If model has a branded label (Deep/Flash), show "Brand (mapped)"
+      // If model has no branded label (Sonnet), show just the mapped name
+      let finalLabel: string;
+      if (mappedModelName) {
+        finalLabel = (label && label.trim()) ? `${baseLabel} (${mappedModelName})` : mappedModelName;
+      } else {
+        finalLabel = baseLabel;
+      }
 
       options.push({
         value: trimmedValue,
@@ -10060,7 +10068,7 @@ export function SidepanelApp() {
       });
     };
 
-    // 先添加内置的三个模型（Opus, Sonnet, Haiku）
+    // 先添加内置的三个模型（Deep, Sonnet, Flash）
     for (const model of BUILT_IN_MODELS) {
       pushOption(model.value, model.label);
     }
