@@ -312,7 +312,7 @@ export function ShortcutsMenu({
         label: `/${cmd.label}`,
         description: cmd.description,
         onClick: () => onSelect(cmd.command, cmd.label),
-        searchTokens: [cmd.command, cmd.label, cmd.description, ...cmd.aliases].filter(Boolean)
+        searchTokens: [cmd.command, cmd.label, ...cmd.aliases].filter(Boolean)
       })),
     [specialCommands, onSelect]
   );
@@ -339,7 +339,7 @@ export function ShortcutsMenu({
           },
           onEdit: onEditShortcut,
           shortcut,
-          searchTokens: [shortcut.command || '', shortcut.prompt || ''].filter(Boolean)
+          searchTokens: [shortcut.command || ''].filter(Boolean)
         };
       }),
     [onEditShortcut, onSelect, shortcuts, untitledLabel]
