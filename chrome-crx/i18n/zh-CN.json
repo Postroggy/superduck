@@ -891,5 +891,10 @@
   "superduck_wants_to_use_an_mcp_tool": "SuperDuck 想要使用 MCP 工具",
   "server_wants_to_use_tool": "{serverName} 想要使用 {toolName}",
   "superduck_will_not_purchase_items_create_accounts": "SuperDuck 不会购买商品、创建账户或尝试绕过验证码。",
-  "superduck_wants_to_navigate_from_to": "SuperDuck 想要从 {fromDomain} 导航到 {toDomain}"
+  "superduck_wants_to_navigate_from_to": "SuperDuck 想要从 {fromDomain} 导航到 {toDomain}",
+  "tip_type_message": "输入消息开始对话...",
+  "tip_slash_command": "输入 / 调用快捷操作",
+  "tip_workflow": "输入 / 选择录制工作流",
+  "tip_schedule": "输入 / 选择创建定时任务",
+  "tip_shortcut": "输入 / 管理和使用快捷指令"
 }

@@ -116,6 +116,7 @@ import { WorkflowModeSelectionModal } from './WorkflowModeSelectionModal';
 import { WorkflowRecordingInterface } from './WorkflowRecordingInterface';
 import { CreateShortcutModal } from './CreateShortcutModal';
 import { ShortcutsMenu } from './ShortcutsMenu';
+import { RotatingTips } from './RotatingTips';
 import { RichTextInput, type RichTextInputHandle } from './RichTextInput';
 import { useWorkflowRecording } from './useWorkflowRecording';
 import { Tooltip } from './Tooltip';
@@ -9951,6 +9952,18 @@ export function SidepanelApp() {
     }
   }, []);
 
+  // Rotating tips for empty input placeholder
+  const rotatingTips = useMemo(
+    () => [
+      intl.formatMessage({ id: 'tip_type_message', defaultMessage: '输入消息开始对话...' }),
+      intl.formatMessage({ id: 'tip_slash_command', defaultMessage: '输入 / 调用快捷操作' }),
+      intl.formatMessage({ id: 'tip_workflow', defaultMessage: '输入 / 选择录制工作流' }),
+      intl.formatMessage({ id: 'tip_schedule', defaultMessage: '输入 / 选择创建定时任务' }),
+      intl.formatMessage({ id: 'tip_shortcut', defaultMessage: '输入 / 管理和使用快捷指令' })
+    ],
+    [intl]
+  );
+
   // Handle command menu when input starts with / or 、(Chinese IME equivalent)
   useEffect(() => {
     // If the user was dismissed but then typed more, reset the dismissed flag
@@ -11050,22 +11063,17 @@ export function SidepanelApp() {
                                   </div>
                                 )}
 
+                                {/* Rotating tips - only when input is empty and no command menu */}
+                                {!input && !showCommandMenu && (
+                                  <RotatingTips tips={rotatingTips} />
+                                )}
+
                                 <RichTextInput
                                   ref={inputRef}
                                   value={input}
                                   onChange={setInput}
                                   onSubmit={submit}
-                                  placeholder={
-                                    messages.length === 0
-                                      ? intl.formatMessage({
-                                          id: 'type_a_message',
-                                          defaultMessage: 'Type a message...'
-                                        })
-                                      : intl.formatMessage({
-                                          id: 'reply_to_claude',
-                                          defaultMessage: 'Reply to SuperDuck'
-                                        })
-                                  }
+                                  placeholder=""
                                   disabled={false}
                                 />
                               </div>

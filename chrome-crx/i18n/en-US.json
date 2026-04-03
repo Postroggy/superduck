@@ -891,5 +891,10 @@
   "superduck_wants_to_use_an_mcp_tool": "SuperDuck wants to use an MCP tool",
   "server_wants_to_use_tool": "{serverName} wants to use {toolName}",
   "superduck_will_not_purchase_items_create_accounts": "SuperDuck will not purchase items, create accounts, or attempt to bypass CAPTCHAs.",
-  "superduck_wants_to_navigate_from_to": "SuperDuck wants to navigate from {fromDomain} to {toDomain}"
+  "superduck_wants_to_navigate_from_to": "SuperDuck wants to navigate from {fromDomain} to {toDomain}",
+  "tip_type_message": "Type a message to start...",
+  "tip_slash_command": "Type / to invoke shortcuts",
+  "tip_workflow": "Type / to record a workflow",
+  "tip_schedule": "Type / to schedule a task",
+  "tip_shortcut": "Type / to manage shortcuts"
 }
