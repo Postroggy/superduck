@@ -9951,7 +9951,7 @@ export function SidepanelApp() {
     }
   }, []);
 
-  // Handle command menu when input starts with /
+  // Handle command menu when input starts with / or 、(Chinese IME equivalent)
   useEffect(() => {
     // If the user was dismissed but then typed more, reset the dismissed flag
     if (commandMenuDismissedRef.current && input !== commandMenuDismissedInputRef.current) {
@@ -9959,8 +9959,9 @@ export function SidepanelApp() {
     }
 
     const hasShortcutChip = inputRef.current?.hasShortcutChips() ?? false;
+    const startsWithCommandTrigger = input.startsWith('/') || input.startsWith('、');
 
-    if (input.startsWith('/') && !hasShortcutChip) {
+    if (startsWithCommandTrigger && !hasShortcutChip) {
       const commandName = input.slice(1).split(' ')[0];
       setCommandSearchTerm(commandName);
       if (!showCommandMenu && !commandMenuDismissedRef.current) {
@@ -9972,7 +9973,7 @@ export function SidepanelApp() {
         setShowCommandMenu(false);
         setCommandSearchTerm('');
       }
-      if (!input.startsWith('/')) {
+      if (!startsWithCommandTrigger) {
         commandMenuDismissedRef.current = false;
       }
     }
