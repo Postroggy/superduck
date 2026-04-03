@@ -928,16 +928,16 @@ export function ShortcutsMenu({
                 <div
                   role="menu"
                   aria-label={manageLabel}
-                  className={`absolute top-0 z-10 overflow-hidden ${PALETTE_SURFACE} ${
-                    submenuSide === 'right' ? 'left-full ml-2' : 'right-full mr-2'
+                  className={`absolute top-0 z-10 ${
+                    submenuSide === 'right' ? 'left-full pl-2' : 'right-full pr-2'
                   }`}
                   style={{
                     top: `${submenuTopOffset}px`,
                     width: 'min(100%, max-content)',
                     maxWidth: `min(${Math.max(submenuMaxWidth, 240)}px, calc(100vw - ${VIEWPORT_PAD * 2}px))`
                   }}
-                  onMouseLeave={closeManageMenuAndResetSelection}
                 >
+                 <div className={`overflow-hidden ${PALETTE_SURFACE}`}>
                   <div
                     ref={submenuContentRef}
                     className="p-1.5 u-hidden-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden rounded-[10px]"
@@ -999,6 +999,7 @@ export function ShortcutsMenu({
                       })}
                     </div>
                   </div>
+                 </div>
                 </div>
               ) : null}
             </div>

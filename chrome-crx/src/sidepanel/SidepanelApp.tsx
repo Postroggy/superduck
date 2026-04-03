@@ -116,6 +116,7 @@ import { WorkflowModeSelectionModal } from './WorkflowModeSelectionModal';
 import { WorkflowRecordingInterface } from './WorkflowRecordingInterface';
 import { CreateShortcutModal } from './CreateShortcutModal';
 import { ShortcutsMenu } from './ShortcutsMenu';
+import { RotatingTips } from './RotatingTips';
 import { RichTextInput, type RichTextInputHandle } from './RichTextInput';
 import { useWorkflowRecording } from './useWorkflowRecording';
 import { Tooltip } from './Tooltip';
@@ -392,8 +393,10 @@ function getModelDisplayName(model: string, config: any): string {
   }
   const match = model.match(/claude-(sonnet|opus|haiku)-(\d+(?:\.\d+)?)/i);
   if (match) {
-    const family = match[1].charAt(0).toUpperCase() + match[1].slice(1);
-    return `Claude ${family} ${match[2]}`;
+    const family = match[1].toLowerCase();
+    if (family === 'opus') return `Deep (${match[2]})`;
+    if (family === 'haiku') return `Flash (${match[2]})`;
+    return `Claude Sonnet ${match[2]}`;
   }
   return model;
 }
@@ -889,7 +892,7 @@ function getMessageLimitBannerState(
   const windowLabelMap: Record<string, string> = {
     '5h': '5-hour',
     '7d': 'Weekly',
-    '7d_opus': 'Opus'
+    '7d_opus': 'Deep'
   };
   const selectedWindow = pickLimitWindow(messageLimit, currentModel);
   const selectedWindowName = selectedWindow?.name || '';
@@ -9949,7 +9952,19 @@ export function SidepanelApp() {
     }
   }, []);
 
-  // Handle command menu when input starts with /
+  // Rotating tips for empty input placeholder
+  const rotatingTips = useMemo(
+    () => [
+      intl.formatMessage({ id: 'tip_type_message', defaultMessage: '输入消息开始对话...' }),
+      intl.formatMessage({ id: 'tip_slash_command', defaultMessage: '输入 / 调用快捷操作' }),
+      intl.formatMessage({ id: 'tip_workflow', defaultMessage: '输入 / 选择录制工作流' }),
+      intl.formatMessage({ id: 'tip_schedule', defaultMessage: '输入 / 选择创建定时任务' }),
+      intl.formatMessage({ id: 'tip_shortcut', defaultMessage: '输入 / 管理和使用快捷指令' })
+    ],
+    [intl]
+  );
+
+  // Handle command menu when input starts with / or 、(Chinese IME equivalent)
   useEffect(() => {
     // If the user was dismissed but then typed more, reset the dismissed flag
     if (commandMenuDismissedRef.current && input !== commandMenuDismissedInputRef.current) {
@@ -9957,8 +9972,9 @@ export function SidepanelApp() {
     }
 
     const hasShortcutChip = inputRef.current?.hasShortcutChips() ?? false;
+    const startsWithCommandTrigger = input.startsWith('/') || input.startsWith('、');
 
-    if (input.startsWith('/') && !hasShortcutChip) {
+    if (startsWithCommandTrigger && !hasShortcutChip) {
       const commandName = input.slice(1).split(' ')[0];
       setCommandSearchTerm(commandName);
       if (!showCommandMenu && !commandMenuDismissedRef.current) {
@@ -9970,7 +9986,7 @@ export function SidepanelApp() {
         setShowCommandMenu(false);
         setCommandSearchTerm('');
       }
-      if (!input.startsWith('/')) {
+      if (!startsWithCommandTrigger) {
         commandMenuDismissedRef.current = false;
       }
     }
@@ -10051,8 +10067,14 @@ export function SidepanelApp() {
       // Add mapped model name if configured
       const mappedModelName = getMappedModelName(trimmedValue, modelMapping);
 
-      // Append mapped model name to label if exists
-      const finalLabel = mappedModelName ? `${baseLabel} (${mappedModelName})` : baseLabel;
+      // If model has a branded label (Deep/Flash), show "Brand (mapped)"
+      // If model has no branded label (Sonnet), show just the mapped name
+      let finalLabel: string;
+      if (mappedModelName) {
+        finalLabel = (label && label.trim()) ? `${baseLabel} (${mappedModelName})` : mappedModelName;
+      } else {
+        finalLabel = baseLabel;
+      }
 
       options.push({
         value: trimmedValue,
@@ -10060,7 +10082,7 @@ export function SidepanelApp() {
       });
     };
 
-    // 先添加内置的三个模型（Opus, Sonnet, Haiku）
+    // 先添加内置的三个模型（Deep, Sonnet, Flash）
     for (const model of BUILT_IN_MODELS) {
       pushOption(model.value, model.label);
     }
@@ -11041,22 +11063,17 @@ export function SidepanelApp() {
                                   </div>
                                 )}
 
+                                {/* Rotating tips - only when input is empty and no command menu */}
+                                {!input && !showCommandMenu && (
+                                  <RotatingTips tips={rotatingTips} />
+                                )}
+
                                 <RichTextInput
                                   ref={inputRef}
                                   value={input}
                                   onChange={setInput}
                                   onSubmit={submit}
-                                  placeholder={
-                                    messages.length === 0
-                                      ? intl.formatMessage({
-                                          id: 'type_a_message',
-                                          defaultMessage: 'Type a message...'
-                                        })
-                                      : intl.formatMessage({
-                                          id: 'reply_to_claude',
-                                          defaultMessage: 'Reply to SuperDuck'
-                                        })
-                                  }
+                                  placeholder=""
                                   disabled={false}
                                 />
                               </div>

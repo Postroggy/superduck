@@ -823,9 +823,9 @@
   "advanced_configuration": "高级配置",
   "model_mapping": "模型映射",
   "model_mapping_description": "如果供应商原生提供 Claude 系列模型，通常无需配置。仅在需要将请求映射到不同模型名称时填写。",
-  "opus_default_model": "Opus 默认模型",
-  "sonnet_default_model": "Sonnet 默认模型",
-  "haiku_default_model": "Haiku 默认模型",
+  "opus_default_model": "Deep 默认模型",
+  "sonnet_default_model": "Auto 默认模型",
+  "haiku_default_model": "Flash 默认模型",
   "model_placeholder": "例如: kimi-k2.5",
   "saved_reopen_sidepanel": "已保存。请重新打开侧边栏以应用。",
   "cleared_status": "已清除。",
@@ -891,5 +891,10 @@
   "superduck_wants_to_use_an_mcp_tool": "SuperDuck 想要使用 MCP 工具",
   "server_wants_to_use_tool": "{serverName} 想要使用 {toolName}",
   "superduck_will_not_purchase_items_create_accounts": "SuperDuck 不会购买商品、创建账户或尝试绕过验证码。",
-  "superduck_wants_to_navigate_from_to": "SuperDuck 想要从 {fromDomain} 导航到 {toDomain}"
+  "superduck_wants_to_navigate_from_to": "SuperDuck 想要从 {fromDomain} 导航到 {toDomain}",
+  "tip_type_message": "输入消息开始对话...",
+  "tip_slash_command": "输入 / 调用快捷操作",
+  "tip_workflow": "输入 / 选择录制工作流",
+  "tip_schedule": "输入 / 选择创建定时任务",
+  "tip_shortcut": "输入 / 管理和使用快捷指令"
 }

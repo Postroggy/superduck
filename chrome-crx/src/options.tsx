@@ -773,7 +773,7 @@ const PermissionsTab: React.FC = () => {
 
                   <div className="space-y-3">
                     <div>
-                      <label className="block text-text-200 font-base-sm mb-1"><FormattedMessage id="opus_default_model" defaultMessage="Opus Default Model" /></label>
+                      <label className="block text-text-200 font-base-sm mb-1"><FormattedMessage id="opus_default_model" defaultMessage="Deep Default Model" /></label>
                       <input
                         type="text"
                         value={opusModelInput}
@@ -784,7 +784,7 @@ const PermissionsTab: React.FC = () => {
                     </div>
 
                     <div>
-                      <label className="block text-text-200 font-base-sm mb-1"><FormattedMessage id="sonnet_default_model" defaultMessage="Sonnet Default Model" /></label>
+                      <label className="block text-text-200 font-base-sm mb-1"><FormattedMessage id="sonnet_default_model" defaultMessage="Auto Default Model" /></label>
                       <input
                         type="text"
                         value={sonnetModelInput}
@@ -795,7 +795,7 @@ const PermissionsTab: React.FC = () => {
                     </div>
 
                     <div>
-                      <label className="block text-text-200 font-base-sm mb-1"><FormattedMessage id="haiku_default_model" defaultMessage="Haiku Default Model" /></label>
+                      <label className="block text-text-200 font-base-sm mb-1"><FormattedMessage id="haiku_default_model" defaultMessage="Flash Default Model" /></label>
                       <input
                         type="text"
                         value={haikuModelInput}
