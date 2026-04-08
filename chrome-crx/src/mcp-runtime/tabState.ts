@@ -1802,7 +1802,10 @@ class TabGroupManager {
               messageType = 'SHOW_STATIC_INDICATOR';
               break;
             case 'none':
-              messageType = 'HIDE_AGENT_INDICATORS';
+              // Hide both indicator types — the tab may have had pulsing OR static
+              // indicators; both hide handlers are idempotent so double-sending is safe
+              await this.sendIndicatorMessage(tabId, 'HIDE_AGENT_INDICATORS', memberState.isMcp);
+              messageType = 'HIDE_STATIC_INDICATOR';
               break;
             default:
               continue;

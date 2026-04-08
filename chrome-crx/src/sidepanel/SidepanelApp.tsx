@@ -8982,8 +8982,12 @@ export function SidepanelApp() {
         setPendingAttachments([]);
         generationStartedAtRef.current = null;
         completionNotificationSentRef.current = false;
-        // Add completion prefix to tab group
+        // Hide agent indicators and add completion prefix to tab group
         if (typeof query.tabId === 'number') {
+          // Direct message to content script — immediate, bypasses queue/metadata lookup
+          chrome.tabs.sendMessage(query.tabId, { type: 'HIDE_AGENT_INDICATORS' }).catch(() => {});
+          // Update group metadata state for consistency
+          tabGroupManager.setTabIndicatorState(query.tabId, 'none').catch(() => {});
           tabGroupManager.addCompletionPrefix(query.tabId).catch(() => {});
         }
       }
@@ -9044,7 +9048,12 @@ export function SidepanelApp() {
       abortControllerRef.current?.abort();
       setIsAgentRunning(false);
     }
-  }, [isPurlMode, lightningResult]);
+    // Ensure indicators are hidden even if no sendPrompt finally-block fires
+    if (typeof query.tabId === 'number') {
+      chrome.tabs.sendMessage(query.tabId, { type: 'HIDE_AGENT_INDICATORS' }).catch(() => {});
+      tabGroupManager.setTabIndicatorState(query.tabId, 'none').catch(() => {});
+    }
+  }, [isPurlMode, lightningResult, query.tabId]);
 
   const effectiveClearMessages = useCallback(async () => {
     if (isPurlMode && lightningResult) {
@@ -10035,6 +10044,11 @@ export function SidepanelApp() {
   const clearConversation = useCallback(() => {
     abortControllerRef.current?.abort();
     setIsAgentRunning(false);
+    // Ensure indicators are hidden when conversation is cleared
+    if (typeof query.tabId === 'number') {
+      chrome.tabs.sendMessage(query.tabId, { type: 'HIDE_AGENT_INDICATORS' }).catch(() => {});
+      tabGroupManager.setTabIndicatorState(query.tabId, 'none').catch(() => {});
+    }
     setMessages([]);
     setAnthropicMessages([]);
     setMessageHistory([]);
