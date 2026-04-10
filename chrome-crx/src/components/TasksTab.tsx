@@ -436,6 +436,7 @@ function EditPromptModal({
       }
       modalSize="lg"
       hasCloseButton
+      placement="center-locked"
       overlayClassName="[background-color:hsl(var(--always-black)/0.5)!important]"
     >
       <div className="space-y-4 mt-4">
