@@ -110,6 +110,7 @@ import {
   MODEL_MAPPING_KEYS,
   getMappedModelName
 } from '../utils/modelMapping';
+import { compressBase64Image } from '../utils/imageCompressor';
 import { EmptyState } from './EmptyState';
 import { useTabEvent } from './hooks';
 import { ScrollContainer, type ScrollContainerHandle } from './ScrollContainer';
@@ -790,17 +791,18 @@ async function resolveShortcutMarkersInMessages(messages: any[]): Promise<any[]>
   });
 }
 
-function formatToolResult(result: any): any {
+async function formatToolResult(result: any): Promise<any> {
   if (result?.error) return result.error;
   const parts: any[] = [];
   if (result?.output) {
     parts.push({ type: 'text', text: result.output });
   }
   if (result?.base64Image) {
-    const mediaType = result.imageFormat ? `image/${result.imageFormat}` : 'image/png';
+    const rawMediaType = result.imageFormat ? `image/${result.imageFormat}` : 'image/png';
+    const { data, mediaType } = await compressBase64Image(result.base64Image, rawMediaType);
     parts.push({
       type: 'image',
-      source: { type: 'base64', media_type: mediaType, data: result.base64Image }
+      source: { type: 'base64', media_type: mediaType, data }
     });
   }
   if (parts.length > 0) return parts;
@@ -808,6 +810,30 @@ function formatToolResult(result: any): any {
     return result.content;
   }
   return '';
+}
+
+function blockContainsImage(block: any): boolean {
+  if (!block || typeof block !== 'object') return false;
+  if (block.type === 'image') return true;
+  if (block.type === 'tool_result' && Array.isArray(block.content)) {
+    return block.content.some((nestedBlock: any) => blockContainsImage(nestedBlock));
+  }
+  return false;
+}
+
+function pruneImagesFromBlock(block: any): any {
+  if (!block || typeof block !== 'object') return block;
+  if (block.type === 'image') return null;
+  if (block.type === 'tool_result' && Array.isArray(block.content)) {
+    const prunedContent = block.content
+      .map((nestedBlock: any) => pruneImagesFromBlock(nestedBlock))
+      .filter((nestedBlock: any) => nestedBlock !== null);
+    return {
+      ...block,
+      content: prunedContent.length > 0 ? prunedContent : ''
+    };
+  }
+  return block;
 }
 
 function formatResetTime(resetSeconds: number, windowName?: string | null) {
@@ -3323,7 +3349,7 @@ function manageScreenshotHistory(messages: any[], screenshotHistory: number): an
   const imageIndices: number[] = [];
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i];
-    if (Array.isArray(msg.content) && msg.content.some((c: any) => c.type === 'image')) {
+    if (Array.isArray(msg.content) && msg.content.some((block: any) => blockContainsImage(block))) {
       imageIndices.push(i);
     }
   }
@@ -3335,7 +3361,9 @@ function manageScreenshotHistory(messages: any[], screenshotHistory: number): an
     .map((msg, idx) => {
       if (keepSet.has(idx)) return msg;
       if (Array.isArray(msg.content)) {
-        const filtered = msg.content.filter((c: any) => c.type !== 'image');
+        const filtered = msg.content
+          .map((block: any) => pruneImagesFromBlock(block))
+          .filter((block: any) => block !== null);
         if (filtered.length === 0) return null;
         return { ...msg, content: filtered };
       }
@@ -8252,7 +8280,7 @@ export function SidepanelApp() {
           }
         });
 
-        const content = formatToolResult(result);
+        const content = await formatToolResult(result);
         const hasError = !!(result && typeof result === 'object' && (result as any).is_error);
         return {
           type: 'tool_result',
@@ -8611,8 +8639,10 @@ export function SidepanelApp() {
 
               // Prepare messages with cache_control on last assistant msg
               const preparedMessagesRaw = prepareMessagesForApi(workingMessages);
+              // Strip old screenshots — keep only the 2 most recent to prevent 413 payload bloat
+              const preparedMessagesPruned = manageScreenshotHistory(preparedMessagesRaw, 2);
               // Resolve [[shortcut:id:name]] markers to actual prompt content before sending
-              const preparedMessages = await resolveShortcutMarkersInMessages(preparedMessagesRaw);
+              const preparedMessages = await resolveShortcutMarkersInMessages(preparedMessagesPruned);
 
               // Add cache_control to the last tool schema
               let preparedTools = toolSchemas.length ? [...toolSchemas] : undefined;
@@ -8903,6 +8933,28 @@ export function SidepanelApp() {
 
               // 实时更新状态，让 UI 能看到 tool_result
               setAnthropicMessages(workingMessages);
+
+              // In-loop auto compaction: prevent token overflow during long agentic runs
+              const lastAssistantMsg = [...workingMessages]
+                .reverse()
+                .find((m: any) => m.role === 'assistant' && m.usage);
+              if (lastAssistantMsg?.usage) {
+                const limitState = calculateMessageLimitFromUsage(lastAssistantMsg.usage);
+                if (limitState.type === 'exceeded_limit' || limitState.type === 'approaching_limit') {
+                  try {
+                    const compactor = new ConversationCompactor(
+                      async (params: any) => createAnthropicMessage(params),
+                      intl.locale
+                    );
+                    const compactResult = await compactor.compactConversation(workingMessages, MAX_TOKENS, true);
+                    workingMessages = compactResult.messagesAfterCompacting;
+                    setAnthropicMessages(workingMessages);
+                    pushMessage('system', 'Conversation compacted to save context.');
+                  } catch (compactError) {
+                    console.warn('[Agentic Loop] In-loop compaction failed:', compactError);
+                  }
+                }
+              }
 
               continueLoop = true;
             } catch (error) {

@@ -1,3 +1,4 @@
+import { compressBase64Image } from '../utils/imageCompressor';
 import { DEFAULT_MODEL, FAST_MODEL } from '../constants/models';
 import {
   StorageKeys,
@@ -1002,7 +1003,7 @@ class ToolExecutor {
   ): Promise<any[]> {
     const results: any[] = [];
 
-    const formatContent = (result: any): any => {
+    const formatContent = async (result: any): Promise<any> => {
       if (result.error) return result.error;
       const content: any[] = [];
       if (result.output) {
@@ -1013,25 +1014,26 @@ class ToolExecutor {
         content.push({ type: 'text', text: tabContextText });
       }
       if (result.base64Image) {
-        const mediaType = result.imageFormat ? `image/${result.imageFormat}` : 'image/png';
+        const rawMediaType = result.imageFormat ? `image/${result.imageFormat}` : 'image/png';
+        const { data, mediaType } = await compressBase64Image(result.base64Image, rawMediaType);
         content.push({
           type: 'image',
           source: {
             type: 'base64',
             media_type: mediaType,
-            data: result.base64Image
+            data
           }
         });
       }
       return content.length > 0 ? content : '';
     };
 
-    const formatToolResult = (toolUseId: string, result: any): any => {
+    const formatToolResult = async (toolUseId: string, result: any): Promise<any> => {
       const isError = !!result.error;
       return {
         type: 'tool_result',
         tool_use_id: toolUseId,
-        content: formatContent(result),
+        content: await formatContent(result),
         ...(isError && { is_error: true })
       };
     };
@@ -1053,7 +1055,7 @@ class ToolExecutor {
           const handler = options?.onPermissionRequired ?? this.context.onPermissionRequired;
           if (!handler || !this.context.tabId) {
             results.push(
-              formatToolResult(toolUse.id, {
+              await formatToolResult(toolUse.id, {
                 error: 'Permission required but no handler or tab id available'
               })
             );
@@ -1062,7 +1064,7 @@ class ToolExecutor {
           const allowed = await handler(result, this.context.tabId);
           if (!allowed) {
             results.push(
-              formatToolResult(toolUse.id, {
+              await formatToolResult(toolUse.id, {
                 error:
                   'update_plan' === toolUse.name
                     ? 'Plan rejected by user. Ask the user how they would like to change the plan.'
@@ -1073,7 +1075,7 @@ class ToolExecutor {
           }
           if ('update_plan' === toolUse.name) {
             results.push(
-              formatToolResult(toolUse.id, {
+              await formatToolResult(toolUse.id, {
                 output:
                   'User has approved your plan. You can now start executing the plan. Start with updating your todo list if applicable.'
               })
@@ -1107,13 +1109,13 @@ class ToolExecutor {
           if ('type' in retryResult && 'permission_required' === retryResult.type) {
             throw new Error('Permission still required after granting');
           }
-          results.push(formatToolResult(toolUse.id, retryResult));
+          results.push(await formatToolResult(toolUse.id, retryResult));
         } else {
-          results.push(formatToolResult(toolUse.id, result));
+          results.push(await formatToolResult(toolUse.id, result));
         }
       } catch (err) {
         results.push(
-          formatToolResult(toolUse.id, {
+          await formatToolResult(toolUse.id, {
             error: err instanceof Error ? err.message : 'Unknown error'
           })
         );
