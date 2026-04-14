@@ -9342,3 +9342,49 @@ button:disabled {
         opacity: 0
     }
 }
+
+/* Liquid-glass halo for scroll-to-bottom button during streaming */
+@keyframes liquid-glass-rotate {
+    0% {
+        --liquid-angle: 0deg;
+    }
+    to {
+        --liquid-angle: 360deg;
+    }
+}
+
+@property --liquid-angle {
+    syntax: "<angle>";
+    initial-value: 0deg;
+    inherits: false;
+}
+
+.scroll-btn-halo {
+    overflow: hidden;
+}
+
+.scroll-btn-halo::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 9999px;
+    background: conic-gradient(
+        from var(--liquid-angle, 0deg) at 50% 50%,
+        hsl(210 100% 50%) 0%,
+        hsl(210 100% 55% / 0.4) 8%,
+        transparent 16%,
+        transparent 84%,
+        hsl(210 100% 55% / 0.4) 92%,
+        hsl(210 100% 50%) 100%
+    );
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1px));
+    mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1px));
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.4s ease-out;
+}
+
+.scroll-btn-halo.is-streaming::before {
+    opacity: 1;
+    animation: liquid-glass-rotate 2s linear infinite;
+}

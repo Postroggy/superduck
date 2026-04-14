@@ -5499,11 +5499,11 @@ function ScrollToBottomButton({
           id: 'scroll_to_bottom',
           defaultMessage: 'Scroll to bottom'
         })}
-        className={`size-9 inline-flex items-center justify-center border-0.5 overflow-hidden !rounded-full p-1 shadow-md hover:shadow-lg bg-bg-000/80 hover:bg-bg-000 backdrop-blur transition-opacity duration-200 ${
+        className={`scroll-btn-halo ${isStreaming ? 'is-streaming' : ''} size-9 inline-flex items-center justify-center border-0.5 !rounded-full p-1 shadow-md hover:shadow-lg bg-bg-000 hover:bg-bg-000 backdrop-blur relative transition-opacity duration-200 ${
           isStreaming ? 'border-accent-brand/30' : 'border-border-300'
         } ${showButton ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
       >
-        <ChevronDown size={16} className="text-text-300" />
+        <ChevronDown size={16} className="text-text-300 relative z-10" />
       </button>
     </div>
   );
