@@ -5470,9 +5470,9 @@ function ScrollToBottomButton({
   }, [autoscrollRef, isStreaming]);
 
   useEffect(() => {
-    if (!isStreaming) {
-      autoscrollRef.current?.setPinToBottom(false);
-    }
+    if (!isStreaming) return;
+    // When streaming starts, pin to bottom so content auto-follows
+    autoscrollRef.current?.setPinToBottom(true);
   }, [isStreaming, autoscrollRef]);
 
   useEffect(() => {
@@ -5492,7 +5492,7 @@ function ScrollToBottomButton({
   }, [sentinelElement, autoscrollRef, scrollThreshold]);
 
   return (
-    <div className="flex justify-center pb-2">
+    <div className={`flex justify-center pb-2 ${showButton ? '' : 'hidden'}`}>
       <button
         onClick={handleClick}
         aria-label={intl.formatMessage({
@@ -5501,7 +5501,7 @@ function ScrollToBottomButton({
         })}
         className={`scroll-btn-halo ${isStreaming ? 'is-streaming' : ''} size-9 inline-flex items-center justify-center border-0.5 !rounded-full p-1 shadow-md hover:shadow-lg bg-bg-000/80 hover:bg-bg-000 backdrop-blur relative transition-opacity duration-200 ${
           isStreaming ? 'border-accent-brand/30' : 'border-border-300'
-        } ${showButton ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+        }`}
       >
         <ChevronDown size={16} className="text-text-300 relative z-10" />
       </button>
@@ -10783,7 +10783,7 @@ export function SidepanelApp() {
               'flex-1 min-h-0 ' + (anthropicMessages.length === 0 ? '!overflow-hidden' : '')
             }
             innerClassName="h-full"
-            pinToBottomConfig={{ disabled: false, initialValue: false }}
+            pinToBottomConfig={{ disabled: false, initialValue: true }}
           >
             <div className="mx-auto flex size-full max-w-3xl flex-col md:px-2">
               <div className="flex-1 flex flex-col px-4 max-w-3xl mx-auto w-full pt-1">
@@ -10845,6 +10845,7 @@ export function SidepanelApp() {
                   scrollRefs={scrollRefs}
                   autoScrollRef={autoScrollRef}
                   messageCount={anthropicMessages.length}
+                  isStreaming={effectiveIsAgentRunning}
                 />
               </div>
               <div ref={scrollRefs.chatInput} className="sticky bottom-0 mx-auto w-full z-[5]">

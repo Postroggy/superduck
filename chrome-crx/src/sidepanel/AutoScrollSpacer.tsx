@@ -17,6 +17,7 @@ interface AutoScrollSpacerProps {
   parentContainerRef?: React.RefObject<HTMLDivElement | null>;
   disablePinToTop?: boolean;
   disableInitialScrollToBottom?: boolean;
+  isStreaming?: boolean;
 }
 
 export const AutoScrollSpacer: React.FC<AutoScrollSpacerProps> = ({
@@ -27,10 +28,19 @@ export const AutoScrollSpacer: React.FC<AutoScrollSpacerProps> = ({
   parentContainerRef,
   disablePinToTop = false,
   disableInitialScrollToBottom = false,
+  isStreaming = false,
 }) => {
   const prevCountRef = useRef(messageCount);
 
   const recalculateSpace = useCallback(() => {
+    // During streaming, no spacer needed — content should sit right above the input
+    if (isStreaming) {
+      if (scrollRefs.extraSpace.current) {
+        scrollRefs.extraSpace.current.style.height = '0px';
+      }
+      return;
+    }
+
     const lastAssistantHeight = scrollRefs.lastAssistantMessage.current?.clientHeight || 0;
     const lastHumanHeight = scrollRefs.lastHumanMessage.current?.clientHeight || 0;
     const chatInputHeight = scrollRefs.chatInput?.current?.clientHeight || 0;
@@ -58,17 +68,23 @@ export const AutoScrollSpacer: React.FC<AutoScrollSpacerProps> = ({
     autoScrollRef,
     parentContainerRef,
     additionalBuffer,
+    isStreaming,
   ]);
 
   useLayoutEffect(() => {
     if (prevCountRef.current !== messageCount) {
       recalculateSpace();
       if (!disablePinToTop) {
+        autoScrollRef.current?.setPinToBottom(true);
         autoScrollRef.current?.scrollToBottom("smooth");
       }
     }
     prevCountRef.current = messageCount;
   }, [messageCount, recalculateSpace, autoScrollRef, disablePinToTop]);
+
+  useLayoutEffect(() => {
+    recalculateSpace();
+  }, [isStreaming, recalculateSpace]);
 
   useLayoutEffect(() => {
     const observer = new ResizeObserver(() => {
@@ -91,6 +107,7 @@ export const AutoScrollSpacer: React.FC<AutoScrollSpacerProps> = ({
 
   useLayoutEffect(() => {
     if (!disableInitialScrollToBottom) {
+      autoScrollRef.current?.setPinToBottom(true);
       autoScrollRef.current?.scrollToBottom("instant");
     }
   }, [autoScrollRef, disableInitialScrollToBottom]);
