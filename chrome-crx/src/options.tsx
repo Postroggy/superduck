@@ -588,6 +588,10 @@ const PermissionsTab: React.FC = () => {
     StorageKeys.NOTIFICATIONS_ENABLED,
     undefined
   );
+  const [debugMode, setDebugMode] = useStorageState<boolean>(
+    StorageKeys.DEBUG_MODE,
+    false
+  );
   const [customApiUrl, setCustomApiUrl] = useStorageState<string>(CUSTOM_API_URL_KEY, '');
   const [customApiKey, setCustomApiKey] = useStorageState<string>(CUSTOM_API_KEY_KEY, '');
   const [modelMappingHaiku, setModelMappingHaiku] = useStorageState<string>(MODEL_MAPPING_KEYS.HAIKU, '');
@@ -870,6 +874,50 @@ const PermissionsTab: React.FC = () => {
                 onChange={(e) => {
                   const value = e.target.checked ? 'enabled' : 'disabled';
                   setNotificationsEnabled(value);
+                }}
+              />
+              <div className="w-11 h-6 bg-bg-300 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-accent-secondary-100 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-border-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-secondary-100" />
+            </label>
+          </div>
+        </div>
+
+        {/* Debug Mode */}
+        <div className="bg-bg-100 border border-border-300 rounded-xl px-6 pt-6 pb-6 md:px-8 md:pt-8 md:pb-8">
+          <h3 className="text-text-100 font-xl-bold">
+            <FormattedMessage defaultMessage="Debug Mode" id="debug_mode" />
+          </h3>
+          <p className="text-text-300 font-base mt-2 mb-6">
+            <FormattedMessage
+              defaultMessage="Show context window usage and token information above the chat input"
+              id="debug_mode_description"
+            />
+          </p>
+          <div className="flex items-center justify-between py-4">
+            <div className="flex-1">
+              <div className="font-large text-text-100">
+                <FormattedMessage defaultMessage="Show context debug info" id="show_context_debug_info" />
+              </div>
+              <div className="text-text-400 font-base-sm mt-1">
+                {debugMode ? (
+                  <FormattedMessage
+                    defaultMessage="Context window usage will be shown above the chat input"
+                    id="debug_mode_enabled_description"
+                  />
+                ) : (
+                  <FormattedMessage
+                    defaultMessage="Context debug info is hidden"
+                    id="debug_mode_disabled_description"
+                  />
+                )}
+              </div>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer ml-4">
+              <input
+                type="checkbox"
+                className="sr-only peer"
+                checked={!!debugMode}
+                onChange={(e) => {
+                  setDebugMode(e.target.checked);
                 }}
               />
               <div className="w-11 h-6 bg-bg-300 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-accent-secondary-100 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-border-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-secondary-100" />

@@ -903,5 +903,15 @@
   "tip_slash_command": "输入 / 调用快捷操作",
   "tip_workflow": "输入 / 选择录制工作流",
   "tip_schedule": "输入 / 选择创建定时任务",
-  "tip_shortcut": "输入 / 管理和使用快捷指令"
+  "tip_shortcut": "输入 / 管理和使用快捷指令",
+  "debug_mode": "调试模式",
+  "debug_mode_description": "在对话输入框上方显示上下文窗口使用情况和 Token 信息",
+  "show_context_debug_info": "显示上下文调试信息",
+  "debug_mode_enabled_description": "上下文窗口使用情况将显示在对话输入框上方",
+  "debug_mode_disabled_description": "上下文调试信息已隐藏",
+  "debug_tokens_used": "已用: {used}",
+  "debug_tokens_remaining": "剩余: {remaining} ({percent}%)",
+  "debug_input_tokens": "输入: {count}",
+  "debug_output_tokens": "输出: {count}",
+  "debug_cache_tokens": "缓存: {count}"
 }

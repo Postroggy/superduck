@@ -66,6 +66,7 @@ import {
   setStorageValue,
   useFeatureValue
 } from '../SavedPromptsService';
+import { useStorageState } from '@/components/useStorageState';
 import { PermissionManager, withTracing, SpanStatusCode } from '../PermissionManager';
 import type { Span } from '@opentelemetry/api';
 import {
@@ -7441,6 +7442,7 @@ export function SidepanelApp() {
     useState<NotificationPreference>(undefined);
   const [showNotificationBanner, setShowNotificationBanner] = useState(false);
   const [messageLimit, setMessageLimit] = useState<MessageLimitState>({ type: 'within_limit' });
+  const [debugMode] = useStorageState<boolean>(StorageKeys.DEBUG_MODE, false);
 
   // 固定随机启动文案的选择，避免每次渲染都重新计算
   const randomStartupKey = useMemo(
@@ -7494,6 +7496,7 @@ export function SidepanelApp() {
   }, [currentPageUrl]);
   const [hasMicrophonePermission, setHasMicrophonePermission] = useState(false);
 
+  const debugTooltipRef = useRef<HTMLSpanElement | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const modelMenuRef = useRef<HTMLDivElement | null>(null);
   const headerMenuRef = useRef<HTMLDivElement | null>(null);
@@ -10452,6 +10455,47 @@ export function SidepanelApp() {
     skipWarningDismissed
   ]);
 
+  // Compute context window debug info from the last assistant message's usage
+  const contextDebugInfo = useMemo(() => {
+    if (!debugMode) return null;
+    for (let i = anthropicMessages.length - 1; i >= 0; i--) {
+      const msg = anthropicMessages[i];
+      if (msg?.role === 'assistant' && msg?.usage) {
+        const inputTokens = msg.usage.input_tokens || 0;
+        const outputTokens = msg.usage.output_tokens || 0;
+        const cacheCreation = msg.usage.cache_creation_input_tokens || 0;
+        const cacheRead = msg.usage.cache_read_input_tokens || 0;
+        const totalUsed = inputTokens + outputTokens + cacheCreation + cacheRead;
+        const remaining = Math.max(0, TOKEN_BUDGET - totalUsed);
+        const percentUsed = Math.round((totalUsed / TOKEN_BUDGET) * 100);
+        return {
+          contextWindow: CONTEXT_WINDOW,
+          maxTokens: MAX_TOKENS,
+          tokenBudget: TOKEN_BUDGET,
+          inputTokens,
+          outputTokens,
+          cacheCreation,
+          cacheRead,
+          totalUsed,
+          remaining,
+          percentUsed
+        };
+      }
+    }
+    return {
+      contextWindow: CONTEXT_WINDOW,
+      maxTokens: MAX_TOKENS,
+      tokenBudget: TOKEN_BUDGET,
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheCreation: 0,
+      cacheRead: 0,
+      totalUsed: 0,
+      remaining: TOKEN_BUDGET,
+      percentUsed: 0
+    };
+  }, [debugMode, anthropicMessages]);
+
   const selectedModelLabel = useMemo(() => {
     const label =
       normalizedModelOptions.find((option) => option.value === effectiveSelectedModel)?.label ||
@@ -11263,6 +11307,104 @@ export function SidepanelApp() {
                                     {attachmentCount} image(s)
                                   </span>
                                 ) : null}
+                                {/* Debug mode: context usage indicator */}
+                                {debugMode && contextDebugInfo && (
+                                  <span
+                                    className="relative inline-flex items-center gap-1 h-7 rounded-lg border border-border-300 bg-bg-000 px-1.5 text-[11px] text-text-200 hover:bg-bg-200 transition-colors cursor-default"
+                                    role="status"
+                                    aria-label={`Context: ${contextDebugInfo.percentUsed}%`}
+                                    onMouseEnter={() => {
+                                      const el = debugTooltipRef.current;
+                                      if (el) { el.style.opacity = '1'; el.style.visibility = 'visible'; el.style.transform = 'translateX(-50%) scale(1)'; }
+                                    }}
+                                    onMouseLeave={() => {
+                                      const el = debugTooltipRef.current;
+                                      if (el) { el.style.opacity = '0'; el.style.visibility = 'hidden'; el.style.transform = 'translateX(-50%) scale(0.95)'; }
+                                    }}
+                                  >
+                                    <svg viewBox="0 0 16 16" width="14" height="14" className="-rotate-90 shrink-0">
+                                      <circle cx="8" cy="8" r="6" fill="none" stroke="hsl(var(--border-300))" strokeWidth="2" />
+                                      <circle
+                                        cx="8" cy="8" r="6" fill="none" strokeWidth="2" strokeLinecap="round"
+                                        strokeDasharray={`${contextDebugInfo.percentUsed * 37.7 / 100} 37.7`}
+                                        stroke={
+                                          contextDebugInfo.percentUsed >= 90
+                                            ? 'hsl(var(--danger-100))'
+                                            : contextDebugInfo.percentUsed >= 70
+                                              ? 'hsl(var(--warning-100))'
+                                              : 'hsl(var(--accent-secondary-100))'
+                                        }
+                                        className="transition-all duration-300"
+                                      />
+                                    </svg>
+                                    <span>{contextDebugInfo.percentUsed}%</span>
+                                    {/* Hover popup — ref-controlled to avoid re-renders */}
+                                    <span
+                                      ref={debugTooltipRef}
+                                      className="absolute bottom-full left-1/2 mb-2 rounded-xl pointer-events-none transition-all duration-150 z-[9999] bg-bg-000 border border-border-300 shadow-xl px-3.5 py-2.5 text-text-100"
+                                      role="tooltip"
+                                      style={{ opacity: 0, visibility: 'hidden', transform: 'translateX(-50%) scale(0.95)' }}
+                                    >
+                                      <div className="whitespace-nowrap text-left leading-relaxed text-[11px]">
+                                        <div className="flex items-center gap-2 pb-1.5 mb-1.5 border-b border-border-300/10">
+                                          <svg viewBox="0 0 16 16" width="28" height="28" className="-rotate-90 shrink-0">
+                                            <circle cx="8" cy="8" r="6.5" fill="none" stroke="hsl(var(--border-300) / 15%)" strokeWidth="1.5" />
+                                            <circle
+                                              cx="8" cy="8" r="6.5" fill="none" strokeWidth="1.5" strokeLinecap="round"
+                                              strokeDasharray={`${contextDebugInfo.percentUsed * 40.84 / 100} 40.84`}
+                                              stroke={
+                                                contextDebugInfo.percentUsed >= 90
+                                                  ? 'hsl(var(--danger-100))'
+                                                  : contextDebugInfo.percentUsed >= 70
+                                                    ? 'hsl(var(--warning-100))'
+                                                    : 'hsl(var(--accent-secondary-100))'
+                                              }
+                                            />
+                                          </svg>
+                                          <div>
+                                            <div className="text-xs font-semibold">
+                                              <span className="text-text-100">{contextDebugInfo.percentUsed}%</span>
+                                              <span className="font-normal text-text-400 ml-1">
+                                                {intl.formatMessage(
+                                                  { id: 'debug_tokens_used', defaultMessage: 'Used: {used}' },
+                                                  { used: contextDebugInfo.totalUsed.toLocaleString() }
+                                                )}
+                                              </span>
+                                            </div>
+                                            <div className="text-[10px] text-text-500 mt-px">
+                                              {intl.formatMessage(
+                                                { id: 'debug_tokens_remaining', defaultMessage: 'Remaining: {remaining} ({percent}%)' },
+                                                { remaining: contextDebugInfo.remaining.toLocaleString(), percent: 100 - contextDebugInfo.percentUsed }
+                                              )}
+                                            </div>
+                                          </div>
+                                        </div>
+                                        <div className="flex items-center gap-3 text-text-500">
+                                          <span>
+                                            {intl.formatMessage(
+                                              { id: 'debug_input_tokens', defaultMessage: 'In: {count}' },
+                                              { count: contextDebugInfo.inputTokens.toLocaleString() }
+                                            )}
+                                          </span>
+                                          <span className="text-border-300/20">|</span>
+                                          <span>
+                                            {intl.formatMessage(
+                                              { id: 'debug_output_tokens', defaultMessage: 'Out: {count}' },
+                                              { count: contextDebugInfo.outputTokens.toLocaleString() }
+                                            )}
+                                          </span>
+                                          <span className="text-border-300/20">|</span>
+                                          <span>
+                                            {intl.formatMessage(
+                                              { id: 'debug_cache_tokens', defaultMessage: 'Cache: {count}' },
+                                              { count: (contextDebugInfo.cacheCreation + contextDebugInfo.cacheRead).toLocaleString() }
+                                            )}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </span>
+                                  </span>
+                                )}
                               </div>
 
                               <div className="flex items-center gap-2">

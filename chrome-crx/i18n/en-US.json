@@ -903,5 +903,15 @@
   "tip_slash_command": "Type / to invoke shortcuts",
   "tip_workflow": "Type / to record a workflow",
   "tip_schedule": "Type / to schedule a task",
-  "tip_shortcut": "Type / to manage shortcuts"
+  "tip_shortcut": "Type / to manage shortcuts",
+  "debug_mode": "Debug Mode",
+  "debug_mode_description": "Show context window usage and token information above the chat input",
+  "show_context_debug_info": "Show context debug info",
+  "debug_mode_enabled_description": "Context window usage will be shown above the chat input",
+  "debug_mode_disabled_description": "Context debug info is hidden",
+  "debug_tokens_used": "Used: {used}",
+  "debug_tokens_remaining": "Remaining: {remaining} ({percent}%)",
+  "debug_input_tokens": "In: {count}",
+  "debug_output_tokens": "Out: {count}",
+  "debug_cache_tokens": "Cache: {count}"
 }
