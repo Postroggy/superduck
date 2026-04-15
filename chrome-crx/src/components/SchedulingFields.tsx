@@ -2,6 +2,7 @@ import React, {
   useState,
   useEffect,
   useCallback,
+  useLayoutEffect,
   useRef,
   useMemo,
   createContext,
@@ -1870,7 +1871,12 @@ function DatePicker({
             isOpen && 'border-border-200 shadow-sm'
           )}
         >
-          <span className={value ? '' : 'text-text-400'}>
+          <span
+            className={cn(
+              'min-w-0 flex-1 whitespace-nowrap overflow-hidden text-ellipsis',
+              value ? '' : 'text-text-400'
+            )}
+          >
             {value ? formatDisplayDate(value) : intl.formatMessage({ defaultMessage: 'Select date', id: 'select_date' })}
           </span>
           <CalendarIcon size={16} className="text-text-400 shrink-0" />
@@ -2277,10 +2283,15 @@ function SchedulingFields({
         )}
       >
         <span
-          className={cn(
-            'pointer-events-none inline-block h-4 w-4 rounded-full bg-bg-000 shadow-sm ring-0 transition-transform duration-200 ease-in-out mt-0.5',
-            scheduleEnabled ? 'translate-x-[18px]' : 'translate-x-0.5'
-          )}
+          // Keep the knob movement inline so it does not depend on generated utility classes.
+          className="pointer-events-none absolute rounded-full bg-bg-000 shadow-sm ring-0 transition-transform duration-200 ease-in-out"
+          style={{
+            top: '2px',
+            left: '2px',
+            width: '16px',
+            height: '16px',
+            transform: scheduleEnabled ? 'translateX(16px)' : 'translateX(0)'
+          }}
         />
       </button>
     </div>
@@ -2427,7 +2438,8 @@ function Modal({
   icon,
   modalSize = 'md',
   hasCloseButton = false,
-  overlayClassName
+  overlayClassName,
+  placement = 'center'
 }: {
   title?: string;
   subtitle?: string;
@@ -2439,20 +2451,39 @@ function Modal({
   modalSize?: 'sm' | 'md' | 'lg' | '2lg' | 'xl' | '2xl' | '3xl';
   hasCloseButton?: boolean;
   overlayClassName?: string;
+  placement?: 'center' | 'top' | 'center-locked';
 }) {
+  const modalRef = useRef<HTMLDivElement>(null);
+  const [lockedTop, setLockedTop] = useState<number | null>(null);
+
+  useLayoutEffect(() => {
+    if (!isOpen || placement !== 'center-locked' || lockedTop !== null || !modalRef.current) return;
+    const rect = modalRef.current.getBoundingClientRect();
+    setLockedTop(Math.max(16, rect.top));
+  }, [isOpen, placement, lockedTop]);
+
   if (!isOpen) return null;
   return (
     <div
       className={cn(
-        'fixed z-50 inset-0 grid items-center justify-items-center bg-always-black overflow-y-auto md:p-10 p-4',
+        'fixed z-50 inset-0 grid justify-items-center bg-always-black overflow-y-auto md:p-10 p-4',
+        placement === 'top' || (placement === 'center-locked' && lockedTop !== null)
+          ? 'items-start'
+          : 'items-center',
         '[background-color:hsl(var(--always-black)/0.5)]',
         overlayClassName
       )}
+      style={
+        placement === 'center-locked' && lockedTop !== null
+          ? { paddingTop: `${lockedTop}px` }
+          : undefined
+      }
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
+        ref={modalRef}
         className={cn(
           'flex flex-col focus:outline-none relative text-text-100 text-left shadow-xl border-0.5 border-border-300 rounded-2xl md:p-6 p-4 w-full min-w-0 bg-bg-100',
           modalSize === 'sm' && 'max-w-sm',

@@ -103,13 +103,27 @@ export function ScrollContainer({
       if (pinnedRef.current) scrollToBottom();
     });
 
+    // MutationObserver catches content changes (e.g. streaming text) that don't
+    // alter the inner div's CSS height (fixed by h-full for sticky positioning)
+    // but do increase the container's scrollHeight.
+    let lastScrollHeight = container.scrollHeight;
+    const mutationObserver = new MutationObserver(() => {
+      const newScrollHeight = container.scrollHeight;
+      if (newScrollHeight !== lastScrollHeight) {
+        lastScrollHeight = newScrollHeight;
+        if (pinnedRef.current) scrollToBottom();
+      }
+    });
+
     container.addEventListener("scroll", handleScroll);
     resizeObserver.observe(inner);
     resizeObserver.observe(container);
+    mutationObserver.observe(inner, { childList: true, subtree: true, characterData: true });
 
     return () => {
       container.removeEventListener("scroll", handleScroll);
       resizeObserver.disconnect();
+      mutationObserver.disconnect();
       if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
     };
   }, [innerRef, pinToBottomConfig.disabled, scrollToBottom]);
