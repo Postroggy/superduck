@@ -56,6 +56,7 @@ interface TreeNode {
   refId: string | null;
   depth: number;
   cursorInteractive: boolean;
+  url: string | null;
 }
 
 export interface SnapshotOptions {
@@ -64,6 +65,16 @@ export interface SnapshotOptions {
   depth?: number;
   maxChars?: number;
   startRef?: number;
+  /**
+   * CSS selector 聚焦：只渲染该元素及其后代（含 iframe contentDocument）。
+   * CDP 没有 partial AX 树接口，仍需全量抓取再用 backendNodeId 集合过滤。
+   */
+  selector?: string;
+  /**
+   * 为带 ref 的 link 节点批量解析 href（DOM.resolveNode + callFunctionOn），
+   * 默认关闭。开启后每个链接多一轮 CDP 往返，大页面上会增加延迟。
+   */
+  urls?: boolean;
 }
 
 export interface RefMapping {
@@ -205,6 +216,7 @@ function createEmptyNode(): TreeNode {
     refId: null,
     depth: 0,
     cursorInteractive: false,
+    url: null,
   };
 }
 
@@ -254,6 +266,7 @@ function buildTree(nodes: AXNode[]): { treeNodes: TreeNode[]; rootIndices: numbe
       refId: null,
       depth: 0,
       cursorInteractive: false,
+      url: null,
     });
   }
 
@@ -368,8 +381,21 @@ function aggregateStaticText(treeNodes: TreeNode[]): void {
  */
 const MAX_SCAN_NODES = 3000;
 
-async function findCursorInteractiveElements(tabId: number): Promise<Set<number>> {
-  const result = new Set<number>();
+/**
+ * 隐藏 input 元数据：key 为宿主（包含 input 的容器或 label）的 backendNodeId，
+ * value 描述 input 的类型与勾选态。用于把 AX 里只呈现为 generic/LabelText 的
+ * 自定义 radio/checkbox 提升回正确的语义角色。
+ */
+interface HiddenInputInfo {
+  type: 'radio' | 'checkbox';
+  checked: boolean;
+}
+
+async function findCursorInteractiveElements(
+  tabId: number
+): Promise<{ cursorIds: Set<number>; hiddenInputs: Map<number, HiddenInputInfo> }> {
+  const cursorIds = new Set<number>();
+  const hiddenInputs = new Map<number, HiddenInputInfo>();
   let scanDispatched = false;
 
   try {
@@ -382,8 +408,14 @@ async function findCursorInteractiveElements(tabId: number): Promise<Set<number>
       // 大页面跳过，避免 getComputedStyle N 次导致的 reflow/style 重算阻塞
       if (all.length > maxNodes) return { count: 0, skipped: true };
       var count = 0;
+      var isInputHidden = function (inp: HTMLInputElement): boolean {
+        var cs = getComputedStyle(inp);
+        if (cs.display === 'none' || cs.visibility === 'hidden') return true;
+        if (inp.offsetWidth === 0 || inp.offsetHeight === 0) return true;
+        return false;
+      };
       for (var i = 0; i < all.length; i++) {
-        var el = all[i];
+        var el = all[i] as HTMLElement;
         if (el.closest('[hidden],[aria-hidden="true"]')) continue;
         if (nativeTags[el.tagName]) continue;
         var role = el.getAttribute('role');
@@ -395,14 +427,47 @@ async function findCursorInteractiveElements(tabId: number): Promise<Set<number>
         var hasTabIndex = ti !== null && ti !== '-1';
         var ce = el.getAttribute('contenteditable');
         var isEditable = ce === '' || ce === 'true';
-        if (!hasCursor && !hasOnClick && !hasTabIndex && !isEditable) continue;
-        if (hasCursor && !hasOnClick && !hasTabIndex && !isEditable) {
+
+        // 自定义 radio/checkbox 检测：元素内含唯一一个 hidden 的 native input。
+        // 多 input 容器（典型 radiogroup / checkbox-group 包装）必须跳过提升，
+        // 否则整组会塌成一个节点，只继承第一项的 checked，其他选项的 ref 全丢。
+        // 让外层放过，文档顺序后续会处理到每个内层 label/wrapper 各自提升。
+        var ihType: 'radio' | 'checkbox' | null = null;
+        var ihChecked = false;
+        var inputs = el.querySelectorAll('input[type="radio"], input[type="checkbox"]');
+        if (inputs.length === 1) {
+          var inp = inputs[0] as HTMLInputElement;
+          if (isInputHidden(inp)) {
+            // 嵌套包装去重：如 <label><span><input/></span></label>，
+            // label 已被标记后跳过 span。文档顺序保证外层先被处理。
+            if (!el.parentElement || !el.parentElement.closest('[data-__sd-ih-t]')) {
+              ihType = inp.type === 'radio' ? 'radio' : 'checkbox';
+              ihChecked = !!inp.checked;
+            }
+          }
+        }
+
+        var isInteractive = hasCursor || hasOnClick || hasTabIndex || isEditable;
+        // 仅含 hidden input 但本身没有交互标志的元素也要标记，以便后续提升
+        if (!isInteractive && !ihType) continue;
+
+        // 仅有 cursor:pointer 且父元素也继承 pointer 时去重（原始逻辑），
+        // 但如果自己是 hidden input 宿主，不能被去重，否则提升会失败。
+        if (isInteractive && !ihType && hasCursor && !hasOnClick && !hasTabIndex && !isEditable) {
           var parent = el.parentElement;
           if (parent && getComputedStyle(parent).cursor === 'pointer') continue;
         }
+
         var rect = el.getBoundingClientRect();
         if (rect.width === 0 || rect.height === 0) continue;
+
         el.setAttribute('data-__sd-ci', String(count));
+        if (ihType) {
+          el.setAttribute('data-__sd-ih-t', ihType);
+          el.setAttribute('data-__sd-ih-c', ihChecked ? '1' : '0');
+          // 标记元素只为 hidden-input 宿主而存在时，不算 cursor 交互（avoid 污染 cursorInteractive）
+          if (!isInteractive) el.setAttribute('data-__sd-ih-only', '1');
+        }
         count++;
       }
       return { count: count, skipped: false };
@@ -420,11 +485,11 @@ async function findCursorInteractiveElements(tabId: number): Promise<Set<number>
       (sum, r) => sum + (((r.result as any)?.count as number) || 0),
       0
     ) ?? 0;
-    if (totalCount === 0) return result;
+    if (totalCount === 0) return { cursorIds, hiddenInputs };
 
     // Step 2: 通过 DOM.getDocument (pierce iframes) + DOM.querySelectorAll 获取标记元素
     const docResult = await cdpDebugger.sendCommand(tabId, 'DOM.getDocument', { depth: -1, pierce: true });
-    if (!docResult?.root) return result;
+    if (!docResult?.root) return { cursorIds, hiddenInputs };
 
     // 收集所有 document 节点（主文档 + iframe 内文档）的 nodeId
     const documentNodeIds: number[] = [];
@@ -458,22 +523,45 @@ async function findCursorInteractiveElements(tabId: number): Promise<Set<number>
     );
     for (const ids of queryResults) allNodeIds.push(...ids);
 
-    // 并发 describeNode 获取 backendNodeId
+    // 并发 describeNode 获取 backendNodeId + 属性（判断是否 hidden-input 宿主）
     const BATCH = 30;
     for (let i = 0; i < allNodeIds.length; i += BATCH) {
       const batch = allNodeIds.slice(i, i + BATCH);
       const results = await Promise.all(
         batch.map(async (nid) => {
           try {
-            const desc = await cdpDebugger.sendCommand(tabId, 'DOM.describeNode', { nodeId: nid });
-            return desc?.node?.backendNodeId ?? null;
+            const [desc, attrs] = await Promise.all([
+              cdpDebugger.sendCommand(tabId, 'DOM.describeNode', { nodeId: nid }),
+              cdpDebugger.sendCommand(tabId, 'DOM.getAttributes', { nodeId: nid }),
+            ]);
+            const backendNodeId: number | null = desc?.node?.backendNodeId ?? null;
+            const flatAttrs: string[] = attrs?.attributes ?? [];
+            // flatAttrs 是 [key, value, key, value, ...] 形式
+            let ihType: string | null = null;
+            let ihChecked: string | null = null;
+            let ihOnly = false;
+            for (let k = 0; k < flatAttrs.length; k += 2) {
+              const key = flatAttrs[k];
+              const val = flatAttrs[k + 1];
+              if (key === 'data-__sd-ih-t') ihType = val;
+              else if (key === 'data-__sd-ih-c') ihChecked = val;
+              else if (key === 'data-__sd-ih-only') ihOnly = val === '1';
+            }
+            return { backendNodeId, ihType, ihChecked, ihOnly };
           } catch {
             return null;
           }
         })
       );
-      for (const bid of results) {
-        if (bid !== null) result.add(bid);
+      for (const r of results) {
+        if (!r || r.backendNodeId === null) continue;
+        if (!r.ihOnly) cursorIds.add(r.backendNodeId);
+        if (r.ihType === 'radio' || r.ihType === 'checkbox') {
+          hiddenInputs.set(r.backendNodeId, {
+            type: r.ihType,
+            checked: r.ihChecked === '1',
+          });
+        }
       }
     }
   } catch (err) {
@@ -485,8 +573,13 @@ async function findCursorInteractiveElements(tabId: number): Promise<Set<number>
         await chrome.scripting.executeScript({
           target: { tabId, allFrames: true },
           func: () => {
-            var els = document.querySelectorAll('[data-__sd-ci]');
-            for (var i = 0; i < els.length; i++) els[i].removeAttribute('data-__sd-ci');
+            var els = document.querySelectorAll('[data-__sd-ci],[data-__sd-ih-t],[data-__sd-ih-c],[data-__sd-ih-only]');
+            for (var i = 0; i < els.length; i++) {
+              els[i].removeAttribute('data-__sd-ci');
+              els[i].removeAttribute('data-__sd-ih-t');
+              els[i].removeAttribute('data-__sd-ih-c');
+              els[i].removeAttribute('data-__sd-ih-only');
+            }
           },
         });
       } catch {
@@ -495,7 +588,7 @@ async function findCursorInteractiveElements(tabId: number): Promise<Set<number>
     }
   }
 
-  return result;
+  return { cursorIds, hiddenInputs };
 }
 
 // ============================================================================
@@ -647,6 +740,7 @@ function renderNode(
   if (node.disabled === true) attrs.push('disabled');
   if (node.required === true) attrs.push('required');
   if (node.refId) attrs.push(`ref=${node.refId}`);
+  if (node.url) attrs.push(`url=${node.url}`);
   if (attrs.length > 0) line += ` [${attrs.join(', ')}]`;
 
   // Value
@@ -736,12 +830,201 @@ export async function withSnapshotLock<T>(tabId: number, fn: () => Promise<T>): 
   }
 }
 
+/**
+ * 抓取主帧 + 同源 iframe 的完整 AX 树。
+ *
+ * CDP 的 nodeId 只在"单次 getFullAXTree 调用"内唯一：主帧和每个子帧各自从小整数开始，
+ * 因此合并前必须给子帧 nodeId 加前缀避免冲突。backendDOMNodeId 是 tab 级唯一，不受影响。
+ *
+ * 跨域 OOPIF：同源 getFullAXTree({frameId}) 调用会失败，这里 try-catch 吞掉，
+ * Phase 2 再接入 Target.setAutoAttach + child sessionId 路由。
+ *
+ * 嵌套 iframe：当前只递归一层（主帧 → 直接子帧）。更深层嵌套、以及嵌套 iframe
+ * 内的 cursor-interactive 元素（需要穿透多层 contentDocument）留到 Phase 2。
+ */
 async function fetchAXTree(tabId: number): Promise<AXNode[]> {
   await cdpDebugger.sendCommand(tabId, 'DOM.enable');
   await cdpDebugger.sendCommand(tabId, 'Accessibility.enable');
 
-  const result = await cdpDebugger.sendCommand(tabId, 'Accessibility.getFullAXTree');
-  return result?.nodes ?? [];
+  const mainResult = await cdpDebugger.sendCommand(tabId, 'Accessibility.getFullAXTree');
+  const mainNodes: AXNode[] = mainResult?.nodes ?? [];
+  if (mainNodes.length === 0) return [];
+
+  // 找出所有 Iframe AX 节点（主帧内）
+  const iframeNodes = mainNodes.filter(
+    (n) => extractAXString(n.role) === 'Iframe' && typeof n.backendDOMNodeId === 'number'
+  );
+  if (iframeNodes.length === 0) return mainNodes;
+
+  // 并发递归抓取每个 iframe 的子帧 AX 树
+  const childResults = await Promise.all(
+    iframeNodes.map(async (ifNode, idx) => {
+      const backendId = ifNode.backendDOMNodeId!;
+      let frameId: string | undefined;
+      try {
+        const desc = await cdpDebugger.sendCommand(tabId, 'DOM.describeNode', {
+          backendNodeId: backendId,
+          depth: 1,
+        });
+        frameId = desc?.node?.contentDocument?.frameId;
+      } catch {
+        // describeNode 失败 → 跳过此 iframe
+        return null;
+      }
+      if (!frameId) return null;
+
+      let childResp: any;
+      try {
+        childResp = await cdpDebugger.sendCommand(tabId, 'Accessibility.getFullAXTree', {
+          frameId,
+        });
+      } catch {
+        // 跨域 OOPIF / detached frame → 静默跳过（Phase 2 再处理）
+        return null;
+      }
+      const childNodes: AXNode[] = childResp?.nodes ?? [];
+      if (childNodes.length === 0) return null;
+
+      // 给子帧 nodeId 加前缀 + 重写 childIds，避免与主帧 / 其他子帧的 nodeId 冲突
+      const prefix = `f${idx}:`;
+      const prefixed: AXNode[] = childNodes.map((n) => ({
+        ...n,
+        nodeId: `${prefix}${n.nodeId}`,
+        childIds: n.childIds?.map((c) => `${prefix}${c}`),
+      }));
+
+      // 找子帧的 root（通常是 RootWebArea，且没有 parentId 的节点）
+      // 最稳健的做法：subtree 第一个节点就是 root（CDP 保证 BFS/DFS 顺序，root 在前）
+      // 但为避免依赖顺序，计算所有被 childIds 引用过的 id 集合，取未被引用者
+      const referenced = new Set<string>();
+      for (const n of prefixed) {
+        if (!n.childIds) continue;
+        for (const c of n.childIds) referenced.add(String(c));
+      }
+      const rootIds = prefixed
+        .filter((n) => !referenced.has(String(n.nodeId)))
+        .map((n) => n.nodeId);
+
+      return { parentIframeNode: ifNode, prefixed, rootIds };
+    })
+  );
+
+  // 合并：把子帧 root 追加到对应 Iframe 节点的 childIds；拼接所有 prefixed 节点
+  const allNodes: AXNode[] = [...mainNodes];
+  for (const r of childResults) {
+    if (!r) continue;
+    // 在合并后的 mainNodes 中定位这个 Iframe 节点并追加 childIds。
+    // 这里要修改的是我们 push 进 allNodes 的 mainNodes 中的引用，而不是
+    // iframeNodes 浅拷贝——ifNode 来自 mainNodes.filter 过滤，是同一个对象引用。
+    if (!r.parentIframeNode.childIds) r.parentIframeNode.childIds = [];
+    r.parentIframeNode.childIds.push(...r.rootIds);
+    allNodes.push(...r.prefixed);
+  }
+
+  return allNodes;
+}
+
+/**
+ * 批量解析 link 节点的 href：DOM.resolveNode → Runtime.callFunctionOn(this.href)。
+ * 仅处理带 ref 且带 backendNodeId 的 link 节点，避免浪费 CDP 往返。
+ * BATCH_LINK_URLS 控制并发，避免 CDP 队列拥塞。
+ */
+const BATCH_LINK_URLS = 20;
+
+async function resolveLinkUrls(tabId: number, treeNodes: TreeNode[]): Promise<void> {
+  const targetIndices: number[] = [];
+  for (let i = 0; i < treeNodes.length; i++) {
+    const n = treeNodes[i];
+    if (n.role === 'link' && n.hasRef && n.backendNodeId !== null) {
+      targetIndices.push(i);
+    }
+  }
+  if (targetIndices.length === 0) return;
+
+  for (let i = 0; i < targetIndices.length; i += BATCH_LINK_URLS) {
+    const batch = targetIndices.slice(i, i + BATCH_LINK_URLS);
+    await Promise.all(
+      batch.map(async (idx) => {
+        const bid = treeNodes[idx].backendNodeId;
+        if (bid === null) return;
+        try {
+          const r = await cdpDebugger.sendCommand(tabId, 'DOM.resolveNode', { backendNodeId: bid });
+          const objectId: string | undefined = r?.object?.objectId;
+          if (!objectId) return;
+          try {
+            const call = await cdpDebugger.sendCommand(tabId, 'Runtime.callFunctionOn', {
+              objectId,
+              functionDeclaration: 'function() { return this.href; }',
+              returnByValue: true,
+            });
+            const href = call?.result?.value;
+            if (typeof href === 'string' && href) {
+              treeNodes[idx].url = href;
+            }
+          } finally {
+            try {
+              await cdpDebugger.sendCommand(tabId, 'Runtime.releaseObject', { objectId });
+            } catch {
+              // ignore
+            }
+          }
+        } catch {
+          // 单个链接失败不影响其他
+        }
+      })
+    );
+  }
+}
+
+/**
+ * 解析 selector → 子树所有 backendNodeId 集合（含 iframe contentDocument）。
+ */
+async function collectSubtreeBackendIds(tabId: number, selector: string): Promise<Set<number>> {
+  // 用 DOM.querySelector 参数化传 selector，避免 Runtime.evaluate 拼字符串带来的代码注入面。
+  const doc = await cdpDebugger.sendCommand(tabId, 'DOM.getDocument', { depth: 0 });
+  const rootNodeId: number | undefined = doc?.root?.nodeId;
+  if (typeof rootNodeId !== 'number') {
+    throw new Error('Failed to get document root for selector lookup');
+  }
+  let qs: any;
+  try {
+    qs = await cdpDebugger.sendCommand(tabId, 'DOM.querySelector', {
+      nodeId: rootNodeId,
+      selector,
+    });
+  } catch (err) {
+    throw new Error(`Invalid selector '${selector}': ${(err as Error).message}`);
+  }
+  const matchedNodeId: number | undefined = qs?.nodeId;
+  if (!matchedNodeId) {
+    throw new Error(`Selector '${selector}' matched no element`);
+  }
+  const describe = await cdpDebugger.sendCommand(tabId, 'DOM.describeNode', {
+    nodeId: matchedNodeId,
+    depth: -1,
+    pierce: true,
+  });
+  const ids = new Set<number>();
+  const collect = (n: any) => {
+    if (!n) return;
+    if (typeof n.backendNodeId === 'number') ids.add(n.backendNodeId);
+    if (Array.isArray(n.children)) n.children.forEach(collect);
+    if (n.contentDocument) collect(n.contentDocument);
+  };
+  collect(describe?.node);
+  return ids;
+}
+
+// 抖动字段：每次扫描都可能不同，diff 前一律剔除避免误报。
+// - ref=ref_N: ref 计数器跨调用单调递增
+// - focused/focused=true: 鼠标移动就变
+// - value="...": 输入中的表单文本
+const SNAPSHOT_NORMALIZE_RE =
+  /,?\s*(?:ref=ref_\d+|focused(?:=(?:true|false))?|value="(?:[^"\\]|\\.)*")/g;
+const EMPTY_ATTRS_RE = / \[\]/g;
+
+export function normalizeSnapshotForDiff(text: string): string {
+  return text.replace(SNAPSHOT_NORMALIZE_RE, '').replace(EMPTY_ATTRS_RE, '');
 }
 
 export async function takeSnapshot(
@@ -758,10 +1041,15 @@ export async function takeSnapshotUnlocked(
   tabId: number,
   options: SnapshotOptions
 ): Promise<SnapshotResult> {
-  const [axNodes, cursorInteractiveIds] = await Promise.all([
+  const [axNodes, cursorScan, selectorSubtreeIds] = await Promise.all([
     fetchAXTree(tabId),
-    findCursorInteractiveElements(tabId)
+    findCursorInteractiveElements(tabId),
+    options.selector
+      ? collectSubtreeBackendIds(tabId, options.selector)
+      : Promise.resolve(null as Set<number> | null),
   ]);
+  const cursorInteractiveIds = cursorScan.cursorIds;
+  const hiddenInputs = cursorScan.hiddenInputs;
 
   if (!axNodes.length) {
     return { content: '(empty page)', refMappings: [] };
@@ -777,9 +1065,59 @@ export async function takeSnapshotUnlocked(
     }
   }
 
+  // 自定义 radio/checkbox 提升：只处理在 AX 树里呈现为 generic/LabelText 的宿主，
+  // 原生 radio/checkbox 不经过这里（scanFunc 里已经 continue 跳过 INPUT 标签）。
+  // 放在 cursorInteractive 标记之后，是因为提升后 role 变成 INTERACTIVE_ROLES，
+  // assignRefs 会自动给 ref，无需依赖 cursorInteractive 标志。
+  //
+  // 关键：提升后也标记 cursorInteractive=true。原因是下一次 resolveStaleRef 会
+  // 再抓一次 AX 树并按 (role=radio|checkbox) 匹配，但 AX 树本身仍呈现为 generic，
+  // 会匹配失败或错配到其他元素。标记后 resolveStaleRef 早停返回 false，避免误恢复。
+  if (hiddenInputs.size > 0) {
+    for (const node of treeNodes) {
+      if (node.backendNodeId === null) continue;
+      const info = hiddenInputs.get(node.backendNodeId);
+      if (!info) continue;
+      if (node.role !== 'generic' && node.role !== 'LabelText') continue;
+      node.role = info.type;
+      node.checked = info.checked ? 'true' : 'false';
+      node.cursorInteractive = true;
+    }
+  }
+
+  let effectiveRoots = rootIndices;
+  if (selectorSubtreeIds) {
+    const inSubtree = treeNodes.map(
+      (n) => n.backendNodeId != null && selectorSubtreeIds.has(n.backendNodeId)
+    );
+    const newRoots: number[] = [];
+    for (let i = 0; i < treeNodes.length; i++) {
+      if (!inSubtree[i]) {
+        treeNodes[i].role = '';
+        continue;
+      }
+      const parentIdx = treeNodes[i].parentIdx;
+      if (parentIdx == null || !inSubtree[parentIdx]) newRoots.push(i);
+      treeNodes[i].children = treeNodes[i].children.filter((c) => inSubtree[c]);
+    }
+    if (newRoots.length === 0) {
+      return { content: '(selector matched no accessibility nodes)', refMappings: [] };
+    }
+    const setDepth = (idx: number, d: number) => {
+      treeNodes[idx].depth = d;
+      for (const childIdx of treeNodes[idx].children) setDepth(childIdx, d + 1);
+    };
+    for (const root of newRoots) setDepth(root, 0);
+    effectiveRoots = newRoots;
+  }
+
   const refMappings = assignRefs(treeNodes, options.filter === 'interactive', (options.startRef ?? 0) + 1);
 
-  let content = renderTree(treeNodes, rootIndices, options);
+  if (options.urls) {
+    await resolveLinkUrls(tabId, treeNodes);
+  }
+
+  let content = renderTree(treeNodes, effectiveRoots, options);
 
   if (options.compact) {
     content = compactTree(content, options.filter === 'interactive');
