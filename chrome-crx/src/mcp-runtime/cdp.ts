@@ -579,6 +579,13 @@ class ChromeDebuggerProtocol {
 
     this.registerDebuggerEventHandlers();
 
+    // 预启用 DOM domain，为后续 DOM.resolveNode 等调用做准备
+    try {
+      await this.sendCommand(tabId, 'DOM.enable');
+    } catch (_err) {
+      // ignore
+    }
+
     if (wasConsoleTracking) {
       try {
         await this.sendCommand(tabId, 'Runtime.enable');

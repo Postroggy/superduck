@@ -8,6 +8,7 @@ import {
   screenshotToViewportCoords,
   scrollViaContentScript
 } from './cdp';
+import { resolveStaleRef, getRefBackendNodeId } from './refBridge';
 import type { ToolContext, ToolDefinition, ToolResult } from './pageTools';
 
 interface ComputerToolParams {
@@ -392,65 +393,199 @@ const computerTool = {
 };
 
 // --- scrollToElementByRef helper (te) ---
+
+function pickFrameResult<T extends { error?: string }>(
+  results: chrome.scripting.InjectionResult[]
+): T | null {
+  for (const sr of results) {
+    const r = sr.result as T;
+    if (r && !r.error?.includes('No element found')) return r;
+  }
+  return (results[0]?.result as T) ?? null;
+}
+
+async function execWithStaleRecovery<T extends { error?: string }>(
+  tabId: number,
+  ref: string,
+  func: (...args: any[]) => T,
+  args: any[]
+): Promise<T | null> {
+  const results = await chrome.scripting.executeScript({
+    target: { tabId, allFrames: true },
+    func,
+    args
+  });
+  if (!results?.length) return null;
+
+  let result = pickFrameResult<T>(results);
+
+  if (result?.error?.includes('No element found')) {
+    const recovered = await resolveStaleRef(tabId, ref);
+    if (recovered) {
+      const retryResults = await chrome.scripting.executeScript({
+        target: { tabId, allFrames: true },
+        func,
+        args
+      });
+      if (retryResults?.length) {
+        const retryResult = pickFrameResult<T>(retryResults);
+        if (retryResult) result = retryResult;
+      }
+    }
+  }
+
+  return result;
+}
+
 interface ScrollToRefResult {
   success: boolean;
   error?: string;
   coordinates?: [number, number];
 }
 
-async function scrollToElementByRef(tabId: number, ref: string): Promise<ScrollToRefResult> {
+/**
+ * 计算 backendNodeId 所在 frame 相对主框架的累积 offset。
+ * 主框架返回 (0, 0)；任一环节失败返回 null，由调用方决定是否降级。
+ *
+ * 实现要点：先一次性从 Page.getFrameTree 构建 child→parent 映射，避免逐跳 describeNode。
+ * 每跳 owner 元素本身位于父 frame，其位置由父 frame 的 DOM.getContentQuads 给出。
+ */
+async function getFrameOffsetForNode(
+  tabId: number,
+  backendNodeId: number
+): Promise<{ x: number; y: number } | null> {
   try {
-    const scriptResults = await chrome.scripting.executeScript({
-      target: { tabId },
-      func: (elementRef: string) => {
-        try {
-          let element: Element | null = null;
-          if (
-            (window as any).__claudeElementMap &&
-            (window as any).__claudeElementMap[elementRef]
-          ) {
-            element = (window as any).__claudeElementMap[elementRef].deref() || null;
-            if (!element || !document.contains(element)) {
-              delete (window as any).__claudeElementMap[elementRef];
-              element = null;
-            }
-          }
+    const [desc, frameTree] = await Promise.all([
+      cdpDebugger.sendCommand(tabId, 'DOM.describeNode', { backendNodeId }),
+      cdpDebugger.sendCommand(tabId, 'Page.getFrameTree')
+    ]);
+    let frameId: string | undefined = desc?.node?.frameId;
+    if (!frameId) return { x: 0, y: 0 };
 
-          if (!element) {
-            return {
-              success: false,
-              error: `No element found with reference: "${elementRef}". The element may have been removed from the page.`
-            };
-          }
+    const mainFrameId: string | undefined = frameTree?.frameTree?.frame?.id;
+    if (!mainFrameId) return null;
 
-          element.scrollIntoView({
-            behavior: 'instant',
-            block: 'center',
-            inline: 'center'
-          });
+    const parentOf = new Map<string, string>();
+    const walk = (node: any) => {
+      const pid = node?.frame?.id;
+      if (!pid) return;
+      for (const child of node.childFrames ?? []) {
+        if (child?.frame?.id) parentOf.set(child.frame.id, pid);
+        walk(child);
+      }
+    };
+    walk(frameTree.frameTree);
 
-          if (element instanceof HTMLElement) {
-            element.offsetHeight; // force reflow
-          }
+    let offsetX = 0;
+    let offsetY = 0;
+    // 最多 16 跳：防御异常的 frame 树（如循环引用）导致死循环，正常嵌套远不会到这个深度。
+    for (let hop = 0; hop < 16 && frameId !== mainFrameId; hop++) {
+      const owner = await cdpDebugger.sendCommand(tabId, 'DOM.getFrameOwner', { frameId });
+      const ownerBackendNodeId: number | undefined = owner?.backendNodeId;
+      if (!ownerBackendNodeId) return null;
 
-          const rect = element.getBoundingClientRect();
-          const centerX = rect.left + rect.width / 2;
-          const centerY = rect.top + rect.height / 2;
-          return { success: true, coordinates: [centerX, centerY] as [number, number] };
-        } catch (err) {
-          return {
-            success: false,
-            error: `Error getting element coordinates: ${err instanceof Error ? err.message : 'Unknown error'}`
-          };
+      const quads = await cdpDebugger.sendCommand(tabId, 'DOM.getContentQuads', {
+        backendNodeId: ownerBackendNodeId
+      });
+      const quad = quads?.quads?.[0] as number[] | undefined;
+      if (!quad) return null;
+      offsetX += quad[0];
+      offsetY += quad[1];
+
+      const parent = parentOf.get(frameId);
+      if (!parent) return null;
+      frameId = parent;
+    }
+
+    return { x: offsetX, y: offsetY };
+  } catch {
+    return null;
+  }
+}
+
+async function scrollToElementByRef(tabId: number, ref: string): Promise<ScrollToRefResult> {
+  const scrollScript = (elementRef: string) => {
+    try {
+      let element: Element | null = null;
+      if (
+        (window as any).__claudeElementMap &&
+        (window as any).__claudeElementMap[elementRef]
+      ) {
+        element = (window as any).__claudeElementMap[elementRef].deref() || null;
+        if (!element || !document.contains(element)) {
+          delete (window as any).__claudeElementMap[elementRef];
+          element = null;
         }
-      },
-      args: [ref]
-    });
+      }
 
-    if (!scriptResults || scriptResults.length === 0) {
+      if (!element) {
+        return {
+          success: false,
+          error: `No element found with reference: "${elementRef}". The element may have been removed from the page.`
+        };
+      }
+
+      element.scrollIntoView({
+        behavior: 'instant',
+        block: 'center',
+        inline: 'center'
+      });
+
+      if (element instanceof HTMLElement) {
+        element.offsetHeight; // force reflow
+      }
+
+      const rect = element.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      return { success: true, coordinates: [centerX, centerY] as [number, number] };
+    } catch (err) {
+      return {
+        success: false,
+        error: `Error getting element coordinates: ${err instanceof Error ? err.message : 'Unknown error'}`
+      };
+    }
+  };
+
+  try {
+    let result = await execWithStaleRecovery<ScrollToRefResult>(tabId, ref, scrollScript, [ref]);
+
+    if (!result) {
       return { success: false, error: 'Failed to execute script to get element coordinates' };
     }
-    return scriptResults[0].result as ScrollToRefResult;
+    if (!result.success) return result;
+
+    // 统一以 backendNodeId 为基准计算坐标，保证 iframe 与主框架一致：
+    // 1) 优先 CDP DOM.getContentQuads（对 CSS transform/clip 更稳），否则退回 content script 返回的
+    //    iframe-local 坐标；
+    // 2) 两者都是节点所在 document 的本地坐标，最后叠加该 document 相对主框架的累积 offset，
+    //    得到主框架坐标供上层 left_click 使用。
+    const backendNodeId = getRefBackendNodeId(tabId, ref);
+    let localCoords: [number, number] | null = result.coordinates ?? null;
+
+    if (backendNodeId !== null) {
+      try {
+        const quads = await cdpDebugger.sendCommand(tabId, 'DOM.getContentQuads', { backendNodeId });
+        const quad = quads?.quads?.[0] as number[] | undefined;
+        if (quad) {
+          localCoords = [
+            (quad[0] + quad[2] + quad[4] + quad[6]) / 4,
+            (quad[1] + quad[3] + quad[5] + quad[7]) / 4
+          ];
+        }
+      } catch {
+        // 使用 content script 返回的本地坐标
+      }
+
+      const offset = await getFrameOffsetForNode(tabId, backendNodeId);
+      if (offset && localCoords) {
+        return { success: true, coordinates: [localCoords[0] + offset.x, localCoords[1] + offset.y] };
+      }
+      // offset 解析失败且元素在 iframe：本地坐标不可直接用于主框架点击。仍返回本地坐标，
+      // 与改造前行为一致（只点主框架可用，iframe 情况原本就错），避免整个 ref 操作失败。
+    }
+
+    return localCoords ? { success: true, coordinates: localCoords } : result;
   } catch (error) {
     return {
       success: false,
@@ -1088,168 +1223,166 @@ const formInputTool: ToolDefinition = {
       const securityCheck = await checkUrlSecurity(tab.id!, originalUrl, 'form input action');
       if (securityCheck) return securityCheck;
 
-      const scriptResult = await chrome.scripting.executeScript({
-        target: { tabId: tab.id! },
-        func: (ref: string, value: any) => {
-          try {
-            let element: HTMLElement | null = null;
-            if ((window as any).__claudeElementMap && (window as any).__claudeElementMap[ref]) {
-              element = (window as any).__claudeElementMap[ref].deref() || null;
-              if (!element || !document.contains(element)) {
-                delete (window as any).__claudeElementMap[ref];
-                element = null;
-              }
+      const formInputScript = (ref: string, value: any) => {
+        try {
+          let element: HTMLElement | null = null;
+          if ((window as any).__claudeElementMap && (window as any).__claudeElementMap[ref]) {
+            element = (window as any).__claudeElementMap[ref].deref() || null;
+            if (!element || !document.contains(element)) {
+              delete (window as any).__claudeElementMap[ref];
+              element = null;
             }
-            if (!element)
-              return {
-                error: `No element found with reference: "${ref}". The element may have been removed from the page.`
-              };
-
-            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-            if (element instanceof HTMLSelectElement) {
-              const prevValue = element.value;
-              const options = Array.from(element.options);
-              let found = false;
-              const strValue = String(value);
-              for (let i = 0; i < options.length; i++) {
-                if (options[i].value === strValue || options[i].text === strValue) {
-                  element.selectedIndex = i;
-                  found = true;
-                  break;
-                }
-              }
-              if (!found) {
-                return {
-                  error: `Option "${strValue}" not found. Available options: ${options.map((o) => `"${o.text}" (value: "${o.value}")`).join(', ')}`
-                };
-              }
-              element.focus();
-              element.dispatchEvent(new Event('change', { bubbles: true }));
-              element.dispatchEvent(new Event('input', { bubbles: true }));
-              return {
-                output: `Selected option "${strValue}" in dropdown (previous: "${prevValue}")`
-              };
-            }
-
-            if (element instanceof HTMLInputElement && 'checkbox' === element.type) {
-              const prevChecked = element.checked;
-              if ('boolean' !== typeof value)
-                return { error: 'Checkbox requires a boolean value (true/false)' };
-              element.checked = value;
-              element.focus();
-              element.dispatchEvent(new Event('change', { bubbles: true }));
-              element.dispatchEvent(new Event('input', { bubbles: true }));
-              return {
-                output: `Checkbox ${element.checked ? 'checked' : 'unchecked'} (previous: ${prevChecked})`
-              };
-            }
-
-            if (element instanceof HTMLInputElement && 'radio' === element.type) {
-              const prevChecked = element.checked;
-              const groupName = element.name;
-              element.checked = true;
-              element.focus();
-              element.dispatchEvent(new Event('change', { bubbles: true }));
-              element.dispatchEvent(new Event('input', { bubbles: true }));
-              return {
-                success: true,
-                action: 'form_input',
-                ref,
-                element_type: 'radio',
-                previous_value: prevChecked,
-                new_value: element.checked,
-                message: 'Radio button selected' + (groupName ? ` in group "${groupName}"` : '')
-              };
-            }
-
-            if (
-              element instanceof HTMLInputElement &&
-              ('date' === element.type ||
-                'time' === element.type ||
-                'datetime-local' === element.type ||
-                'month' === element.type ||
-                'week' === element.type)
-            ) {
-              const prevValue = element.value;
-              element.value = String(value);
-              element.focus();
-              element.dispatchEvent(new Event('change', { bubbles: true }));
-              element.dispatchEvent(new Event('input', { bubbles: true }));
-              return {
-                output: `Set ${element.type} to "${element.value}" (previous: ${prevValue})`
-              };
-            }
-
-            if (element instanceof HTMLInputElement && 'range' === element.type) {
-              const prevValue = element.value;
-              const numValue = Number(value);
-              if (isNaN(numValue)) return { error: 'Range input requires a numeric value' };
-              element.value = String(numValue);
-              element.focus();
-              element.dispatchEvent(new Event('change', { bubbles: true }));
-              element.dispatchEvent(new Event('input', { bubbles: true }));
-              return {
-                success: true,
-                action: 'form_input',
-                ref,
-                element_type: 'range',
-                previous_value: prevValue,
-                new_value: element.value,
-                message: `Set range to ${element.value} (min: ${element.min}, max: ${element.max})`
-              };
-            }
-
-            if (element instanceof HTMLInputElement && 'number' === element.type) {
-              const prevValue = element.value;
-              const numValue = Number(value);
-              if (isNaN(numValue) && '' !== value)
-                return { error: 'Number input requires a numeric value' };
-              element.value = String(value);
-              element.focus();
-              element.dispatchEvent(new Event('change', { bubbles: true }));
-              element.dispatchEvent(new Event('input', { bubbles: true }));
-              return {
-                output: `Set number input to ${element.value} (previous: ${prevValue})`
-              };
-            }
-
-            if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
-              const prevValue = element.value;
-              element.value = String(value);
-              element.focus();
-              if (
-                element instanceof HTMLTextAreaElement ||
-                (element instanceof HTMLInputElement &&
-                  ['text', 'search', 'url', 'tel', 'password'].includes(element.type))
-              ) {
-                element.setSelectionRange(element.value.length, element.value.length);
-              }
-              element.dispatchEvent(new Event('change', { bubbles: true }));
-              element.dispatchEvent(new Event('input', { bubbles: true }));
-              return {
-                output: `Set ${element instanceof HTMLTextAreaElement ? 'textarea' : (element as HTMLInputElement).type || 'text'} value to "${element.value}" (previous: "${prevValue}")`
-              };
-            }
-
+          }
+          if (!element)
             return {
-              error: `Element type "${(element as any).tagName}" is not a supported form input`
+              error: `No element found with reference: "${ref}". The element may have been removed from the page.`
             };
-          } catch (err) {
+
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+          if (element instanceof HTMLSelectElement) {
+            const prevValue = element.value;
+            const options = Array.from(element.options);
+            let found = false;
+            const strValue = String(value);
+            for (let i = 0; i < options.length; i++) {
+              if (options[i].value === strValue || options[i].text === strValue) {
+                element.selectedIndex = i;
+                found = true;
+                break;
+              }
+            }
+            if (!found) {
+              return {
+                error: `Option "${strValue}" not found. Available options: ${options.map((o) => `"${o.text}" (value: "${o.value}")`).join(', ')}`
+              };
+            }
+            element.focus();
+            element.dispatchEvent(new Event('change', { bubbles: true }));
+            element.dispatchEvent(new Event('input', { bubbles: true }));
             return {
-              error: `Error setting form value: ${err instanceof Error ? err.message : 'Unknown error'}`
+              output: `Selected option "${strValue}" in dropdown (previous: "${prevValue}")`
             };
           }
-        },
-        args: [params.ref, params.value]
-      });
 
-      if (!scriptResult || 0 === scriptResult.length)
+          if (element instanceof HTMLInputElement && 'checkbox' === element.type) {
+            const prevChecked = element.checked;
+            if ('boolean' !== typeof value)
+              return { error: 'Checkbox requires a boolean value (true/false)' };
+            element.checked = value;
+            element.focus();
+            element.dispatchEvent(new Event('change', { bubbles: true }));
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+            return {
+              output: `Checkbox ${element.checked ? 'checked' : 'unchecked'} (previous: ${prevChecked})`
+            };
+          }
+
+          if (element instanceof HTMLInputElement && 'radio' === element.type) {
+            const prevChecked = element.checked;
+            const groupName = element.name;
+            element.checked = true;
+            element.focus();
+            element.dispatchEvent(new Event('change', { bubbles: true }));
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+            return {
+              success: true,
+              action: 'form_input',
+              ref,
+              element_type: 'radio',
+              previous_value: prevChecked,
+              new_value: element.checked,
+              message: 'Radio button selected' + (groupName ? ` in group "${groupName}"` : '')
+            };
+          }
+
+          if (
+            element instanceof HTMLInputElement &&
+            ('date' === element.type ||
+              'time' === element.type ||
+              'datetime-local' === element.type ||
+              'month' === element.type ||
+              'week' === element.type)
+          ) {
+            const prevValue = element.value;
+            element.value = String(value);
+            element.focus();
+            element.dispatchEvent(new Event('change', { bubbles: true }));
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+            return {
+              output: `Set ${element.type} to "${element.value}" (previous: ${prevValue})`
+            };
+          }
+
+          if (element instanceof HTMLInputElement && 'range' === element.type) {
+            const prevValue = element.value;
+            const numValue = Number(value);
+            if (isNaN(numValue)) return { error: 'Range input requires a numeric value' };
+            element.value = String(numValue);
+            element.focus();
+            element.dispatchEvent(new Event('change', { bubbles: true }));
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+            return {
+              success: true,
+              action: 'form_input',
+              ref,
+              element_type: 'range',
+              previous_value: prevValue,
+              new_value: element.value,
+              message: `Set range to ${element.value} (min: ${element.min}, max: ${element.max})`
+            };
+          }
+
+          if (element instanceof HTMLInputElement && 'number' === element.type) {
+            const prevValue = element.value;
+            const numValue = Number(value);
+            if (isNaN(numValue) && '' !== value)
+              return { error: 'Number input requires a numeric value' };
+            element.value = String(value);
+            element.focus();
+            element.dispatchEvent(new Event('change', { bubbles: true }));
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+            return {
+              output: `Set number input to ${element.value} (previous: ${prevValue})`
+            };
+          }
+
+          if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
+            const prevValue = element.value;
+            element.value = String(value);
+            element.focus();
+            if (
+              element instanceof HTMLTextAreaElement ||
+              (element instanceof HTMLInputElement &&
+                ['text', 'search', 'url', 'tel', 'password'].includes(element.type))
+            ) {
+              element.setSelectionRange(element.value.length, element.value.length);
+            }
+            element.dispatchEvent(new Event('change', { bubbles: true }));
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+            return {
+              output: `Set ${element instanceof HTMLTextAreaElement ? 'textarea' : (element as HTMLInputElement).type || 'text'} value to "${element.value}" (previous: "${prevValue}")`
+            };
+          }
+
+          return {
+            error: `Element type "${(element as any).tagName}" is not a supported form input`
+          };
+        } catch (err) {
+          return {
+            error: `Error setting form value: ${err instanceof Error ? err.message : 'Unknown error'}`
+          };
+        }
+      };
+
+      const formResult = await execWithStaleRecovery<any>(tab.id!, params.ref, formInputScript, [params.ref, params.value]);
+
+      if (!formResult)
         throw new Error('Failed to execute form input');
 
       const validTabs = await tabGroupManager.getValidTabsWithMetadata(context.tabId);
       return {
-        ...(scriptResult[0].result as any),
+        ...formResult,
         tabContext: {
           currentTabId: context.tabId,
           executedOnTabId: effectiveTabId,

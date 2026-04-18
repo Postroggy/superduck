@@ -1,6 +1,8 @@
 import { PermissionTools, checkUrlSecurity } from './shared';
 import { domainCategoryCache, tabGroupManager } from './tabState';
 import { cdpDebugger } from './cdp';
+import { takeSnapshotUnlocked, SnapshotMaxCharsError, withSnapshotLock } from './axSnapshot';
+import { registerRefsInPage, pruneStaleRefs } from './refBridge';
 
 // =============================================================================
 
@@ -1004,6 +1006,71 @@ const readPageTool: ToolDefinition = {
     await tabGroupManager.hideIndicatorForToolUse(effectiveTabId);
 
     try {
+      // CDP AX Tree 优先路径：不指定 ref_id 时尝试使用 CDP 获取原生无障碍树
+      if (!refId) {
+        try {
+          const isAttached = await cdpDebugger.isDebuggerAttached(effectiveTabId);
+          if (isAttached) {
+            // 持锁串行执行 pruneStaleRefs → 读 counter → takeSnapshot → registerRefsInPage，
+            // 防止并发 read_page 读到相同 counter 导致 ref_N 相互覆盖。
+            const lockedResult = await withSnapshotLock(effectiveTabId, async () => {
+              await pruneStaleRefs(effectiveTabId);
+
+              // 读取所有框架的 ref 计数器，取最大值，确保新 ref 不覆盖已有 ref；
+              // 同时读 viewport（仅主框架）。两个 executeScript 并发，无依赖。
+              const [counterResult, vpResult] = await Promise.all([
+                chrome.scripting.executeScript({
+                  target: { tabId: effectiveTabId, allFrames: true },
+                  func: () => (window as any).__claudeRefCounter || 0,
+                }),
+                chrome.scripting.executeScript({
+                  target: { tabId: effectiveTabId },
+                  func: () => ({ width: window.innerWidth, height: window.innerHeight }),
+                })
+              ]);
+              const currentRefCounter = Math.max(
+                0,
+                ...counterResult.map(r => (r.result as number) || 0)
+              );
+
+              const snapshotResult = await takeSnapshotUnlocked(effectiveTabId, {
+                filter: (filter as 'all' | 'interactive') || 'all',
+                depth: depth ?? 15,
+                maxChars: maxChars ?? 50000,
+                compact: filter === 'interactive',
+                startRef: currentRefCounter,
+              });
+
+              if (snapshotResult.refMappings.length > 0) {
+                await registerRefsInPage(effectiveTabId, snapshotResult.refMappings);
+              }
+
+              const viewport = vpResult?.[0]?.result ?? { width: 0, height: 0 };
+              return { snapshotResult, viewport };
+            });
+
+            const viewportInfo = `Viewport: ${lockedResult.viewport.width}x${lockedResult.viewport.height}`;
+            const validTabs = await tabGroupManager.getValidTabsWithMetadata(context.tabId);
+            return {
+              output: `${lockedResult.snapshotResult.content}\n\n${viewportInfo}`,
+              tabContext: {
+                currentTabId: context.tabId,
+                executedOnTabId: effectiveTabId,
+                availableTabs: validTabs,
+                tabCount: validTabs.length
+              }
+            };
+          }
+        } catch (cdpErr) {
+          // maxChars 超限属于业务错误，需透传
+          if (cdpErr instanceof SnapshotMaxCharsError) {
+            throw cdpErr;
+          }
+          console.warn('[read_page] CDP AX tree failed, falling back to content script:', cdpErr);
+        }
+      }
+
+      // 降级路径：使用 content script 方式（ref_id 查询也走此路径）
       const scriptResult = await chrome.scripting.executeScript({
         target: { tabId: tab.id! },
         func: (
@@ -1023,7 +1090,6 @@ const readPageTool: ToolDefinition = {
         },
         args: [filter || null, depth ?? null, maxChars ?? 50000, refId ?? null]
       });
-
       if (!scriptResult || 0 === scriptResult.length)
         throw new Error('No results returned from page script');
       if ('error' in scriptResult[0] && scriptResult[0].error)
@@ -1034,7 +1100,6 @@ const readPageTool: ToolDefinition = {
 
       const result = scriptResult[0].result as any;
       if (result.error) return { error: result.error };
-      if (!scriptResult[0].result) throw new Error('Page script returned empty result');
 
       const viewportInfo = `Viewport: ${result.viewport.width}x${result.viewport.height}`;
       const validTabs = await tabGroupManager.getValidTabsWithMetadata(context.tabId);
