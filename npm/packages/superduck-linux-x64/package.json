@@ -1,0 +1,15 @@
+{
+  "name": "superduck-linux-x64",
+  "version": "0.2.1",
+  "description": "Linux x64 native binary for superduck",
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "files": [
+    "bin/"
+  ],
+  "license": "MIT"
+}

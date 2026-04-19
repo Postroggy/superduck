@@ -1,9 +1,9 @@
-.PHONY: all clean native-host mcp-server install test
+.PHONY: all clean native-host mcp-server superduck install test release-binaries
 
 # Build output directory
 BUILD_DIR := build
 
-all: native-host mcp-server
+all: native-host mcp-server superduck
 
 native-host:
 	@echo "Building native-host..."
@@ -14,6 +14,26 @@ mcp-server:
 	@echo "Building mcp-server..."
 	@mkdir -p $(BUILD_DIR)
 	go build -o $(BUILD_DIR)/chrome-mcp-server ./cmd/mcp-server
+
+superduck:
+	@echo "Building superduck CLI..."
+	@mkdir -p $(BUILD_DIR)
+	go build -o $(BUILD_DIR)/superduck ./cmd/superduck
+
+# Cross-compile both binaries (superduck CLI + chrome-native-host companion)
+# into the npm sub-packages. Users install via `npm install -g superduck-cli`
+# and `superduck init` reads chrome-native-host from the same bin dir.
+release-binaries:
+	@echo "Cross-building superduck + chrome-native-host for all platforms..."
+	GOOS=darwin  GOARCH=arm64 go build -o ../npm/packages/superduck-darwin-arm64/bin/superduck ./cmd/superduck
+	GOOS=darwin  GOARCH=arm64 go build -o ../npm/packages/superduck-darwin-arm64/bin/chrome-native-host ./cmd/native-host
+	GOOS=darwin  GOARCH=amd64 go build -o ../npm/packages/superduck-darwin-x64/bin/superduck ./cmd/superduck
+	GOOS=darwin  GOARCH=amd64 go build -o ../npm/packages/superduck-darwin-x64/bin/chrome-native-host ./cmd/native-host
+	GOOS=linux   GOARCH=arm64 go build -o ../npm/packages/superduck-linux-arm64/bin/superduck ./cmd/superduck
+	GOOS=linux   GOARCH=arm64 go build -o ../npm/packages/superduck-linux-arm64/bin/chrome-native-host ./cmd/native-host
+	GOOS=linux   GOARCH=amd64 go build -o ../npm/packages/superduck-linux-x64/bin/superduck ./cmd/superduck
+	GOOS=linux   GOARCH=amd64 go build -o ../npm/packages/superduck-linux-x64/bin/chrome-native-host ./cmd/native-host
+	@echo "Done. Binaries placed in npm/packages/*/bin/"
 
 clean:
 	@echo "Cleaning build artifacts..."

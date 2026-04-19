@@ -59,6 +59,7 @@ import {
   initializeAnalytics,
   identifyUser
 } from './analytics';
+import { superduckTools, superduckToolNames } from './superduckTools';
 
 // Alias withTracing as initializePermissions (legacy name from compiled bundle)
 const initializePermissions = withTracing;
@@ -827,7 +828,8 @@ function getAllTools(): ToolDefinition[] {
       tabsContextMcpTool,
       tabsCreateMcpTool,
       shortcutsListTool,
-      shortcutsExecuteTool
+      shortcutsExecuteTool,
+      ...superduckTools
     ];
   }
   return _allTools;
@@ -852,10 +854,11 @@ const allTools: ToolDefinition[] = [
   tabsContextMcpTool,
   tabsCreateMcpTool,
   shortcutsListTool,
-  shortcutsExecuteTool
+  shortcutsExecuteTool,
+  ...superduckTools
 ];
 
-const mcpToolNames = ['tabs_context_mcp', 'tabs_create_mcp'];
+const mcpToolNames = ['tabs_context_mcp', 'tabs_create_mcp', ...superduckToolNames];
 
 // =============================================================================
 // ToolExecutor class (gr, lines 6813-6987)

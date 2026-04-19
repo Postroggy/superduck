@@ -1,0 +1,33 @@
+{
+  "name": "superduck-cli",
+  "version": "0.2.1",
+  "description": "Your browser's session, callable as a tool. CLI bridge from Claude Code/Codex/etc to your active Chrome tab.",
+  "bin": {
+    "superduck": "bin/superduck.js"
+  },
+  "files": [
+    "bin/",
+    "SKILL.md",
+    "README.md"
+  ],
+  "scripts": {
+    "postinstall": "node bin/superduck.js --postinstall || true"
+  },
+  "optionalDependencies": {
+    "superduck-darwin-arm64": "0.2.1",
+    "superduck-darwin-x64": "0.2.1",
+    "superduck-linux-arm64": "0.2.1",
+    "superduck-linux-x64": "0.2.1"
+  },
+  "engines": {
+    "node": ">=16"
+  },
+  "keywords": [
+    "claude-code",
+    "agent",
+    "browser",
+    "chrome",
+    "cli"
+  ],
+  "license": "MIT"
+}

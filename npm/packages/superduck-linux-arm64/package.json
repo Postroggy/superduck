@@ -1,0 +1,15 @@
+{
+  "name": "superduck-linux-arm64",
+  "version": "0.2.1",
+  "description": "Linux arm64 native binary for superduck",
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "files": [
+    "bin/"
+  ],
+  "license": "MIT"
+}
