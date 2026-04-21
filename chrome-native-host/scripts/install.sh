@@ -3,8 +3,9 @@ set -euo pipefail
 
 HOST_NAME="com.me.superduck_browser_extension"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-HOST_BINARY="$SCRIPT_DIR/chrome-native-host"
-MCP_BINARY="$SCRIPT_DIR/chrome-mcp-server"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+HOST_BINARY="$PROJECT_DIR/build/chrome-native-host"
+MCP_BINARY="$PROJECT_DIR/build/chrome-mcp-server"
 
 # Detect OS and set manifest directory
 case "$(uname -s)" in
@@ -23,7 +24,7 @@ case "$(uname -s)" in
 esac
 
 echo "=== Building binaries ==="
-cd "$SCRIPT_DIR"
+cd "$SCRIPT_DIR/.."
 make all
 
 echo ""

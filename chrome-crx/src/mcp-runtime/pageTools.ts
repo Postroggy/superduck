@@ -1,6 +1,154 @@
 import { PermissionTools, checkUrlSecurity } from './shared';
 import { domainCategoryCache, tabGroupManager } from './tabState';
 import { cdpDebugger } from './cdp';
+import {
+  takeSnapshotUnlocked,
+  SnapshotMaxCharsError,
+  withSnapshotLock,
+  normalizeSnapshotForDiff,
+} from './axSnapshot';
+import { registerRefsInPage, pruneStaleRefs } from './refBridge';
+import { diffArrays } from 'diff';
+
+// read_page snapshot diff cache: per-(session, tab) baseline for diff:true.
+// 必须按 sessionId 隔离 — 否则两个 sidepanel/agent 共用同一 tab 时会互相污染
+// baseline，让 diff 退化成"相对别人上次 read_page 的变化"，且 diff 里的 ref
+// 也可能是别的会话注册过的、本会话已 prune 的 stale ref。
+// SPA route changes don't fire onUpdated.url, so diff also re-checks cache.url
+// against current tab.url and treats a mismatch as no baseline.
+// variantKey 把会改变快照形态的参数（filter/depth/maxChars/urls）打进 key，
+// 防止"先 interactive 再 diff:true"读到不同形态当同基线，产生大量伪 diff。
+interface SnapshotCacheEntry {
+  url: string;
+  variantKey: string;
+  content: string;
+  lastUsedAt: number;
+}
+
+// 上限设为 20：覆盖典型并发 agent 同时操作的标签数，且 LRU 扫描在此规模下成本可忽略。
+const SNAPSHOT_CACHE_MAX = 20;
+const snapshotCache = new Map<string, SnapshotCacheEntry>();
+
+// session 缺失时回退到固定占位符（如 MCP_NATIVE 等无 session 调用），保留隔离意图。
+function snapshotCacheKey(sessionId: string | undefined, tabId: number): string {
+  return `${sessionId ?? '_nosession'}:${tabId}`;
+}
+
+const DIFF_NO_CHANGES = '(no changes since last read_page)';
+const DIFF_NO_BASELINE_PREFIX = '(no previous snapshot for this URL, returning full content)';
+
+interface SnapshotVariant {
+  filter: 'all' | 'interactive';
+  depth: number;
+  maxChars: number;
+  urls: boolean;
+}
+
+function snapshotVariantKey(v: SnapshotVariant): string {
+  return `${v.filter}|d=${v.depth}|m=${v.maxChars}|u=${v.urls ? 1 : 0}`;
+}
+
+function snapshotCacheSet(
+  sessionId: string | undefined,
+  tabId: number,
+  url: string,
+  variantKey: string,
+  content: string
+): void {
+  if (!url) return;
+  const key = snapshotCacheKey(sessionId, tabId);
+  snapshotCache.set(key, { url, variantKey, content, lastUsedAt: Date.now() });
+  if (snapshotCache.size > SNAPSHOT_CACHE_MAX) {
+    let oldestKey: string | null = null;
+    let oldestTs = Infinity;
+    for (const [k, entry] of snapshotCache) {
+      if (entry.lastUsedAt < oldestTs) {
+        oldestTs = entry.lastUsedAt;
+        oldestKey = k;
+      }
+    }
+    if (oldestKey != null) snapshotCache.delete(oldestKey);
+  }
+}
+
+function snapshotCacheGet(
+  sessionId: string | undefined,
+  tabId: number,
+  currentUrl: string,
+  variantKey: string
+): SnapshotCacheEntry | undefined {
+  if (!currentUrl) return undefined;
+  const key = snapshotCacheKey(sessionId, tabId);
+  const entry = snapshotCache.get(key);
+  if (!entry) return undefined;
+  if (entry.url !== currentUrl || entry.variantKey !== variantKey) {
+    snapshotCache.delete(key);
+    return undefined;
+  }
+  entry.lastUsedAt = Date.now();
+  return entry;
+}
+
+// tab 级失效（关闭、URL 变更）需要扫所有 session 下该 tab 的条目。
+function invalidateAllSessionsForTab(tabId: number): void {
+  const suffix = `:${tabId}`;
+  for (const key of snapshotCache.keys()) {
+    if (key.endsWith(suffix)) snapshotCache.delete(key);
+  }
+}
+
+/**
+ * 行级 diff，输出保留原文（含 ref=ref_N），比较时按 normalized 文本判等。
+ * 这样新增行里仍带可点击的 ref，agent 看到 diff 后能直接调用 click(ref=...)。
+ * >3 行的未变动区块折叠为 `... (N unchanged) ...`。
+ */
+function formatCompactDiff(
+  prevContent: string,
+  currContent: string
+): { added: number; removed: number; body: string } {
+  const prevLines = prevContent.split('\n');
+  const currLines = currContent.split('\n');
+  const parts = diffArrays(prevLines, currLines, {
+    comparator: (a, b) => normalizeSnapshotForDiff(a) === normalizeSnapshotForDiff(b),
+  });
+  let added = 0;
+  let removed = 0;
+  const out: string[] = [];
+  for (const p of parts) {
+    const lines = p.value;
+    if (p.added) {
+      added += lines.length;
+      for (const line of lines) out.push('+' + line);
+    } else if (p.removed) {
+      removed += lines.length;
+      for (const line of lines) out.push('-' + line);
+    } else if (lines.length > 3) {
+      out.push(' ' + lines[0]);
+      out.push(`... (${lines.length - 2} unchanged) ...`);
+      out.push(' ' + lines[lines.length - 1]);
+    } else {
+      for (const line of lines) out.push(' ' + line);
+    }
+  }
+  return { added, removed, body: out.join('\n') };
+}
+
+// Service worker 单次启动只执行一次模块顶层代码；为防止极端场景（HMR、测试重入）
+// 重复注册导致同一事件多次清缓存，用 Symbol 标记 globalThis 实现幂等。
+const SNAPSHOT_LISTENERS_INSTALLED = Symbol.for('chrome-crx.snapshot-cache.listeners-installed');
+if (!(globalThis as any)[SNAPSHOT_LISTENERS_INSTALLED]) {
+  (globalThis as any)[SNAPSHOT_LISTENERS_INSTALLED] = true;
+  chrome.tabs.onRemoved.addListener((tabId) => {
+    invalidateAllSessionsForTab(tabId);
+  });
+  chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+    if (changeInfo.url !== undefined) invalidateAllSessionsForTab(tabId);
+  });
+  // SPA pushState/replaceState 不一定触发 onUpdated.url，再加 webNavigation 双保险。
+  chrome.webNavigation?.onHistoryStateUpdated.addListener(({ tabId, frameId }) => {
+    if (frameId === 0) invalidateAllSessionsForTab(tabId);
+  });
+}
 
 // =============================================================================
 
@@ -948,7 +1096,7 @@ const getPageTextTool: ToolDefinition = {
 const readPageTool: ToolDefinition = {
   name: 'read_page',
   description:
-    "Get an accessibility tree representation of elements on the page. By default returns all elements including non-visible ones. Can optionally filter for only interactive elements, limit tree depth, or focus on a specific element. Returns a structured tree that represents how screen readers see the page content. If you don't have a valid tab ID, use tabs_context first to get available tabs. Output is limited to 50000 characters - if exceeded, specify a depth limit or ref_id to focus on a specific element.",
+    "Get an accessibility tree representation of elements on the page. By default returns all elements including non-visible ones. Can optionally filter for only interactive elements, limit tree depth, or focus on a specific element. Returns a structured tree that represents how screen readers see the page content. If you don't have a valid tab ID, use tabs_context first to get available tabs. Output is limited to 50000 characters - if exceeded, specify a depth limit or ref_id/selector to focus on a specific element. After an interaction (click/fill/scroll), prefer diff:true to receive only the changes since the last read_page (saves tokens in long agent loops). Use selector to scope a snapshot to a CSS-selected subtree (faster and smaller than reading the whole page).",
   parameters: {
     filter: {
       type: 'string',
@@ -975,11 +1123,38 @@ const readPageTool: ToolDefinition = {
       type: 'number',
       description:
         'Maximum characters for output (default: 50000). Set to a higher value if your client can handle large outputs.'
+    },
+    selector: {
+      type: 'string',
+      description:
+        'CSS selector to focus the snapshot on a specific element subtree (including iframe contents). Useful when you only care about part of the page. Mutually independent from ref_id.'
+    },
+    diff: {
+      type: 'boolean',
+      description:
+        'If true, return only changes vs the previous read_page snapshot for this tab (line-based diff). First call always returns the full snapshot. Mutually exclusive with ref_id and selector (subtree reads have no integral baseline). URL navigation invalidates the diff baseline.'
+    },
+    urls: {
+      type: 'boolean',
+      description:
+        'If true, resolve href for each link element and include it as [url=...] in the output. Adds one CDP round-trip per link; skip on pages with many links unless you need the targets.'
     }
   },
   execute: async (input: any, context: ToolContext): Promise<ToolResult> => {
-    const { filter, tabId, depth, ref_id: refId, max_chars: maxChars } = input || {};
+    const {
+      filter,
+      tabId,
+      depth,
+      ref_id: refId,
+      max_chars: maxChars,
+      selector,
+      diff: diffMode,
+      urls: urlsOpt
+    } = input || {};
     if (!context?.tabId) throw new Error('No active tab found');
+    if (diffMode === true && (refId || selector)) {
+      return { error: 'diff is not supported with ref_id or selector (subtree reads have no integral baseline). Use diff only on full-page reads.' };
+    }
 
     const effectiveTabId = await tabGroupManager.getEffectiveTabId(tabId, context.tabId);
     const tab = await chrome.tabs.get(effectiveTabId);
@@ -1004,6 +1179,98 @@ const readPageTool: ToolDefinition = {
     await tabGroupManager.hideIndicatorForToolUse(effectiveTabId);
 
     try {
+      // CDP AX Tree 优先路径：不指定 ref_id 时尝试使用 CDP 获取原生无障碍树
+      if (!refId) {
+        try {
+          const isAttached = await cdpDebugger.isDebuggerAttached(effectiveTabId);
+          if (isAttached) {
+            // 持锁串行执行 pruneStaleRefs → 读 counter → takeSnapshot → registerRefsInPage，
+            // 防止并发 read_page 读到相同 counter 导致 ref_N 相互覆盖。
+            const lockedResult = await withSnapshotLock(effectiveTabId, async () => {
+              await pruneStaleRefs(effectiveTabId);
+
+              // 读取所有框架的 ref 计数器，取最大值，确保新 ref 不覆盖已有 ref；
+              // 同时读 viewport（仅主框架）。两个 executeScript 并发，无依赖。
+              const [counterResult, vpResult] = await Promise.all([
+                chrome.scripting.executeScript({
+                  target: { tabId: effectiveTabId, allFrames: true },
+                  func: () => (window as any).__claudeRefCounter || 0,
+                }),
+                chrome.scripting.executeScript({
+                  target: { tabId: effectiveTabId },
+                  func: () => ({ width: window.innerWidth, height: window.innerHeight }),
+                })
+              ]);
+              const currentRefCounter = Math.max(
+                0,
+                ...counterResult.map(r => (r.result as number) || 0)
+              );
+
+              const snapshotResult = await takeSnapshotUnlocked(effectiveTabId, {
+                filter: (filter as 'all' | 'interactive') || 'all',
+                depth: depth ?? 15,
+                maxChars: maxChars ?? 50000,
+                compact: filter === 'interactive',
+                startRef: currentRefCounter,
+                selector: typeof selector === 'string' && selector ? selector : undefined,
+                urls: urlsOpt === true,
+              });
+
+              if (snapshotResult.refMappings.length > 0) {
+                await registerRefsInPage(effectiveTabId, snapshotResult.refMappings);
+              }
+
+              const viewport = vpResult?.[0]?.result ?? { width: 0, height: 0 };
+              return { snapshotResult, viewport };
+            });
+
+            const viewportInfo = `Viewport: ${lockedResult.viewport.width}x${lockedResult.viewport.height}`;
+            const validTabs = await tabGroupManager.getValidTabsWithMetadata(context.tabId);
+
+            let outputContent = lockedResult.snapshotResult.content;
+            const variantKey = snapshotVariantKey({
+              filter: (filter as 'all' | 'interactive') || 'all',
+              depth: depth ?? 15,
+              maxChars: maxChars ?? 50000,
+              urls: urlsOpt === true,
+            });
+            if (diffMode === true) {
+              const prev = snapshotCacheGet(context.sessionId, effectiveTabId, tabUrl, variantKey);
+              snapshotCacheSet(context.sessionId, effectiveTabId, tabUrl, variantKey, outputContent);
+              if (prev !== undefined) {
+                if (normalizeSnapshotForDiff(prev.content) === normalizeSnapshotForDiff(outputContent)) {
+                  outputContent = DIFF_NO_CHANGES;
+                } else {
+                  const { added, removed, body } = formatCompactDiff(prev.content, outputContent);
+                  outputContent = `[diff: +${added} -${removed}]\n${body}`;
+                }
+              } else {
+                outputContent = `${DIFF_NO_BASELINE_PREFIX}\n${outputContent}`;
+              }
+            } else if (!selector) {
+              snapshotCacheSet(context.sessionId, effectiveTabId, tabUrl, variantKey, outputContent);
+            }
+
+            return {
+              output: `${outputContent}\n\n${viewportInfo}`,
+              tabContext: {
+                currentTabId: context.tabId,
+                executedOnTabId: effectiveTabId,
+                availableTabs: validTabs,
+                tabCount: validTabs.length
+              }
+            };
+          }
+        } catch (cdpErr) {
+          // maxChars 超限属于业务错误，需透传
+          if (cdpErr instanceof SnapshotMaxCharsError) {
+            throw cdpErr;
+          }
+          console.warn('[read_page] CDP AX tree failed, falling back to content script:', cdpErr);
+        }
+      }
+
+      // 降级路径：使用 content script 方式（ref_id 查询也走此路径）
       const scriptResult = await chrome.scripting.executeScript({
         target: { tabId: tab.id! },
         func: (
@@ -1023,7 +1290,6 @@ const readPageTool: ToolDefinition = {
         },
         args: [filter || null, depth ?? null, maxChars ?? 50000, refId ?? null]
       });
-
       if (!scriptResult || 0 === scriptResult.length)
         throw new Error('No results returned from page script');
       if ('error' in scriptResult[0] && scriptResult[0].error)
@@ -1034,10 +1300,10 @@ const readPageTool: ToolDefinition = {
 
       const result = scriptResult[0].result as any;
       if (result.error) return { error: result.error };
-      if (!scriptResult[0].result) throw new Error('Page script returned empty result');
 
       const viewportInfo = `Viewport: ${result.viewport.width}x${result.viewport.height}`;
       const validTabs = await tabGroupManager.getValidTabsWithMetadata(context.tabId);
+      // 降级路径产物与 CDP 路径格式不同，不能作为后续 diff:true 的基线，跳过缓存写入。
       return {
         output: `${result.pageContent}\n\n${viewportInfo}`,
         tabContext: {
@@ -1058,7 +1324,7 @@ const readPageTool: ToolDefinition = {
   toAnthropicSchema: async () => ({
     name: 'read_page',
     description:
-      "Get an accessibility tree representation of elements on the page. By default returns all elements including non-visible ones. Output is limited to 50000 characters. If the output exceeds this limit, you will receive an error asking you to specify a smaller depth or focus on a specific element using ref_id. Optionally filter for only interactive elements. If you don't have a valid tab ID, use tabs_context first to get available tabs.",
+      "Get an accessibility tree representation of elements on the page. By default returns all elements including non-visible ones. Output is limited to 50000 characters. If the output exceeds this limit, you will receive an error asking you to specify a smaller depth, or focus on a specific element using ref_id or selector. Optionally filter for only interactive elements. After an interaction (click/fill/scroll), prefer diff:true to receive only the changes since the last read_page (saves tokens). Use selector to scope a snapshot to a CSS-selected subtree. If you don't have a valid tab ID, use tabs_context first to get available tabs.",
     input_schema: {
       type: 'object',
       properties: {
@@ -1087,6 +1353,21 @@ const readPageTool: ToolDefinition = {
           type: 'number',
           description:
             'Maximum characters for output (default: 50000). Set to a higher value if your client can handle large outputs.'
+        },
+        selector: {
+          type: 'string',
+          description:
+            'CSS selector to focus the snapshot on a specific element subtree (including iframe contents).'
+        },
+        diff: {
+          type: 'boolean',
+          description:
+            'If true, return only changes vs the previous read_page snapshot for this tab. First call returns the full snapshot. Mutually exclusive with ref_id and selector. URL navigation invalidates the diff baseline.'
+        },
+        urls: {
+          type: 'boolean',
+          description:
+            'If true, resolve href for each link element and include it as [url=...] in the output. Adds one CDP round-trip per link; skip on pages with many links unless you need the targets.'
         }
       },
       required: ['tabId']

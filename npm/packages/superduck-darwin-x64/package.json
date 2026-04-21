@@ -1,0 +1,15 @@
+{
+  "name": "superduck-darwin-x64",
+  "version": "0.2.1",
+  "description": "macOS x64 native binary for superduck",
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "files": [
+    "bin/"
+  ],
+  "license": "MIT"
+}
