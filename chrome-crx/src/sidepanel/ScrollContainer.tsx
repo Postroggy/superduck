@@ -46,9 +46,6 @@ export function ScrollContainer({
       if (!scrollRef.current) return;
       if (options?.onlyIfPinned && !pinnedRef.current) return;
 
-      const { scrollHeight, scrollTop, clientHeight } = scrollRef.current;
-      if (scrollTop > scrollHeight - clientHeight) return;
-
       programmaticScrollRef.current = true;
       scrollRef.current.scrollTo({
         top: scrollRef.current.scrollHeight,
@@ -84,18 +81,20 @@ export function ScrollContainer({
     if (!container || !inner || pinToBottomConfig.disabled) return;
 
     const handleScroll = () => {
-      if (programmaticScrollRef.current) return;
-
       const { scrollHeight, scrollTop, clientHeight } = container;
       const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
       const isAtBottom = Math.floor(distanceFromBottom) < 8;
-
-      isNearBottomRef.current = isAtBottom;
       const isScrollingUp = scrollTop < lastScrollTopRef.current;
       lastScrollTopRef.current = scrollTop;
 
+      if (programmaticScrollRef.current) return;
+
+      isNearBottomRef.current = isAtBottom;
+
       if (!isAtBottom && isScrollingUp) {
         pinnedRef.current = false;
+      } else if (isAtBottom) {
+        pinnedRef.current = true;
       }
     };
 
