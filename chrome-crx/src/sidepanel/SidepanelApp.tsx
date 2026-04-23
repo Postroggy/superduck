@@ -7388,7 +7388,7 @@ export function SidepanelApp() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [anthropicMessages, setAnthropicMessages] = useState<any[]>([]);
   const [messageHistory, setMessageHistory] = useState<any[]>([]);
-  const [permissionMode, setPermissionMode] = useState<PermissionMode>('follow_a_plan');
+  const [permissionMode, setPermissionMode] = useState<PermissionMode>('skip_all_permission_checks');
   const [selectedModel, setSelectedModel] = useState<string>('');
   const selectedModelRef = useRef(selectedModel);
   const [modelMapping, setModelMapping] = useState<{
@@ -8318,7 +8318,7 @@ export function SidepanelApp() {
           toolName: toolUse.name,
           args: toolUse.input,
           tabId: query.tabId,
-          permissionMode,
+          permissionMode: permissionModeRef.current,
           toolUseId: toolUse.id,
           anthropicClient,
           onPermissionRequired: async (permissionData: any, permTabId: number) => {
@@ -8559,7 +8559,7 @@ export function SidepanelApp() {
 
       // Reset plan approval state at start of new message when in follow_a_plan mode
       // — bundle's line 41256: "follow_a_plan" !== k || o || (G.current = !1, C.clearTurnApprovedDomains())
-      if (permissionMode === 'follow_a_plan') {
+      if (permissionModeRef.current === 'follow_a_plan') {
         hasApprovedPlanRef.current = false;
         const pm = getPermissionManager();
         pm.clearTurnApprovedDomains();
@@ -8632,7 +8632,7 @@ export function SidepanelApp() {
 
         // Inject plan mode system reminder if in follow_a_plan mode and no plan approved yet
         // — bundle's line 41322: m(k, G.current) && n.content.push({type: "text", text: Z()})
-        if (shouldShowPlanMode(permissionMode, hasApprovedPlanRef.current)) {
+        if (shouldShowPlanMode(permissionModeRef.current, hasApprovedPlanRef.current)) {
           userContent.push({
             type: 'text',
             text: getPlanModeSystemReminder()
@@ -8905,7 +8905,7 @@ export function SidepanelApp() {
                     const toolCheck = checkToolAllowed(
                       toolUse.name,
                       currentPageType,
-                      permissionMode,
+                      permissionModeRef.current,
                       hasApprovedPlanRef.current
                     );
                     if (!toolCheck.allowed) {
@@ -8925,7 +8925,7 @@ export function SidepanelApp() {
                         domains?: string[];
                       };
 
-                      if (permissionMode !== 'follow_a_plan') {
+                      if (permissionModeRef.current !== 'follow_a_plan') {
                         // Auto-approve update_plan when not in follow_a_plan mode
                         let approvalMessage =
                           'User has approved your plan. You can now start executing the plan.';
@@ -9332,6 +9332,26 @@ export function SidepanelApp() {
     }
   }, [blockedCategory, permissionMode]);
 
+  // Live mode-switch handling: skip auto-resolves any pending prompt; follow_a_plan
+  // forces the next tool call to re-request plan approval.
+  const prevPermissionModeRef = useRef<PermissionMode>(permissionMode);
+  useEffect(() => {
+    const prev = prevPermissionModeRef.current;
+    prevPermissionModeRef.current = permissionMode;
+    if (prev === permissionMode) return;
+
+    if (permissionMode === 'skip_all_permission_checks') {
+      if (permissionResolveRef.current) {
+        permissionResolveRef.current(true);
+        permissionResolveRef.current = null;
+      }
+      setPermissionPrompt(null);
+    } else if (permissionMode === 'follow_a_plan') {
+      hasApprovedPlanRef.current = false;
+      permissionManagerRef.current?.clearTurnApprovedDomains();
+    }
+  }, [permissionMode]);
+
   const shouldDisableSkipPermissions = blockedCategory !== null && blockedCategory !== 'category0';
   const permissionModeMenuOptions = useMemo(
     () =>
@@ -9367,7 +9387,9 @@ export function SidepanelApp() {
             setPermissionMode(savedMode);
           }
         } else {
-          setPermissionMode('follow_a_plan');
+          setPermissionMode(
+            shouldDisableSkipPermissions ? 'follow_a_plan' : 'skip_all_permission_checks'
+          );
         }
       } finally {
         if (active) {
