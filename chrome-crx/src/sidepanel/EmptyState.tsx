@@ -7,6 +7,7 @@ import {
   useFeatureValue,
 } from "../SavedPromptsService";
 import { useTabEvent } from "./hooks";
+import { HandwritingAnimation } from "./HandwritingAnimation";
 
 // =============================================================================
 // DomainPrompts (lines 729-748)
@@ -245,7 +246,7 @@ export function EmptyState({ tabId, onPromptClick }: EmptyStateProps) {
   if (!isPinned && tipDisplay.canShow) {
     return (
       <MountEffect onMount={tipDisplay.markAsShown}>
-        <div className="flex flex-col items-center justify-center h-full">
+        <SuperDuckHeader>
           <FeatureCard
             lightImage="/assets/extension-light-min-CwWd0kAK.svg"
             darkImage="/assets/extension-dark-min-Ctxo0Z8w.svg"
@@ -259,12 +260,35 @@ export function EmptyState({ tabId, onPromptClick }: EmptyStateProps) {
               id: "PqHH2BNESm",
             })}
           />
-        </div>
+        </SuperDuckHeader>
       </MountEffect>
     );
   }
 
-  return null;
+  return <SuperDuckHeader />;
+}
+
+const HEADER_COLOR = "rgb(156,156,156)";
+const HEADER_SKEW = "skewX(-10deg)";
+// Sit slightly above vertical center so the header reads as "upper-middle"
+// across both tall windows and short ones (fixed bottom offsets don't scale).
+const HEADER_VERTICAL_BIAS = "-15%";
+
+function SuperDuckHeader({ children }: { children?: React.ReactNode }) {
+  return (
+    <div
+      className="flex flex-col items-center justify-center gap-6 px-6 pointer-events-none"
+      style={{ position: 'absolute', inset: 0, transform: `translateY(${HEADER_VERTICAL_BIAS})` }}
+    >
+      <div
+        className="pointer-events-auto flex flex-col items-center gap-6 w-full"
+        style={{ transform: HEADER_SKEW }}
+      >
+        <HandwritingAnimation text="SuperDuck" fontSize={88} speed={3} color={HEADER_COLOR} />
+        {children}
+      </div>
+    </div>
+  );
 }
 
 // =============================================================================
