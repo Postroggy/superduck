@@ -31,15 +31,25 @@ func runAction(action string, args map[string]any) error {
 		rec.Err = err.Error()
 	}
 	_ = cliclient.WriteAudit(rec)
+	if gflags.JSON {
+		envelope := map[string]any{
+			"tool":   "computer",
+			"action": action,
+			"ok":     err == nil,
+		}
+		if err != nil {
+			envelope["error"] = err.Error()
+		} else {
+			envelope["output"] = contentString(v)
+		}
+		out, _ := json.Marshal(envelope)
+		fmt.Println(string(out))
+		return err
+	}
 	if err != nil {
 		return err
 	}
-	raw := contentString(v)
-	if gflags.JSON {
-		fmt.Println(raw)
-		return nil
-	}
-	printActionResult(action, raw)
+	printActionResult(action, contentString(v))
 	return nil
 }
 

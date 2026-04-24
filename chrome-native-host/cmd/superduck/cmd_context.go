@@ -41,13 +41,17 @@ func cmdContext(argv []string) error {
 		}
 	}
 	_ = cliclient.WriteAudit(rec)
-	if err != nil {
-		return err
-	}
-
 	if gflags.JSON {
+		if err != nil {
+			out, _ := json.Marshal(map[string]any{"ok": false, "error": err.Error()})
+			fmt.Println(string(out))
+			return err
+		}
 		fmt.Println(raw)
 		return nil
+	}
+	if err != nil {
+		return err
 	}
 
 	if data != nil {

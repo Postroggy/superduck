@@ -6,7 +6,7 @@ import (
 )
 
 // cmdScrollTo: `superduck scroll_to --tab <id> --ref <refId>` scrolls an
-// element (identified by a ref id returned by read_page / find tools) into view.
+// element (identified by a ref id returned by the read_page tool) into view.
 func cmdScrollTo(argv []string) error {
 	fs := flag.NewFlagSet("scroll_to", flag.ContinueOnError)
 	ref := fs.String("ref", "", "Element reference ID")

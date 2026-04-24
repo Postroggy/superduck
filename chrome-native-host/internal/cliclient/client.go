@@ -107,6 +107,66 @@ func RunTool(tool string, args map[string]any, opts Options, rec *AuditRecord) (
 	return raw, err
 }
 
+// RunToolJSON is the JSON-mode counterpart of RunTool. It returns a single
+// JSON object as a string, suitable for piping into jq. Always wraps the tool
+// response so callers get a stable schema regardless of whether the tool
+// returns structured content or plain text.
+//
+//	{ "tool": "...", "ok": bool, "output": <raw value or string>, "error"?: "..." }
+func RunToolJSON(tool string, args map[string]any, opts Options, rec *AuditRecord) (string, error) {
+	v, callErr := Call(tool, args, opts)
+	rec.OK = callErr == nil
+	if callErr != nil {
+		rec.Err = callErr.Error()
+	}
+	_ = WriteAudit(*rec)
+
+	envelope := map[string]any{
+		"tool": tool,
+		"ok":   callErr == nil,
+	}
+	if callErr != nil {
+		envelope["error"] = callErr.Error()
+	} else {
+		envelope["output"] = normalizeOutput(v)
+	}
+	b, mErr := json.Marshal(envelope)
+	if mErr != nil {
+		return "", mErr
+	}
+	return string(b), callErr
+}
+
+// normalizeOutput collapses the `[{type:text,text:"..."}, ...]` MCP envelope
+// into a plain string when that's all there is. Structured payloads are
+// passed through untouched so JSON consumers can still see schema details.
+func normalizeOutput(v any) any {
+	if arr, ok := v.([]any); ok {
+		var b strings.Builder
+		allText := true
+		for _, it := range arr {
+			m, mok := it.(map[string]any)
+			if !mok {
+				allText = false
+				break
+			}
+			s, sok := m["text"].(string)
+			if !sok {
+				allText = false
+				break
+			}
+			if b.Len() > 0 {
+				b.WriteByte('\n')
+			}
+			b.WriteString(s)
+		}
+		if allText && b.Len() > 0 {
+			return b.String()
+		}
+	}
+	return v
+}
+
 // TimedCall calls tool and updates rec.DurationMs/OK/Err; the caller is responsible
 // for writing the audit (typically after enriching rec from the response).
 func TimedCall(tool string, args map[string]any, opts Options, rec *AuditRecord) (string, error) {
