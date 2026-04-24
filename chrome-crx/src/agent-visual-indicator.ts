@@ -334,27 +334,12 @@
   // ============================================
 
   function createBlockingOverlay(): HTMLElement {
+    // 遮罩已停用:返回一个不可见、不拦截事件的占位元素,保持外部引用逻辑不变。
+    // 停用原因:该遮罩的 touch-action:none 会阻断 CDP/content-script 注入的
+    // wheel 事件,导致 x.com 等站点在 agent 运行时无法滚动。
     const overlay = document.createElement("div");
     overlay.id = "claude-agent-blocking-overlay";
-    overlay.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      z-index: 2147483645;
-      background: rgba(0, 0, 0, 0.08);
-      cursor: not-allowed;
-      opacity: 0;
-      transition: opacity 0.3s ease-in-out;
-      overscroll-behavior: none;
-      touch-action: none;
-    `;
-
-    // Prevent scroll events from passing through the overlay
-    overlay.addEventListener("wheel", (e) => e.preventDefault(), { passive: false });
-    overlay.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
-
+    overlay.style.cssText = "display: none !important;";
     return overlay;
   }
 

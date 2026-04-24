@@ -78,9 +78,6 @@ run exec "document.title"
 echo "==> page_text (main text)"
 run page_text | head -6
 
-echo "==> find 'submit'"
-run find "submit button"
-
 echo "==> read_page interactive depth 6"
 run read_page --filter interactive --depth 6 --max-chars 3000 | head -25
 

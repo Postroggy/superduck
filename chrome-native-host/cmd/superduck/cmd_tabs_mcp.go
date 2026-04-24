@@ -55,6 +55,13 @@ func cmdTabGroupList(argv []string) error {
 	}
 
 	rec := cliclient.AuditRecord{Cmd: "tab_group list"}
+	if gflags.JSON {
+		raw, err := cliclient.RunToolJSON("tabs_context_mcp", args, clientOpts(), &rec)
+		if raw != "" {
+			fmt.Println(raw)
+		}
+		return err
+	}
 	raw, err := cliclient.RunTool("tabs_context_mcp", args, clientOpts(), &rec)
 	if err != nil {
 		return err
@@ -70,6 +77,13 @@ func cmdTabGroupNew(argv []string) error {
 	}
 
 	rec := cliclient.AuditRecord{Cmd: "tab_group new"}
+	if gflags.JSON {
+		raw, err := cliclient.RunToolJSON("tabs_create_mcp", nil, clientOpts(), &rec)
+		if raw != "" {
+			fmt.Println(raw)
+		}
+		return err
+	}
 	raw, err := cliclient.RunTool("tabs_create_mcp", nil, clientOpts(), &rec)
 	if err != nil {
 		return err

@@ -107,6 +107,12 @@
   <p>Last submit shown in event log.</p>
 </section>
 
+<section id="sec-upload">
+  <h2>8b. File upload (use upload tool with --ref)</h2>
+  <input data-testid="upload-input" id="uploadInput" type="file" accept="image/*">
+  <p>Last upload: <span id="uploadStatus">—</span></p>
+</section>
+
 <section id="sec-console-net">
   <h2>9. console / network playground</h2>
   <button id="btnLog">console.log</button>
@@ -216,6 +222,12 @@ document.getElementById('btnLog').addEventListener('click', () => console.log('s
 document.getElementById('btnErr').addEventListener('click', () => console.error('superduck console.error @', Date.now()));
 document.getElementById('btnFetch').addEventListener('click', () =>
   fetch('/api/ping?ts=' + Date.now()).catch(e => log('fetch err (expected for file://): ' + e.message)));
+
+document.getElementById('uploadInput').addEventListener('change', e => {
+  const f = e.target.files && e.target.files[0];
+  document.getElementById('uploadStatus').textContent = f ? `${f.name} (${f.size}B)` : 'cleared';
+  log('upload: ' + (f ? f.name : 'cleared'));
+});
 </script>
 </body>
 </html>

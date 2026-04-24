@@ -43,7 +43,7 @@ MCP TAB GROUP (each conversation usually owns one group of tabs):
 MOUSE / KEYBOARD (all require --tab <id>):
   left_click <x> <y> [--modifiers M] [--ref R]
                              Single left-click at viewport (x,y). --ref clicks an element id
-                             returned by read_page/find instead of coordinates.
+                             returned by read_page instead of coordinates.
   right_click <x> <y> [--modifiers M] [--ref R]
                              Right-click (opens context menu in real apps).
   double_click <x> <y> [--modifiers M] [--ref R]
@@ -58,7 +58,7 @@ MOUSE / KEYBOARD (all require --tab <id>):
                              "ctrl+shift+t". Use --repeat to press multiple times.
   scroll <x> <y> --direction <up|down|left|right> [--amount N]
                              Scroll wheel ticks at (x,y); --amount is wheel ticks (default 3).
-  scroll_to --ref <refId>    Scroll a specific element (from read_page/find refs) into view.
+  scroll_to --ref <refId>    Scroll a specific element (from read_page refs) into view.
   wait <seconds>             Pause the CLI between actions (e.g. wait 0.5).
   zoom <x0> <y0> <x1> <y1> [--output PATH]
                              Capture a rectangular region as a PNG/JPEG (good for icon inspection).
@@ -68,8 +68,6 @@ PAGE / DOM (require --tab <id>):
                              Evaluate JS in the page context. The last expression's value is
                              returned (do NOT use 'return'). Use for assertions and debugging.
   page_text                  Extract the main article text (skips chrome/nav, like Reader Mode).
-  find "<query>"             Natural-language element search; returns up to 20 refs you can pass
-                             to click/scroll_to/form_input.
   read_page [--filter interactive|all] [--depth N] [--ref R] [--max-chars N]
                              Accessibility-tree snapshot with stable ref ids. Filter to
                              'interactive' for buttons/links/inputs only.
@@ -204,8 +202,6 @@ func main() {
 		err = cmdExec(rest)
 	case "page_text":
 		err = cmdPageText(rest)
-	case "find":
-		err = cmdFind(rest)
 	case "read_page":
 		err = cmdReadPage(rest)
 	case "form_input":
