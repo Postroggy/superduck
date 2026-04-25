@@ -9,7 +9,7 @@ import (
 	"chrome-native-host/internal/cliclient"
 )
 
-const version = "0.2.1"
+const version = "0.2.3"
 
 const usage = `superduck %s — your browser's session, callable as a tool.
 
@@ -93,9 +93,9 @@ UPLOAD / SHORTCUTS / GIF (require --tab <id>):
   upload --image-id <id> (--ref R | --coord x,y) [--filename N]
                              Drop a previously captured image onto a file input or drag target
                              (works for hidden <input type=file>).
-  shortcuts list             List Claude in Chrome shortcuts/workflows available on this tab.
-  shortcuts execute --id I [--command C]
-                             Execute a shortcut/workflow by id (or by --command name).
+  shortcuts list             List saved shortcuts (use --json for machine output).
+  shortcuts get <name|id>    Fetch a shortcut's prompt (with vars filled) to stdout.
+                             Pipe into your local agent — the CLI does NOT run it.
   gif start                  Begin recording browser actions for the current tab group.
   gif stop                   Stop recording (frames retained — call export or clear).
   gif export [--download] [--filename N] [--quality N] [--no-clicks] [--no-labels] [--no-progress] [--no-watermark]

@@ -7,7 +7,7 @@ import (
 )
 
 func TestRegisterToolsUsesValidSchemas(t *testing.T) {
-	if got, want := len(toolDefinitions), 18; got != want {
+	if got, want := len(toolDefinitions), 19; got != want {
 		t.Fatalf("toolDefinitions length = %d, want %d", got, want)
 	}
 
