@@ -304,6 +304,14 @@ var toolDefinitions = []toolDefinition{
 		inputSchema: objectSchema(map[string]any{}),
 	},
 	{
+		name:        "shortcuts_get",
+		description: "Fetch the raw prompt text of a shortcut by id or command, without executing it. Use this when you want to retrieve the shortcut definition and run it locally.",
+		inputSchema: objectSchema(map[string]any{
+			"shortcutId": stringSchema("The ID of the shortcut to fetch."),
+			"command":    stringSchema("The command name of the shortcut to fetch, without the leading slash."),
+		}),
+	},
+	{
 		name:        "shortcuts_execute",
 		description: "Execute a shortcut or workflow by running it in a new sidepanel window using the current tab (shortcuts and workflows are interchangeable). Use shortcuts_list first to see available shortcuts. This starts the execution and returns immediately - it does not wait for completion.",
 		inputSchema: objectSchema(map[string]any{

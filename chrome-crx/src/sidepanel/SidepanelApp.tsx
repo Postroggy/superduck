@@ -548,13 +548,17 @@ function compareVersions(left: string, right: string): number {
   return 0;
 }
 
-function calculateMessageLimitFromUsage(usage: any): MessageLimitState {
+function calculateMessageLimitFromUsage(
+  usage: any,
+  contextWindow: number = CONTEXT_WINDOW
+): MessageLimitState {
   const inputTokens = usage?.input_tokens || 0;
   const outputTokens = usage?.output_tokens || 0;
   const cacheTokens =
     (usage?.cache_creation_input_tokens || 0) + (usage?.cache_read_input_tokens || 0);
   const total = inputTokens + outputTokens + cacheTokens;
-  const percentUsed = Math.round((total / TOKEN_BUDGET) * 100);
+  const budget = Math.max(1, contextWindow - MAX_TOKENS);
+  const percentUsed = Math.round((total / budget) * 100);
   if (percentUsed >= 95) {
     return { type: 'exceeded_limit', percentUsed };
   }
@@ -1164,13 +1168,23 @@ function useQueryState() {
 class ConversationCompactor {
   private createMessage: (params: any) => Promise<any>;
   private locale?: string;
+  private contextWindow: number;
 
-  constructor(createMessage: (params: any) => Promise<any>, locale?: string) {
+  constructor(
+    createMessage: (params: any) => Promise<any>,
+    locale?: string,
+    contextWindow: number = CONTEXT_WINDOW
+  ) {
     this.createMessage = createMessage;
     this.locale = locale;
+    this.contextWindow = contextWindow;
   }
 
-  async compactConversation(messages: any[], maxTokens: number, continueWithoutPrompt: boolean) {
+  async compactConversation(
+    messages: any[],
+    maxTokens: number,
+    continueWithoutPrompt: boolean
+  ) {
     if (messages.length === 0) {
       throw new Error('No messages to compact');
     }
@@ -1312,12 +1326,12 @@ class ConversationCompactor {
     const cacheCreationTokens = usage?.cache_creation_input_tokens || 0;
     const cacheReadTokens = usage?.cache_read_input_tokens || 0;
     const cachedTokens = cacheCreationTokens + cacheReadTokens;
-    const contextWindow = CONTEXT_WINDOW - maxTokens;
+    const effectiveContextWindow = Math.max(1, this.contextWindow - maxTokens);
     const totalTokens = inputTokens + outputTokens + cachedTokens;
     return {
       totalTokens,
-      contextWindow,
-      percentUsed: Math.round((totalTokens / contextWindow) * 100)
+      contextWindow: effectiveContextWindow,
+      percentUsed: Math.round((totalTokens / effectiveContextWindow) * 100)
     };
   }
 }
@@ -7374,7 +7388,7 @@ export function SidepanelApp() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [anthropicMessages, setAnthropicMessages] = useState<any[]>([]);
   const [messageHistory, setMessageHistory] = useState<any[]>([]);
-  const [permissionMode, setPermissionMode] = useState<PermissionMode>('follow_a_plan');
+  const [permissionMode, setPermissionMode] = useState<PermissionMode>('skip_all_permission_checks');
   const [selectedModel, setSelectedModel] = useState<string>('');
   const selectedModelRef = useRef(selectedModel);
   const [modelMapping, setModelMapping] = useState<{
@@ -8117,6 +8131,35 @@ export function SidepanelApp() {
     });
   }, [apiBaseUrl, apiKey, authToken]);
 
+  // Fetch /v1/models once per (baseURL, credential) so we can use the gateway's
+  // real context_length instead of the hard-coded 200k constant.
+  const [serverModelInfo, setServerModelInfo] = useState<{
+    id: string;
+    contextLength: number;
+  } | null>(null);
+  const serverContextLengthRef = useRef<number>(CONTEXT_WINDOW);
+  useEffect(() => {
+    if (!anthropicClient) return;
+    const ctrl = new AbortController();
+    (async () => {
+      try {
+        const page = await (anthropicClient as any).models.list(
+          {},
+          { signal: ctrl.signal }
+        );
+        const first = page?.data?.[0];
+        const ctxLen = (first as any)?.context_length;
+        if (first?.id && typeof ctxLen === 'number') {
+          serverContextLengthRef.current = ctxLen;
+          setServerModelInfo({ id: first.id, contextLength: ctxLen });
+        }
+      } catch {
+        /* ignore — will fall back to default budget */
+      }
+    })();
+    return () => ctrl.abort();
+  }, [anthropicClient]);
+
   const systemPrompt = useMemo(() => {
     const isMac = navigator.platform.toUpperCase().includes('MAC');
     const modifier = isMac ? 'cmd' : 'ctrl';
@@ -8275,7 +8318,7 @@ export function SidepanelApp() {
           toolName: toolUse.name,
           args: toolUse.input,
           tabId: query.tabId,
-          permissionMode,
+          permissionMode: permissionModeRef.current,
           toolUseId: toolUse.id,
           anthropicClient,
           onPermissionRequired: async (permissionData: any, permTabId: number) => {
@@ -8332,9 +8375,14 @@ export function SidepanelApp() {
       try {
         const compactor = new ConversationCompactor(
           async (params) => createAnthropicMessage(params),
-          intl.locale
+          intl.locale,
+          serverContextLengthRef.current
         );
-        const result = await compactor.compactConversation(messagesToCompact, MAX_TOKENS, !manual);
+        const result = await compactor.compactConversation(
+          messagesToCompact,
+          MAX_TOKENS,
+          !manual
+        );
         setMessageHistory(messagesToCompact);
         setAnthropicMessages(
           visibleCommandText
@@ -8511,7 +8559,7 @@ export function SidepanelApp() {
 
       // Reset plan approval state at start of new message when in follow_a_plan mode
       // — bundle's line 41256: "follow_a_plan" !== k || o || (G.current = !1, C.clearTurnApprovedDomains())
-      if (permissionMode === 'follow_a_plan') {
+      if (permissionModeRef.current === 'follow_a_plan') {
         hasApprovedPlanRef.current = false;
         const pm = getPermissionManager();
         pm.clearTurnApprovedDomains();
@@ -8534,8 +8582,10 @@ export function SidepanelApp() {
       try {
         let baseMessages = anthropicMessages;
         if (
-          calculateMessageLimitFromUsage(baseMessages[baseMessages.length - 1]?.usage).type ===
-          'exceeded_limit'
+          calculateMessageLimitFromUsage(
+            baseMessages[baseMessages.length - 1]?.usage,
+            serverContextLengthRef.current
+          ).type === 'exceeded_limit'
         ) {
           baseMessages = await compactConversation(false);
         }
@@ -8582,7 +8632,7 @@ export function SidepanelApp() {
 
         // Inject plan mode system reminder if in follow_a_plan mode and no plan approved yet
         // — bundle's line 41322: m(k, G.current) && n.content.push({type: "text", text: Z()})
-        if (shouldShowPlanMode(permissionMode, hasApprovedPlanRef.current)) {
+        if (shouldShowPlanMode(permissionModeRef.current, hasApprovedPlanRef.current)) {
           userContent.push({
             type: 'text',
             text: getPlanModeSystemReminder()
@@ -8765,7 +8815,11 @@ export function SidepanelApp() {
               });
               const parsedMessageLimit = parseMessageLimit((response as any).message_limit);
               setMessageLimit(
-                parsedMessageLimit ?? calculateMessageLimitFromUsage((response as any).usage || {})
+                parsedMessageLimit ??
+                calculateMessageLimitFromUsage(
+                  (response as any).usage || {},
+                  serverContextLengthRef.current
+                )
               );
               setMessageLimitDismissed(false);
 
@@ -8851,7 +8905,7 @@ export function SidepanelApp() {
                     const toolCheck = checkToolAllowed(
                       toolUse.name,
                       currentPageType,
-                      permissionMode,
+                      permissionModeRef.current,
                       hasApprovedPlanRef.current
                     );
                     if (!toolCheck.allowed) {
@@ -8871,7 +8925,7 @@ export function SidepanelApp() {
                         domains?: string[];
                       };
 
-                      if (permissionMode !== 'follow_a_plan') {
+                      if (permissionModeRef.current !== 'follow_a_plan') {
                         // Auto-approve update_plan when not in follow_a_plan mode
                         let approvalMessage =
                           'User has approved your plan. You can now start executing the plan.';
@@ -8942,14 +8996,22 @@ export function SidepanelApp() {
                 .reverse()
                 .find((m: any) => m.role === 'assistant' && m.usage);
               if (lastAssistantMsg?.usage) {
-                const limitState = calculateMessageLimitFromUsage(lastAssistantMsg.usage);
+                const limitState = calculateMessageLimitFromUsage(
+                  lastAssistantMsg.usage,
+                  serverContextLengthRef.current
+                );
                 if (limitState.type === 'exceeded_limit' || limitState.type === 'approaching_limit') {
                   try {
                     const compactor = new ConversationCompactor(
                       async (params: any) => createAnthropicMessage(params),
-                      intl.locale
+                      intl.locale,
+                      serverContextLengthRef.current
                     );
-                    const compactResult = await compactor.compactConversation(workingMessages, MAX_TOKENS, true);
+                    const compactResult = await compactor.compactConversation(
+                      workingMessages,
+                      MAX_TOKENS,
+                      true
+                    );
                     workingMessages = compactResult.messagesAfterCompacting;
                     setAnthropicMessages(workingMessages);
                     pushMessage('system', 'Conversation compacted to save context.');
@@ -9270,6 +9332,26 @@ export function SidepanelApp() {
     }
   }, [blockedCategory, permissionMode]);
 
+  // Live mode-switch handling: skip auto-resolves any pending prompt; follow_a_plan
+  // forces the next tool call to re-request plan approval.
+  const prevPermissionModeRef = useRef<PermissionMode>(permissionMode);
+  useEffect(() => {
+    const prev = prevPermissionModeRef.current;
+    prevPermissionModeRef.current = permissionMode;
+    if (prev === permissionMode) return;
+
+    if (permissionMode === 'skip_all_permission_checks') {
+      if (permissionResolveRef.current) {
+        permissionResolveRef.current(true);
+        permissionResolveRef.current = null;
+      }
+      setPermissionPrompt(null);
+    } else if (permissionMode === 'follow_a_plan') {
+      hasApprovedPlanRef.current = false;
+      permissionManagerRef.current?.clearTurnApprovedDomains();
+    }
+  }, [permissionMode]);
+
   const shouldDisableSkipPermissions = blockedCategory !== null && blockedCategory !== 'category0';
   const permissionModeMenuOptions = useMemo(
     () =>
@@ -9305,7 +9387,9 @@ export function SidepanelApp() {
             setPermissionMode(savedMode);
           }
         } else {
-          setPermissionMode('follow_a_plan');
+          setPermissionMode(
+            shouldDisableSkipPermissions ? 'follow_a_plan' : 'skip_all_permission_checks'
+          );
         }
       } finally {
         if (active) {
@@ -10455,46 +10539,41 @@ export function SidepanelApp() {
     skipWarningDismissed
   ]);
 
-  // Compute context window debug info from the last assistant message's usage
+  // Compute context window debug info from the last assistant message's usage.
+  // - Denominator: real context_length from /v1/models (fallback to CONTEXT_WINDOW)
+  // - Cache tokens are intentionally excluded from totalUsed and the UI
+  // - input_tokens already represents the cumulative prompt length for that turn,
+  //   so no extra summing across messages is needed
   const contextDebugInfo = useMemo(() => {
     if (!debugMode) return null;
+    const ctxWindow = serverModelInfo?.contextLength ?? CONTEXT_WINDOW;
+    const budget = Math.max(1, ctxWindow - MAX_TOKENS);
+    let lastUsage: any = null;
     for (let i = anthropicMessages.length - 1; i >= 0; i--) {
       const msg = anthropicMessages[i];
       if (msg?.role === 'assistant' && msg?.usage) {
-        const inputTokens = msg.usage.input_tokens || 0;
-        const outputTokens = msg.usage.output_tokens || 0;
-        const cacheCreation = msg.usage.cache_creation_input_tokens || 0;
-        const cacheRead = msg.usage.cache_read_input_tokens || 0;
-        const totalUsed = inputTokens + outputTokens + cacheCreation + cacheRead;
-        const remaining = Math.max(0, TOKEN_BUDGET - totalUsed);
-        const percentUsed = Math.round((totalUsed / TOKEN_BUDGET) * 100);
-        return {
-          contextWindow: CONTEXT_WINDOW,
-          maxTokens: MAX_TOKENS,
-          tokenBudget: TOKEN_BUDGET,
-          inputTokens,
-          outputTokens,
-          cacheCreation,
-          cacheRead,
-          totalUsed,
-          remaining,
-          percentUsed
-        };
+        lastUsage = msg.usage;
+        break;
       }
     }
+    const hasUsage = lastUsage !== null;
+    const inputTokens = lastUsage?.input_tokens || 0;
+    const outputTokens = lastUsage?.output_tokens || 0;
+    const totalUsed = inputTokens + outputTokens;
+    const remaining = Math.max(0, budget - totalUsed);
+    const percentUsed = Math.round((totalUsed / budget) * 100);
     return {
-      contextWindow: CONTEXT_WINDOW,
+      hasUsage,
+      contextWindow: ctxWindow,
       maxTokens: MAX_TOKENS,
-      tokenBudget: TOKEN_BUDGET,
-      inputTokens: 0,
-      outputTokens: 0,
-      cacheCreation: 0,
-      cacheRead: 0,
-      totalUsed: 0,
-      remaining: TOKEN_BUDGET,
-      percentUsed: 0
+      tokenBudget: budget,
+      inputTokens,
+      outputTokens,
+      totalUsed,
+      remaining,
+      percentUsed
     };
-  }, [debugMode, anthropicMessages]);
+  }, [debugMode, anthropicMessages, serverModelInfo]);
 
   const selectedModelLabel = useMemo(() => {
     const label =
@@ -11372,15 +11451,17 @@ export function SidepanelApp() {
                                                 )}
                                               </span>
                                             </div>
-                                            <div className="text-[10px] text-text-500 mt-px">
-                                              {intl.formatMessage(
-                                                { id: 'debug_tokens_remaining', defaultMessage: 'Remaining: {remaining} ({percent}%)' },
-                                                { remaining: contextDebugInfo.remaining.toLocaleString(), percent: 100 - contextDebugInfo.percentUsed }
-                                              )}
-                                            </div>
+                                            {contextDebugInfo.hasUsage && (
+                                              <div className="text-[10px] text-text-500 mt-px">
+                                                {intl.formatMessage(
+                                                  { id: 'debug_tokens_remaining', defaultMessage: 'Remaining: {remaining} ({percent}%)' },
+                                                  { remaining: contextDebugInfo.remaining.toLocaleString(), percent: 100 - contextDebugInfo.percentUsed }
+                                                )}
+                                              </div>
+                                            )}
                                           </div>
                                         </div>
-                                        <div className="flex items-center gap-3 text-text-500">
+                                        <div className="flex items-center gap-3 text-text-500 pl-9">
                                           <span>
                                             {intl.formatMessage(
                                               { id: 'debug_input_tokens', defaultMessage: 'In: {count}' },
@@ -11392,13 +11473,6 @@ export function SidepanelApp() {
                                             {intl.formatMessage(
                                               { id: 'debug_output_tokens', defaultMessage: 'Out: {count}' },
                                               { count: contextDebugInfo.outputTokens.toLocaleString() }
-                                            )}
-                                          </span>
-                                          <span className="text-border-300/20">|</span>
-                                          <span>
-                                            {intl.formatMessage(
-                                              { id: 'debug_cache_tokens', defaultMessage: 'Cache: {count}' },
-                                              { count: (contextDebugInfo.cacheCreation + contextDebugInfo.cacheRead).toLocaleString() }
                                             )}
                                           </span>
                                         </div>

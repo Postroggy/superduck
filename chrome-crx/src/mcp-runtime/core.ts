@@ -670,16 +670,36 @@ const tabsCreateMcpTool: ToolDefinition = {
   })
 };
 
+const SHORTCUT_PLACEHOLDER_RE = /\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g;
+
+function extractShortcutVars(prompt: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const m of prompt.matchAll(SHORTCUT_PLACEHOLDER_RE)) {
+    const name = m[1];
+    if (!seen.has(name)) {
+      seen.add(name);
+      out.push(name);
+    }
+  }
+  return out;
+}
+
 const shortcutsListTool: ToolDefinition = {
   name: 'shortcuts_list',
   description:
-    'List all available shortcuts and workflows (shortcuts and workflows are interchangeable). Returns shortcuts with their commands, descriptions, and whether they are workflows. Use shortcuts_execute to run a shortcut or workflow.',
+    'List all available shortcuts and workflows (shortcuts and workflows are interchangeable). Returns each shortcut with its command, type, starting URL, declared {{var}} placeholders, model, and skipPermissions flag — enough for an external agent to plan execution without a follow-up shortcuts_get call.',
   parameters: {},
   execute: async () => {
     try {
       const allPrompts = (await promptManager.getAllPrompts()).map((p: any) => ({
         id: p.id,
-        ...(p.command && { command: p.command })
+        ...(p.command && { command: p.command }),
+        ...(p.type && { type: p.type }),
+        ...(p.url && { url: p.url }),
+        ...(p.model && { model: p.model }),
+        ...(p.skipPermissions && { skipPermissions: true }),
+        vars: typeof p.prompt === 'string' ? extractShortcutVars(p.prompt) : []
       }));
       if (allPrompts.length === 0) {
         return {
@@ -705,8 +725,84 @@ const shortcutsListTool: ToolDefinition = {
   toAnthropicSchema: async () => ({
     name: 'shortcuts_list',
     description:
-      'List all available shortcuts and workflows (shortcuts and workflows are interchangeable). Returns shortcuts with their commands, descriptions, and whether they are workflows. Use shortcuts_execute to run a shortcut or workflow.',
+      'List all available shortcuts and workflows. Each entry includes id, command, type, url, vars (declared {{var}} placeholder names), model, skipPermissions.',
     input_schema: { type: 'object', properties: {}, required: [] }
+  })
+};
+
+const shortcutsGetTool: ToolDefinition = {
+  name: 'shortcuts_get',
+  description:
+    'Fetch the raw prompt text of a shortcut by id or command, without executing it. Use this when an external agent (e.g. CLI) wants to retrieve the shortcut definition and run it locally instead of triggering the in-browser sidepanel agent.',
+  parameters: {
+    shortcutId: { type: 'string', description: 'The ID of the shortcut to fetch' },
+    command: {
+      type: 'string',
+      description: "The command name of the shortcut to fetch (e.g., 'debug'). Do not include the leading slash."
+    }
+  },
+  execute: async (args) => {
+    try {
+      const { shortcutId, command } = args || {};
+      if (!shortcutId && !command) {
+        return { error: 'Either shortcutId or command is required.' };
+      }
+      // When both are present, callers typically pass the same string in both
+      // fields (they don't know yet whether it's an ID or a command). Try ID
+      // first, then fall back to command — saves a round-trip for the CLI.
+      let shortcut: any;
+      if (shortcutId) {
+        shortcut = await promptManager.getPromptById(shortcutId);
+      }
+      if (!shortcut && command) {
+        const cmd = command.startsWith('/') ? command.slice(1) : command;
+        shortcut = await promptManager.getPromptByCommand(cmd);
+      }
+      if (!shortcut) {
+        const tried = [
+          shortcutId && `ID "${shortcutId}"`,
+          command && `command "/${command}"`
+        ]
+          .filter(Boolean)
+          .join(' or ');
+        return { error: `Shortcut not found (tried ${tried}).` };
+      }
+      return {
+        output: JSON.stringify(
+          {
+            id: shortcut.id,
+            command: shortcut.command,
+            type: shortcut.type,
+            prompt: shortcut.prompt,
+            url: shortcut.url,
+            model: shortcut.model,
+            skipPermissions: shortcut.skipPermissions
+          },
+          null,
+          2
+        )
+      };
+    } catch (err) {
+      return {
+        error: `Failed to get shortcut: ${err instanceof Error ? err.message : 'Unknown error'}`
+      };
+    }
+  },
+  toAnthropicSchema: async () => ({
+    name: 'shortcuts_get',
+    description:
+      'Fetch the raw prompt text of a shortcut by id or command, without executing it.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        shortcutId: { type: 'string', description: 'The ID of the shortcut to fetch' },
+        command: {
+          type: 'string',
+          description: "The command name of the shortcut to fetch (e.g., 'debug'). Do not include the leading slash."
+        }
+      },
+      required: []
+    }
   })
 };
 
@@ -828,6 +924,7 @@ function getAllTools(): ToolDefinition[] {
       tabsContextMcpTool,
       tabsCreateMcpTool,
       shortcutsListTool,
+      shortcutsGetTool,
       shortcutsExecuteTool,
       ...superduckTools
     ];
@@ -854,11 +951,12 @@ const allTools: ToolDefinition[] = [
   tabsContextMcpTool,
   tabsCreateMcpTool,
   shortcutsListTool,
+  shortcutsGetTool,
   shortcutsExecuteTool,
   ...superduckTools
 ];
 
-const mcpToolNames = ['tabs_context_mcp', 'tabs_create_mcp', ...superduckToolNames];
+const mcpToolNames = ['tabs_context_mcp', 'tabs_create_mcp', 'shortcuts_list', 'shortcuts_get', ...superduckToolNames];
 
 // =============================================================================
 // ToolExecutor class (gr, lines 6813-6987)
@@ -1359,10 +1457,14 @@ export async function executeTool(options: {
   let toolResult: any;
 
   try {
-    const tabInfo = await tabGroupManager.getTabForMcp(options.tabId, options.tabGroupId);
-    tabId = tabInfo.tabId;
-    domain = tabInfo.domain;
-    url = tabInfo.url;
+    const skipTabLookup =
+      mcpToolNames.includes(options.toolName) && options.tabId === undefined;
+    if (!skipTabLookup) {
+      const tabInfo = await tabGroupManager.getTabForMcp(options.tabId, options.tabGroupId);
+      tabId = tabInfo.tabId;
+      domain = tabInfo.domain;
+      url = tabInfo.url;
+    }
   } catch {
     trackEvent('claude_chrome.mcp.tool_called', {
       tool_name: options.toolName,

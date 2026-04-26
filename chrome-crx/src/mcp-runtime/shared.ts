@@ -1,3 +1,5 @@
+import { SavedPromptsService } from '../SavedPromptsService';
+
 export const PermissionTools = {
   EXECUTE_JAVASCRIPT: 'execute_javascript',
   NAVIGATE: 'navigate',
@@ -48,11 +50,16 @@ export const screenRecorder = {
 
 export const MCP_NATIVE_SESSION_ID = `mcp_native_${Date.now()}`;
 
+// Thin re-export so callers can swap implementations later (e.g. cache layer)
+// without touching every call site. Also normalizes find-by-X to `null` so
+// callers can `if (!shortcut)` without distinguishing missing vs undefined.
 export const promptManager = {
-  getAllPrompts: async (): Promise<any[]> => [],
-  getPromptById: async (_id: string): Promise<any> => null,
-  getPromptByCommand: async (_cmd: string): Promise<any> => null,
-  recordPromptUsage: async (_id: string): Promise<void> => {}
+  getAllPrompts: () => SavedPromptsService.getAllPrompts(),
+  getPromptById: async (id: string) =>
+    (await SavedPromptsService.getPromptById(id)) ?? null,
+  getPromptByCommand: async (cmd: string) =>
+    (await SavedPromptsService.getPromptByCommand(cmd)) ?? null,
+  recordPromptUsage: (id: string) => SavedPromptsService.recordPromptUsage(id)
 };
 
 export function extractAppName(url: string): string | undefined {
