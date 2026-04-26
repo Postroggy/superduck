@@ -6927,7 +6927,7 @@ function VersionBlockedView({
           className="px-4 py-2 rounded-lg bg-accent-main-100 text-oncolor-100"
           onClick={() =>
             chrome.tabs.create({
-              url: 'https://chromewebstore.google.com/detail/claude/onpjjodappojoekckagpfjckoamcmhbn'
+              url: 'https://chromewebstore.google.com/detail/claude/komnjkkihimgafgblijcchlgeiogpjgi'
             })
           }
         >
