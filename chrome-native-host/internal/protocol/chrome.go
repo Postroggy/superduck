@@ -50,7 +50,7 @@ type Message struct {
 	Type    string                 `json:"type"`
 	Method  string                 `json:"method,omitempty"`
 	Params  map[string]interface{} `json:"params,omitempty"`
-	JsonRPC string                 `json:"jsonrpc,omitempty"`
+	JSONRPC string                 `json:"jsonrpc,omitempty"`
 }
 
 type ToolRequest struct {
