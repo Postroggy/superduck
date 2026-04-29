@@ -65,7 +65,7 @@
   "icons": {
     "128": "icon-128.png"
   },
-  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuU2JVTkmCKDJEpCHlsr4zPkPx9lEwHTE66DQMn8nhuazGn6KxqzgSa88Qe4IE3uK5MEGZebCbUOuEg6wsH6IjnuepymKjP+MS8JeYLrFNqDFMkfdUg/H3PWkLe2qqQ1lynltiWYaP8USiY1JbDUVHHhtdtcMvX2zNVeNSTj74rywsoPeCOdZfW5BRkekwBUOnPzFZZCozkk4B5VUCdIRINmam8uAVQwUtW/njOhBWJ8xz5ljOjFvKVH41UTe+fiDOSyO48q6MpmzFHZxVS8CQkRCwj5Wf6Pjf4NnBV37GP/v2LkENwNpUK6jl/ztQMQHKj6t53qhGUxExwzrZ59A+wIDAQAB",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyZcvGdcrhXUFfnde8sYGcU0gWzcZrw92r/6r9FPD300E3ITlkcbdjvue7WJA8h4ajvPljQLtx8FMJCk+yZI+POL1yGF8ImMfkLKVj9EE4hMojXtMJCUDWeAqWeabe9q7mg7NubJqVXm3jKhmoUacbLptDYiDz3TYLXWq+M1Tk8UEdsdVOu3L0KE8GvyGUGKSpXoU5WU+z9CjBVenuBAtnKon/Sqev+pg54aqReDuRGtGTkgHLu2vf8scnEkfpLABH38DfXfcnPC2qeRG+tPlAq3IlqELuVJDd2xtEaMXzz9eE6oRhSRPzmae/7HJfjPg+TQxq1ivZ5CxtQVbfQCZkwIDAQAB",
   "manifest_version": 3,
   "minimum_chrome_version": "116",
   "name": "SuperDuck",
