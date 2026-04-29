@@ -1,0 +1,62 @@
+# golangci-lint configuration for chrome-native-host (superduck CLI + native host + MCP server).
+# Focused on enforcing Go naming conventions documented in AGENTS.md.
+# Run with: golangci-lint run ./...
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  disable-all: true
+  enable:
+    # Naming convention enforcement
+    - revive       # configurable replacement for golint; flags ID/URL/HTTP casing, exported-comment style, var-naming
+    - stylecheck   # ST1003 (var naming), ST1016 (consistent receiver names), ST1023 (redundant types)
+    - predeclared  # warns when shadowing predeclared identifiers (e.g. `len`, `error`)
+    # Baseline correctness (kept on so naming fixes don't introduce regressions)
+    - govet
+    - ineffassign
+    - unused
+    - misspell
+
+linters-settings:
+  revive:
+    severity: warning
+    rules:
+      - name: var-naming                # camelCase / PascalCase, ID/URL/HTTP all-caps, no snake_case
+      - name: exported                  # exported identifiers must have a doc comment starting with the name
+      - name: package-comments
+      - name: receiver-naming           # consistent receiver name within a type
+      - name: range-val-in-closure
+      - name: error-naming              # error vars: errXxx (unexported) / ErrXxx (exported)
+      - name: error-return
+      - name: increment-decrement
+      - name: unexported-return
+      - name: indent-error-flow
+      - name: superfluous-else
+      - name: time-naming
+      - name: context-keys-type
+      - name: context-as-argument
+  stylecheck:
+    checks:
+      - "ST1003"   # naming
+      - "ST1016"   # receiver name consistency
+      - "ST1020"   # exported function comment
+      - "ST1021"   # exported type comment
+      - "ST1022"   # exported var/const comment
+
+issues:
+  # Don't hide naming issues behind the default "max 3 per linter per file" cap.
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  exclude-rules:
+    # Generated / vendored code: skip naming complaints.
+    - path: _generated\.go
+      linters:
+        - revive
+        - stylecheck
+    # Tests can use slightly looser rules (e.g. shorter receivers, ad-hoc helpers).
+    - path: _test\.go
+      linters:
+        - revive
+      text: "exported"
