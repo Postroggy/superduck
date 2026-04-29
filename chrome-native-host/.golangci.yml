@@ -1,62 +1,68 @@
-# golangci-lint configuration for chrome-native-host (superduck CLI + native host + MCP server).
-# Focused on enforcing Go naming conventions documented in AGENTS.md.
-# Run with: golangci-lint run ./...
-
+version: "2"
 run:
-  timeout: 5m
   tests: true
-
 linters:
-  disable-all: true
+  default: none
   enable:
-    # Naming convention enforcement
-    - revive       # configurable replacement for golint; flags ID/URL/HTTP casing, exported-comment style, var-naming
-    - stylecheck   # ST1003 (var naming), ST1016 (consistent receiver names), ST1023 (redundant types)
-    - predeclared  # warns when shadowing predeclared identifiers (e.g. `len`, `error`)
-    # Baseline correctness (kept on so naming fixes don't introduce regressions)
     - govet
     - ineffassign
-    - unused
     - misspell
-
-linters-settings:
-  revive:
-    severity: warning
+    - predeclared
+    - revive
+    - staticcheck
+    - unused
+  settings:
+    revive:
+      severity: warning
+      rules:
+        - name: var-naming
+        - name: exported
+        - name: package-comments
+        - name: receiver-naming
+        - name: range-val-in-closure
+        - name: error-naming
+        - name: error-return
+        - name: increment-decrement
+        - name: unexported-return
+        - name: indent-error-flow
+        - name: superfluous-else
+        - name: time-naming
+        - name: context-keys-type
+        - name: context-as-argument
+    staticcheck:
+      checks:
+        - ST1003
+        - ST1016
+        - ST1020
+        - ST1021
+        - ST1022
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
     rules:
-      - name: var-naming                # camelCase / PascalCase, ID/URL/HTTP all-caps, no snake_case
-      - name: exported                  # exported identifiers must have a doc comment starting with the name
-      - name: package-comments
-      - name: receiver-naming           # consistent receiver name within a type
-      - name: range-val-in-closure
-      - name: error-naming              # error vars: errXxx (unexported) / ErrXxx (exported)
-      - name: error-return
-      - name: increment-decrement
-      - name: unexported-return
-      - name: indent-error-flow
-      - name: superfluous-else
-      - name: time-naming
-      - name: context-keys-type
-      - name: context-as-argument
-  stylecheck:
-    checks:
-      - "ST1003"   # naming
-      - "ST1016"   # receiver name consistency
-      - "ST1020"   # exported function comment
-      - "ST1021"   # exported type comment
-      - "ST1022"   # exported var/const comment
-
+      - linters:
+          - revive
+          - staticcheck
+        path: _generated\.go
+      - linters:
+          - revive
+        path: _test\.go
+        text: exported
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
 issues:
-  # Don't hide naming issues behind the default "max 3 per linter per file" cap.
   max-issues-per-linter: 0
   max-same-issues: 0
-  exclude-rules:
-    # Generated / vendored code: skip naming complaints.
-    - path: _generated\.go
-      linters:
-        - revive
-        - stylecheck
-    # Tests can use slightly looser rules (e.g. shorter receivers, ad-hoc helpers).
-    - path: _test\.go
-      linters:
-        - revive
-      text: "exported"
+formatters:
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

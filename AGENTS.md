@@ -42,6 +42,9 @@ bun run format       # prettier
 cd chrome-native-host
 make              # 构建 native-host / mcp-server / superduck 三个二进制到 build/
 make superduck    # 只构建 CLI
+make test         # 运行 go test ./...
+make lint         # 运行 golangci-lint(配置见 .golangci.yml)
+make lint-install # 首次使用前安装 pinned 版本的 golangci-lint
 ```
 
 构建完成后,`chrome-native-host/superduck` 通常是指向 `build/superduck` 的软链;如果丢失用 `ln -sf build/superduck superduck` 重建。

@@ -1,0 +1,35 @@
+name: Lint (Go)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'chrome-native-host/**'
+      - '.github/workflows/lint-go.yml'
+  pull_request:
+    paths:
+      - 'chrome-native-host/**'
+      - '.github/workflows/lint-go.yml'
+
+jobs:
+  golangci:
+    name: golangci-lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: chrome-native-host
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: chrome-native-host/go.mod
+          cache: true
+          cache-dependency-path: chrome-native-host/go.sum
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v2.6.0
+          working-directory: chrome-native-host
+          args: --timeout=5m
