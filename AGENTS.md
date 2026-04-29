@@ -46,6 +46,21 @@ make superduck    # 只构建 CLI
 
 构建完成后,`chrome-native-host/superduck` 通常是指向 `build/superduck` 的软链;如果丢失用 `ln -sf build/superduck superduck` 重建。
 
+### Pre-commit Hooks (husky + lint-staged)
+
+仓库根目录配置了 husky + lint-staged,首次 clone 后请在仓库根执行:
+
+```bash
+bun install      # 或 npm install — 触发 husky `prepare` 脚本,在 .git 中注册钩子
+```
+
+之后每次 `git commit` 时会自动:
+
+- 对暂存的 `chrome-crx/src/**/*.{ts,tsx,js,json}` 跑 `prettier --write` 与 `eslint --fix`
+- 对暂存的 `chrome-native-host/**/*.go` / `coworkd/**/*.go` 跑 `gofmt -w` 与 `go vet ./...`
+
+钩子失败时提交会被中止;修复后重新 `git add` 再 `git commit`。如需绕过(不推荐),可加 `--no-verify`。
+
 ## 约定与原则
 
 - **修改即构建**:改完代码立即跑对应的 build,验证通过再回复用户。
