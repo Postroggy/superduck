@@ -30,7 +30,7 @@ export const useScreenCapture = ({
       }
 
       // Capture visible tab
-      const dataUrl = await chrome.tabs.captureVisibleTab(undefined, {
+      const dataUrl = await chrome.tabs.captureVisibleTab({
         format: 'jpeg',
         quality: 90,
       });

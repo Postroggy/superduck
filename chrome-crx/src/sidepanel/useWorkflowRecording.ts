@@ -100,7 +100,7 @@ export const useWorkflowRecording = ({
   const [activeTabs, setActiveTabs] = useState<Set<number>>(new Set());
   const visitedTabsRef = useRef<Set<number>>(new Set());
   const createdTabsRef = useRef<Set<number>>(new Set());
-  const [currentTabId, setCurrentTabId] = useState<number>(tabId);
+  const [currentTabId, setCurrentTabId] = useState<number | undefined>(tabId);
   const tabGroupIdRef = useRef<number | undefined>(undefined);
 
   // Recording control
@@ -109,7 +109,7 @@ export const useWorkflowRecording = ({
 
   // Screenshot and speech
   const lastScreenshotRef = useRef<string>('');
-  const tabActivationListenerRef = useRef<((activeInfo: chrome.tabs.TabActiveInfo) => void) | null>(
+  const tabActivationListenerRef = useRef<((activeInfo: chrome.tabs.OnActivatedInfo) => void) | null>(
     null
   );
   const injectionPendingTabsRef = useRef<Set<number>>(new Set());
@@ -125,7 +125,7 @@ export const useWorkflowRecording = ({
   // Deduplication
   const processedEventsRef = useRef<Set<number>>(new Set());
   const lastTabsRef = useRef<Set<number>>(new Set());
-  const lastTabIdRef = useRef<number>(tabId);
+  const lastTabIdRef = useRef<number | undefined>(tabId);
 
   // Speech recognition hook
   const {
@@ -759,7 +759,7 @@ export const useWorkflowRecording = ({
       }
 
       // Listen for tab activation
-      const handleTabActivation = (activeInfo: chrome.tabs.TabActiveInfo) => {
+      const handleTabActivation = (activeInfo: chrome.tabs.OnActivatedInfo) => {
         if (!isRecordingRef.current || recordingState.isPaused) return;
 
         const activatedTabId = activeInfo.tabId;

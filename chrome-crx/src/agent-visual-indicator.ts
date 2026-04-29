@@ -19,7 +19,8 @@
     if (i18nLoaded) return;
     try {
       const stored = await chrome.storage.local.get('preferred_locale');
-      const rawLocale = stored.preferred_locale || navigator.language || DEFAULT_LOCALE;
+      const rawLocale: string =
+        (stored.preferred_locale as string) || navigator.language || DEFAULT_LOCALE;
       const locale = normalizeLocale(rawLocale);
       const response = await fetch(chrome.runtime.getURL(`i18n/${locale}.json`));
       if (response.ok) {

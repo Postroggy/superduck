@@ -134,8 +134,8 @@ export function detectConversationLanguage(messages: any[]): SupportedCompaction
       if (typeof msg.content === 'string') return msg.content;
       if (Array.isArray(msg.content)) {
         return msg.content
-          .filter(item => item?.type === 'text')
-          .map(item => item.text || '')
+          .filter((item: { type?: string }) => item?.type === 'text')
+          .map((item: { text?: string }) => item.text || '')
           .join(' ');
       }
       return '';

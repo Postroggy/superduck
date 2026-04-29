@@ -468,7 +468,7 @@ export function CreateShortcutModal({
                 label={intl.formatMessage({ defaultMessage: 'Name', id: 'name' })}
                 type="text"
                 value={commandName}
-                onValueChange={(val) => {
+                onValueChange={(val: string) => {
                   // Allow Chinese characters, letters, numbers, hyphens, and underscores
                   // Replace spaces with hyphens
                   const sanitized = val
@@ -536,7 +536,7 @@ export function CreateShortcutModal({
               label={intl.formatMessage({ defaultMessage: 'Prompt', id: 'prompt' })}
               required
               value={promptText}
-              onChange={(e) => setPromptText(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setPromptText(e.target.value)}
               className="min-h-32 max-h-64 overflow-y-auto font-large text-sm"
               placeholder={intl.formatMessage({
                 defaultMessage: 'Enter your prompt text...',
@@ -556,7 +556,7 @@ export function CreateShortcutModal({
                 label={urlFieldLabel}
                 type="url"
                 value={url}
-                onValueChange={(value) => setUrl(value)}
+                onValueChange={(value: string) => setUrl(value)}
                 placeholder="https://example.com"
                 className="w-full text-sm"
                 error={hasAttemptedSubmit && !!urlErrorMessage}

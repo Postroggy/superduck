@@ -215,7 +215,7 @@ export function WorkflowRecordingInterface({
                 value={workflowTitle}
                 onValueChange={setWorkflowTitle}
                 onBlur={commitWorkflowTitle}
-                onKeyDown={(event) => {
+                onKeyDown={(event: React.KeyboardEvent<HTMLInputElement>) => {
                   if (event.key === 'Enter') {
                     event.preventDefault();
                     commitWorkflowTitle();

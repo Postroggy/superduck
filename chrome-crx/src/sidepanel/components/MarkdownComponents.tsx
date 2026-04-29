@@ -715,7 +715,7 @@ export const STANDARD_MARKDOWN_GRID_CLASS = 'grid-cols-1 grid [&_>_*]:min-w-0 ga
 // =============================================================================
 
 let mathPluginsCache: { remarkMath: any; rehypeKatex: any } | null = null;
-let mathPluginsPromise: Promise<typeof mathPluginsCache> | null = null;
+let mathPluginsPromise: Promise<{ remarkMath: any; rehypeKatex: any } | null> | null = null;
 
 /**
  * Hook to lazy-load remark-math and rehype-katex plugins.
@@ -740,7 +740,8 @@ export function useMathPlugins(): { remarkMath?: any; rehypeKatex?: any } {
         }
       );
     }
-    mathPluginsPromise.then((result) => {
+    const promise = mathPluginsPromise;
+    promise.then((result) => {
       if (result) setPlugins(result);
     });
   }, []);
