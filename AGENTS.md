@@ -31,6 +31,8 @@ bun run dev          # 监听模式
 bun run typecheck    # tsc --noEmit
 bun run lint         # eslint
 bun run format       # prettier
+bun run test         # vitest run (单元 + 集成)
+bun run test:coverage # vitest 覆盖率 + 阈值门禁 (lines/statements/branches ≥ 90%, functions ≥ 55%)
 ```
 
 构建产物在 `chrome-crx/dist/`,加载扩展时指向该目录。
@@ -43,6 +45,7 @@ cd chrome-native-host
 make              # 构建 native-host / mcp-server / superduck 三个二进制到 build/
 make superduck    # 只构建 CLI
 make test         # 运行 go test ./...
+make test-coverage # 覆盖率门禁(默认 ≥ 40%, 见 COVERAGE_PACKAGES / MIN_COVERAGE 变量)
 make lint         # 运行 golangci-lint(配置见 .golangci.yml)
 make lint-install # 首次使用前安装 pinned 版本的 golangci-lint
 ```
