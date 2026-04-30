@@ -1,4 +1,4 @@
-.PHONY: all clean native-host mcp-server superduck install test test-coverage lint lint-install release-binaries
+.PHONY: all clean native-host mcp-server superduck install test test-coverage test-perf lint lint-install release-binaries
 
 # Pinned linter version. Bump deliberately and re-run `make lint`.
 GOLANGCI_LINT_VERSION ?= v2.6.0
@@ -53,6 +53,39 @@ install: all
 test:
 	@echo "Running tests..."
 	go test ./...
+
+# Test-performance tracking. Emits per-test timings (-v) and a machine-readable
+# JSON event stream (test-results.json) that CI can publish as an artifact and
+# downstream tooling (BuildPulse, Datadog CI Visibility, custom dashboards) can
+# ingest to chart suite duration over time. SLOW_TEST_MS (default 500ms) flags
+# any individual test that exceeds the threshold so regressions are caught
+# early instead of being buried in averages.
+SLOW_TEST_MS ?= 500
+
+test-perf:
+	@echo "Running tests with timing instrumentation (slow threshold $(SLOW_TEST_MS)ms)..."
+	@go test -v -count=1 -json ./... | tee test-results.json >/dev/null
+	@echo ""
+	@echo "Slow tests (>= $(SLOW_TEST_MS)ms):"
+	@awk -v slow=$(SLOW_TEST_MS) ' \
+		/"Action":"pass"/ && /"Test":/ && /"Elapsed":/ { \
+			match($$0, /"Test":"[^"]+"/); test=substr($$0, RSTART+8, RLENGTH-9); \
+			match($$0, /"Package":"[^"]+"/); pkg=substr($$0, RSTART+11, RLENGTH-12); \
+			match($$0, /"Elapsed":[0-9.]+/); elapsed=substr($$0, RSTART+10, RLENGTH-10)+0; \
+			ms = elapsed * 1000; \
+			if (ms >= slow) printf "  %6.0fms  %s.%s\n", ms, pkg, test; \
+		} \
+	' test-results.json | sort -nr || true
+	@echo ""
+	@echo "Top 10 slowest tests overall:"
+	@awk ' \
+		/"Action":"pass"/ && /"Test":/ && /"Elapsed":/ { \
+			match($$0, /"Test":"[^"]+"/); test=substr($$0, RSTART+8, RLENGTH-9); \
+			match($$0, /"Package":"[^"]+"/); pkg=substr($$0, RSTART+11, RLENGTH-12); \
+			match($$0, /"Elapsed":[0-9.]+/); elapsed=substr($$0, RSTART+10, RLENGTH-10)+0; \
+			printf "%.6f\t%s.%s\n", elapsed, pkg, test; \
+		} \
+	' test-results.json | sort -nr | head -10 | awk '{ printf "  %7.3fs  %s\n", $$1, $$2 }'
 
 # Coverage gate. Only the packages that actually have unit tests are
 # included; cmd/* and pure I/O packages are skipped because they require

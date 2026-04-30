@@ -29,6 +29,21 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Run tests with coverage thresholds
         run: bun run test:coverage
+      - name: Upload JUnit test report (timing data)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chrome-crx-test-junit
+          path: chrome-crx/test-results.junit.xml
+          if-no-files-found: warn
+      - name: Publish test report (durations)
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: chrome-crx tests
+          path: chrome-crx/test-results.junit.xml
+          reporter: jest-junit
+          fail-on-error: false
       - name: Upload HTML coverage report
         if: always()
         uses: actions/upload-artifact@v4
@@ -52,6 +67,15 @@ jobs:
           cache-dependency-path: chrome-native-host/go.sum
       - name: Run tests with coverage gate
         run: make test-coverage
+      - name: Run tests with timing instrumentation
+        run: make test-perf
+      - name: Upload Go test timing JSON
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chrome-native-host-test-timings
+          path: chrome-native-host/test-results.json
+          if-no-files-found: warn
       - name: Upload coverage profile
         if: always()
         uses: actions/upload-artifact@v4
