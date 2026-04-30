@@ -10,7 +10,11 @@
     "lint": "eslint \"src/**/*.ts\"",
     "lint:fix": "npm run lint -- --fix",
     "format": "prettier --write \"src/**/*.{ts,js,json}\" \"eslint.config.js\" \"package.json\" \"tsconfig.json\" \".prettierrc.json\"",
-    "format:check": "prettier --check \"src/**/*.{ts,js,json}\" \"eslint.config.js\" \"package.json\" \"tsconfig.json\" \".prettierrc.json\""
+    "format:check": "prettier --check \"src/**/*.{ts,js,json}\" \"eslint.config.js\" \"package.json\" \"tsconfig.json\" \".prettierrc.json\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "vitest run tests/integration",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
@@ -69,6 +73,7 @@
     "@types/luxon": "^3.4.0",
     "@types/react": "^19.2.0",
     "@vitejs/plugin-react": "^5.1.4",
+    "@vitest/coverage-v8": "^2.1.9",
     "eslint": "^10.0.2",
     "eslint-config-prettier": "^10.1.8",
     "globals": "^17.3.0",
@@ -76,7 +81,8 @@
     "tailwindcss": "4.1.4",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.56.1",
-    "vite": "^7.3.1"
+    "vite": "^7.3.1",
+    "vitest": "^2.1.9"
   },
   "description": "",
   "main": "eslint.config.js",

@@ -1,4 +1,4 @@
-.PHONY: all clean native-host mcp-server superduck install test lint lint-install release-binaries
+.PHONY: all clean native-host mcp-server superduck install test test-coverage lint lint-install release-binaries
 
 # Pinned linter version. Bump deliberately and re-run `make lint`.
 GOLANGCI_LINT_VERSION ?= v2.6.0
@@ -53,6 +53,20 @@ install: all
 test:
 	@echo "Running tests..."
 	go test ./...
+
+# Coverage gate. Only the packages that actually have unit tests are
+# included; cmd/* and pure I/O packages are skipped because they require
+# Chrome / native messaging at the other end. Adjust MIN_COVERAGE deliberately
+# (and add tests) when raising the bar.
+COVERAGE_PACKAGES ?= ./cmd/mcp-server/... ./internal/converter/...
+MIN_COVERAGE ?= 40
+
+test-coverage:
+	@echo "Running tests with coverage gate (>= $(MIN_COVERAGE)%) on $(COVERAGE_PACKAGES)..."
+	@go test -covermode=atomic -coverprofile=coverage.out $(COVERAGE_PACKAGES)
+	@go tool cover -func=coverage.out | tail -1
+	@total=$$(go tool cover -func=coverage.out | awk '/^total:/ {gsub("%","",$$3); print $$3}'); \
+		awk -v t="$$total" -v m="$(MIN_COVERAGE)" 'BEGIN{ if (t+0 < m+0) { printf "FAIL: coverage %.1f%% < %s%%\n", t, m; exit 1 } else { printf "OK: coverage %.1f%% >= %s%%\n", t, m } }'
 
 # Install golangci-lint at the pinned version into $GOPATH/bin (or $HOME/go/bin).
 lint-install:
