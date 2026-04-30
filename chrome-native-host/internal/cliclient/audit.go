@@ -26,7 +26,7 @@ func AuditPath() (string, error) {
 }
 
 type AuditRecord struct {
-	Ts          string `json:"ts"`
+	TS          string `json:"ts"`
 	Cmd         string `json:"cmd"`
 	TabID       *int   `json:"tabId,omitempty"`
 	URL         string `json:"url,omitempty"`
@@ -60,8 +60,8 @@ func WriteAudit(rec AuditRecord) error {
 		return err
 	}
 	defer f.Close()
-	if rec.Ts == "" {
-		rec.Ts = time.Now().UTC().Format(time.RFC3339)
+	if rec.TS == "" {
+		rec.TS = time.Now().UTC().Format(time.RFC3339)
 	}
 	b, _ := json.Marshal(rec)
 	b = append(b, '\n')

@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 type TabChangeProperty = 'status' | 'active' | 'url' | 'title' | 'audible' | 'mutedInfo' | 'favIconUrl';
 
 interface TabChangeInfo {
-  status?: 'loading' | 'complete';
+  status?: 'loading' | 'complete' | 'unloaded';
   active?: boolean;
   url?: string;
   title?: string;

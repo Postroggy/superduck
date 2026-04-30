@@ -769,6 +769,11 @@ async function executeScroll(
   const direction = params.scroll_direction || 'down';
   const amount = params.scroll_amount || 3;
 
+  const manageIndicator = !options?.skipIndicator;
+  if (manageIndicator) {
+    await tabGroupManager.hideIndicatorForToolUse(tabId);
+  }
+
   try {
     let deltaX = 0;
     let deltaY = 0;
@@ -845,6 +850,10 @@ async function executeScroll(
     return {
       error: `Error scrolling: ${error instanceof Error ? error.message : 'Unknown error'}`
     };
+  } finally {
+    if (manageIndicator) {
+      await tabGroupManager.restoreIndicatorAfterToolUse(tabId);
+    }
   }
 }
 
@@ -974,40 +983,45 @@ async function executeDrag(
     const securityCheck = await checkDomainSecurity(tabId, currentUrl, 'drag action');
     if (securityCheck) return securityCheck;
 
-    await cdpDebugger.dispatchMouseEvent(tabId, {
-      type: 'mouseMoved',
-      x: startX,
-      y: startY,
-      button: 'none',
-      buttons: 0,
-      modifiers: 0
-    });
-    await cdpDebugger.dispatchMouseEvent(tabId, {
-      type: 'mousePressed',
-      x: startX,
-      y: startY,
-      button: 'left',
-      buttons: 1,
-      clickCount: 1,
-      modifiers: 0
-    });
-    await cdpDebugger.dispatchMouseEvent(tabId, {
-      type: 'mouseMoved',
-      x: endX,
-      y: endY,
-      button: 'left',
-      buttons: 1,
-      modifiers: 0
-    });
-    await cdpDebugger.dispatchMouseEvent(tabId, {
-      type: 'mouseReleased',
-      x: endX,
-      y: endY,
-      button: 'left',
-      buttons: 0,
-      clickCount: 1,
-      modifiers: 0
-    });
+    await tabGroupManager.hideIndicatorForToolUse(tabId);
+    try {
+      await cdpDebugger.dispatchMouseEvent(tabId, {
+        type: 'mouseMoved',
+        x: startX,
+        y: startY,
+        button: 'none',
+        buttons: 0,
+        modifiers: 0
+      });
+      await cdpDebugger.dispatchMouseEvent(tabId, {
+        type: 'mousePressed',
+        x: startX,
+        y: startY,
+        button: 'left',
+        buttons: 1,
+        clickCount: 1,
+        modifiers: 0
+      });
+      await cdpDebugger.dispatchMouseEvent(tabId, {
+        type: 'mouseMoved',
+        x: endX,
+        y: endY,
+        button: 'left',
+        buttons: 1,
+        modifiers: 0
+      });
+      await cdpDebugger.dispatchMouseEvent(tabId, {
+        type: 'mouseReleased',
+        x: endX,
+        y: endY,
+        button: 'left',
+        buttons: 0,
+        clickCount: 1,
+        modifiers: 0
+      });
+    } finally {
+      await tabGroupManager.restoreIndicatorAfterToolUse(tabId);
+    }
 
     return { output: `Dragged from (${startX}, ${startY}) to (${endX}, ${endY})` };
   } catch (error) {
@@ -1142,14 +1156,19 @@ async function executeHover(
     const securityCheck = await checkDomainSecurity(tabId, currentUrl, 'hover action');
     if (securityCheck) return securityCheck;
 
-    await cdpDebugger.dispatchMouseEvent(tabId, {
-      type: 'mouseMoved',
-      x,
-      y,
-      button: 'none',
-      buttons: 0,
-      modifiers: 0
-    });
+    await tabGroupManager.hideIndicatorForToolUse(tabId);
+    try {
+      await cdpDebugger.dispatchMouseEvent(tabId, {
+        type: 'mouseMoved',
+        x,
+        y,
+        button: 'none',
+        buttons: 0,
+        modifiers: 0
+      });
+    } finally {
+      await tabGroupManager.restoreIndicatorAfterToolUse(tabId);
+    }
 
     if (params.ref) {
       return { output: `Hovered over element ${params.ref}` };

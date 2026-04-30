@@ -1,0 +1,68 @@
+version: "2"
+run:
+  tests: true
+linters:
+  default: none
+  enable:
+    - govet
+    - ineffassign
+    - misspell
+    - predeclared
+    - revive
+    - staticcheck
+    - unused
+  settings:
+    revive:
+      severity: warning
+      rules:
+        - name: var-naming
+        - name: exported
+        - name: package-comments
+        - name: receiver-naming
+        - name: range-val-in-closure
+        - name: error-naming
+        - name: error-return
+        - name: increment-decrement
+        - name: unexported-return
+        - name: indent-error-flow
+        - name: superfluous-else
+        - name: time-naming
+        - name: context-keys-type
+        - name: context-as-argument
+    staticcheck:
+      checks:
+        - ST1003
+        - ST1016
+        - ST1020
+        - ST1021
+        - ST1022
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - revive
+          - staticcheck
+        path: _generated\.go
+      - linters:
+          - revive
+        path: _test\.go
+        text: exported
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+formatters:
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

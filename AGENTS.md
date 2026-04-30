@@ -42,9 +42,27 @@ bun run format       # prettier
 cd chrome-native-host
 make              # 构建 native-host / mcp-server / superduck 三个二进制到 build/
 make superduck    # 只构建 CLI
+make test         # 运行 go test ./...
+make lint         # 运行 golangci-lint(配置见 .golangci.yml)
+make lint-install # 首次使用前安装 pinned 版本的 golangci-lint
 ```
 
 构建完成后,`chrome-native-host/superduck` 通常是指向 `build/superduck` 的软链;如果丢失用 `ln -sf build/superduck superduck` 重建。
+
+### Pre-commit Hooks (husky + lint-staged)
+
+仓库根目录配置了 husky + lint-staged,首次 clone 后请在仓库根执行:
+
+```bash
+bun install      # 或 npm install — 触发 husky `prepare` 脚本,在 .git 中注册钩子
+```
+
+之后每次 `git commit` 时会自动:
+
+- 对暂存的 `chrome-crx/src/**/*.{ts,tsx,js,json}` 跑 `prettier --write` 与 `eslint --fix`
+- 对暂存的 `chrome-native-host/**/*.go` / `coworkd/**/*.go` 跑 `gofmt -w` 与 `go vet ./...`
+
+钩子失败时提交会被中止;修复后重新 `git add` 再 `git commit`。如需绕过(不推荐),可加 `--no-verify`。
 
 ## 约定与原则
 
@@ -52,6 +70,48 @@ make superduck    # 只构建 CLI
 - **不做多余的防御**:不加无用的 try/catch、不写冗长注释、不引入向后兼容壳。
 - **优先复用已有结构**,而不是新建抽象。
 - **中文交流**:用户是中文用户,回复请使用中文。
+
+## 命名约定 (Naming Conventions)
+
+仓库统一执行下面的命名规则,新增 / 修改代码时请遵循。TS 侧已通过 `@typescript-eslint/naming-convention` 在 `chrome-crx/eslint.config.js` 强制,Go 侧遵循官方 `gofmt`/`go vet`/`golint` 风格。
+
+### TypeScript / JavaScript (`chrome-crx/src/**`)
+
+| 类别 | 约定 | 例子 |
+|---|---|---|
+| 变量 / 局部常量 | `camelCase` | `tabId`, `currentUser` |
+| 模块级常量(不可变字面量) | `UPPER_CASE` | `MAX_RETRIES`, `DEFAULT_TIMEOUT_MS` |
+| 函数 | `camelCase` | `fetchTabInfo()`, `parseUrl()` |
+| React 组件 / 类 / 类型 / 接口 / 枚举 | `PascalCase` | `SidepanelApp`, `TabInfo`, `MessageKind` |
+| 枚举成员 | `PascalCase` 或 `UPPER_CASE` | `MessageKind.Request`, `Status.OK` |
+| 私有 / 故意未使用的标识符 | 前缀 `_` | `_unused`, `_internal` |
+| 文件名 | 组件用 `PascalCase.tsx`,工具/hook 用 `camelCase.ts` | `SidepanelApp.tsx`, `useTabStatus.ts` |
+| 对象字面量 / 接口属性 | 不强制(为兼容外部 API / JSON) | `{ "Content-Type": "..." }` |
+
+避免:
+- 缩写大小写混乱(`HTTPUrl` → 用 `HttpUrl` 或 `httpUrl`)。
+- TS 接口加 `I` 前缀(`IUser` ❌,直接 `User` ✅)。
+- snake_case 变量(除非来自外部 JSON schema)。
+
+### Go (`chrome-native-host/**`、`coworkd/**`)
+
+遵循 [Effective Go](https://go.dev/doc/effective_go#names) 与 `gofmt`:
+
+- 包名:全小写、单个单词,无下划线(`tabgroup`,不要 `tab_group`)。
+- 导出标识符:`PascalCase`(`NewTabGroup`、`ServerConfig`)。
+- 未导出标识符:`camelCase`(`newTabGroup`、`serverConfig`)。
+- 缩写保持统一大小写:`URL`、`ID`、`HTTP`(用 `parseURL` 而不是 `parseUrl`,导出版用 `ParseURL`)。
+- 接收者:1–2 个字母短名,且全文件保持一致(`func (s *Server) ...`)。
+- 错误变量:`errXxx`(包内)/ `ErrXxx`(导出)。
+- 常量:依语义选 `PascalCase` / `camelCase`,不用 `UPPER_CASE`。
+
+### 通用
+
+- 文件名与目录名:Go 用全小写(必要时下划线),TS 见上表。
+- 测试文件:Go 用 `*_test.go`,TS 用 `*.test.ts` / `*.spec.ts`。
+- 提交信息 scope 用小写短名(`cli`、`crx`、`sidepanel`)。
+
+新代码若违反 TS 命名规则会触发 ESLint warning;Go 侧请在提交前跑 `go vet ./...`。
 
 ## 目录入口速查
 

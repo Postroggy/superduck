@@ -310,7 +310,7 @@ export function WorkflowStepsList({
                                     setEditingTranscriptIndex(null);
                                     setTranscriptDraft('');
                                   }}
-                                  onKeyDown={(event) => {
+                                  onKeyDown={(event: React.KeyboardEvent<HTMLTextAreaElement>) => {
                                     if (event.key === 'Enter' && !event.shiftKey) {
                                       event.preventDefault();
                                       const nextTranscript = transcriptDraft.trim();

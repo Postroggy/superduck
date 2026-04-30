@@ -402,11 +402,11 @@ class ChromeDebuggerProtocol {
   }
 
   static get consoleMessagesByTab(): Map<number, ConsoleTabData> {
-    return globalThis.__cdpConsoleMessagesByTab;
+    return globalThis.__cdpConsoleMessagesByTab as Map<number, ConsoleTabData>;
   }
 
   static get networkRequestsByTab(): Map<number, NetworkTabData> {
-    return globalThis.__cdpNetworkRequestsByTab;
+    return globalThis.__cdpNetworkRequestsByTab as Map<number, NetworkTabData>;
   }
 
   static get networkTrackingEnabled(): Set<number> {

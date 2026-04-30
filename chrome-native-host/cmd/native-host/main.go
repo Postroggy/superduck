@@ -1,7 +1,7 @@
 package main
 
 import (
-"chrome-native-host/internal/protocol"
+	"chrome-native-host/internal/protocol"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,38 +9,13 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"regexp"
-	"strconv"
 	"sync"
 	"syscall"
-	"time"
 )
 
 const (
 	socketPath = "/tmp/chrome-native-host.sock"
 )
-
-// --- State machine for test sequences ---
-
-var (
-	stateMu    sync.Mutex
-	running    bool
-	stepIndex  int
-	steps      []testStep
-	tabId      int
-	tabGroupId int
-)
-
-var (
-	reTabGroup = regexp.MustCompile(`Tab Group (\d+)`)
-	reTabId    = regexp.MustCompile(`tabId (\d+)`)
-)
-
-type testStep struct {
-	Name string
-	Tool string
-	Args map[string]interface{}
-}
 
 // --- Server with dual channels ---
 
@@ -250,18 +225,6 @@ func main() {
 
 // --- Helper functions ---
 
-func sendToolRequest(tool string, args map[string]interface{}) {
-	slog.Debug("sending tool request", "tool", tool, "args", args)
-	protocol.SendMessage(os.Stdout, map[string]interface{}{
-		"type":   "tool_request",
-		"method": "execute_tool",
-		"params": map[string]interface{}{
-			"tool": tool,
-			"args": args,
-		},
-	})
-}
-
 func handleIncomingToolRequest(raw []byte, writer io.Writer) {
 	var req protocol.ToolRequest
 	if err := json.Unmarshal(raw, &req); err != nil {
@@ -271,193 +234,6 @@ func handleIncomingToolRequest(raw []byte, writer io.Writer) {
 	}
 	slog.Debug("tool_request from extension", "method", req.Method, "tool", req.Params.Tool, "args", req.Params.Args)
 	sendToolError(writer, fmt.Sprintf("tool not implemented: %s", req.Params.Tool))
-}
-
-func handleToolResponse(raw []byte, writer io.Writer) {
-	var resp protocol.ToolResponseMsg
-	if err := json.Unmarshal(raw, &resp); err != nil {
-		slog.Error("tool_response unmarshal error", "error", err)
-		return
-	}
-
-	stateMu.Lock()
-	if !running {
-		stateMu.Unlock()
-		slog.Debug("tool_response received but no test running")
-		return
-	}
-	currentStep := stepIndex
-	stateMu.Unlock()
-
-	if resp.Error != nil {
-		errContent := fmt.Sprintf("%v", resp.Error.Content)
-		if currentStep < 0 {
-			slog.Error("FAIL step 0 (tabs_context_mcp)", "error", errContent)
-		} else {
-			slog.Error("FAIL step", "step", currentStep+1, "name", steps[currentStep].Name, "error", errContent)
-		}
-		finishTest("step failed")
-		return
-	}
-
-	// Step 0: tabs_context_mcp response
-	if currentStep < 0 {
-		tid, tgid := parseTabContext(resp.Result.Content)
-		if tid == 0 {
-			slog.Error("FAIL step 0: could not parse tabId")
-			finishTest("no tabId")
-			return
-		}
-
-		stateMu.Lock()
-		tabId = tid
-		tabGroupId = tgid
-		steps = buildTestSteps(tabId, tabGroupId)
-		stepIndex = 0
-		stateMu.Unlock()
-
-		slog.Info("OK step 0", "tabGroupId", tgid, "tabId", tid, "totalSteps", len(steps))
-		executeCurrentStep()
-		return
-	}
-
-	// Log success for current step
-	resultSummary := summarizeResult(resp.Result)
-	slog.Info("OK step", "step", currentStep+1, "name", steps[currentStep].Name, "result", resultSummary)
-
-	// Advance to next step
-	stateMu.Lock()
-	stepIndex++
-	idx := stepIndex
-	stateMu.Unlock()
-
-	if idx >= len(steps) {
-		finishTest("all steps completed successfully")
-		return
-	}
-	executeCurrentStep()
-	time.Sleep(time.Second * 5)
-}
-
-func buildTestSteps(tabId, tabGroupId int) []testStep {
-	return []testStep{
-		{
-			Name: "navigate to Google",
-			Tool: "navigate",
-			Args: map[string]interface{}{
-				"url":        "https://www.google.com/",
-				"tabId":      tabId,
-				"tabGroupId": tabGroupId,
-			},
-		},
-		{
-			Name: "read page content",
-			Tool: "read_page",
-			Args: map[string]interface{}{
-				"tabId":      tabId,
-				"tabGroupId": tabGroupId,
-			},
-		},
-	}
-}
-
-func executeCurrentStep() {
-	stateMu.Lock()
-	idx := stepIndex
-	s := steps[idx]
-	stateMu.Unlock()
-
-	slog.Debug("executing step", "step", idx+1, "name", s.Name, "tool", s.Tool)
-	sendToolRequest(s.Tool, s.Args)
-}
-
-func finishTest(reason string) {
-	stateMu.Lock()
-	running = false
-	stateMu.Unlock()
-	slog.Info("test sequence end", "reason", reason)
-}
-
-func summarizeResult(result *protocol.ContentWrap) string {
-	if result == nil {
-		return "(nil)"
-	}
-
-	switch v := result.Content.(type) {
-	case string:
-		if len(v) > 200 {
-			return v[:200] + "..."
-		}
-		return v
-	case []interface{}:
-		var parts []string
-		for _, item := range v {
-			m, ok := item.(map[string]interface{})
-			if !ok {
-				continue
-			}
-			if t, _ := m["type"].(string); t == "image" {
-				parts = append(parts, "[image: base64 screenshot]")
-			} else if text, _ := m["text"].(string); text != "" {
-				if len(text) > 150 {
-					text = text[:150] + "..."
-				}
-				parts = append(parts, text)
-			}
-		}
-		if len(parts) == 0 {
-			return fmt.Sprintf("(%d items)", len(v))
-		}
-		result := ""
-		for i, p := range parts {
-			if i > 0 {
-				result += " | "
-			}
-			result += p
-		}
-		return result
-	default:
-		s := fmt.Sprintf("%v", v)
-		if len(s) > 200 {
-			return s[:200] + "..."
-		}
-		return s
-	}
-}
-
-func parseTabContext(content interface{}) (tid int, tgid int) {
-	items, ok := content.([]interface{})
-	if !ok {
-		return 0, 0
-	}
-	for _, item := range items {
-		m, ok := item.(map[string]interface{})
-		if !ok {
-			continue
-		}
-		text, _ := m["text"].(string)
-		if text == "" {
-			continue
-		}
-		if tgid == 0 {
-			if match := reTabGroup.FindStringSubmatch(text); len(match) > 1 {
-				tgid, _ = strconv.Atoi(match[1])
-			}
-		}
-		if tid == 0 {
-			if match := reTabId.FindStringSubmatch(text); len(match) > 1 {
-				tid, _ = strconv.Atoi(match[1])
-			}
-		}
-	}
-	return
-}
-
-func sendToolResult(writer io.Writer, content interface{}) {
-	protocol.SendMessage(writer, protocol.ToolResponseMsg{
-		Type:   "tool_response",
-		Result: &protocol.ContentWrap{Content: content},
-	})
 }
 
 func sendToolError(writer io.Writer, msg string) {

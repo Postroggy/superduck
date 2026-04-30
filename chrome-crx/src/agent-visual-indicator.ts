@@ -19,7 +19,8 @@
     if (i18nLoaded) return;
     try {
       const stored = await chrome.storage.local.get('preferred_locale');
-      const rawLocale = stored.preferred_locale || navigator.language || DEFAULT_LOCALE;
+      const rawLocale: string =
+        (stored.preferred_locale as string) || navigator.language || DEFAULT_LOCALE;
       const locale = normalizeLocale(rawLocale);
       const response = await fetch(chrome.runtime.getURL(`i18n/${locale}.json`));
       if (response.ok) {
@@ -51,29 +52,6 @@
   let staticIndicatorHeartbeatInterval: ReturnType<typeof setInterval> | null = null;
   let ellipsisInterval: ReturnType<typeof setInterval> | null = null;
   let isMcpEnabled = false;
-  let savedOverflowHtml = "";
-  let savedOverflowBody = "";
-  let isPageScrollLocked = false;
-
-  function lockPageScroll(): void {
-    if (isPageScrollLocked) return;
-
-    savedOverflowHtml = document.documentElement.style.overflow;
-    savedOverflowBody = document.body.style.overflow;
-    document.documentElement.style.overflow = "hidden";
-    document.body.style.overflow = "hidden";
-    isPageScrollLocked = true;
-  }
-
-  function unlockPageScroll(): void {
-    if (!isPageScrollLocked) return;
-
-    document.documentElement.style.overflow = savedOverflowHtml;
-    document.body.style.overflow = savedOverflowBody;
-    savedOverflowHtml = "";
-    savedOverflowBody = "";
-    isPageScrollLocked = false;
-  }
 
   // ============================================
   // Styles
@@ -334,12 +312,46 @@
   // ============================================
 
   function createBlockingOverlay(): HTMLElement {
-    // 遮罩已停用:返回一个不可见、不拦截事件的占位元素,保持外部引用逻辑不变。
-    // 停用原因:该遮罩的 touch-action:none 会阻断 CDP/content-script 注入的
-    // wheel 事件,导致 x.com 等站点在 agent 运行时无法滚动。
+    // 全屏透明遮罩，拦截真实用户输入。
+    // CDP Input.dispatchMouseEvent / dispatchKeyEvent 是浏览器层注入，
+    // 不经过 DOM 事件分发，不受 pointer-events 影响，因此 agent 的点击/滚动
+    // 不会被这层遮罩阻断。注意：不要再加 touch-action:none —— 历史上它会
+    // 阻断 content-script 派发的 wheel 事件（虽然现在走 CDP，但保持简洁）。
     const overlay = document.createElement("div");
     overlay.id = "claude-agent-blocking-overlay";
-    overlay.style.cssText = "display: none !important;";
+    overlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: transparent;
+      pointer-events: auto;
+      z-index: 2147483645;
+      cursor: not-allowed;
+      opacity: 0;
+      transition: opacity 0.3s ease-in-out;
+    `;
+
+    const swallow = (e: Event) => {
+      if (!(e as any).isTrusted) return;
+      e.preventDefault();
+      e.stopPropagation();
+      (e as any).stopImmediatePropagation?.();
+    };
+
+    const events = [
+      "click", "dblclick", "auxclick", "contextmenu",
+      "mousedown", "mouseup",
+      "pointerdown", "pointerup",
+      "touchstart", "touchend", "touchmove",
+      "keydown", "keyup", "keypress",
+      "wheel",
+    ];
+    for (const evt of events) {
+      overlay.addEventListener(evt, swallow, { capture: true, passive: false });
+    }
+
     return overlay;
   }
 
@@ -688,8 +700,6 @@
       document.body.appendChild(blockingOverlayEl);
     }
 
-    lockPageScroll();
-
     // Create/show stop button (only if MCP is enabled)
     if (isMcpEnabled) {
       console.log('[Agent Indicator] Creating/showing stop button');
@@ -739,8 +749,6 @@
     if (blockingOverlayEl) {
       blockingOverlayEl.style.opacity = "0";
     }
-
-    unlockPageScroll();
 
     if (stopContainerEl) {
       stopContainerEl.style.opacity = "0";

@@ -6,7 +6,7 @@ import "flag"
 func cmdNetwork(argv []string) error {
 	fs := flag.NewFlagSet("network", flag.ContinueOnError)
 	urlPattern := fs.String("url-pattern", "", "Substring URL filter")
-	clear := fs.Bool("clear", false, "Clear after reading")
+	clearFlag := fs.Bool("clear", false, "Clear after reading")
 	limit := fs.Int("limit", 0, "Max requests (default 100)")
 	if err := fs.Parse(reorderFlagsFirst(argv)); err != nil {
 		return err
@@ -15,7 +15,7 @@ func cmdNetwork(argv []string) error {
 	if *urlPattern != "" {
 		args["urlPattern"] = *urlPattern
 	}
-	if *clear {
+	if *clearFlag {
 		args["clear"] = true
 	}
 	if *limit > 0 {

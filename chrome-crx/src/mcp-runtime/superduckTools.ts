@@ -277,7 +277,9 @@ export const superduckOpenTool: ToolDefinition = {
       } else {
         const active = await resolveActiveTab(args?.tabId);
         if (active.id === undefined) return { error: 'active tab has no id' };
-        tab = await chrome.tabs.update(active.id, { url, active: true });
+        const updated = await chrome.tabs.update(active.id, { url, active: true });
+        if (!updated) return { error: 'failed to update tab' };
+        tab = updated;
       }
       return {
         output: JSON.stringify({ tabId: tab.id, windowId: tab.windowId, url, newTab: !!args?.newTab })

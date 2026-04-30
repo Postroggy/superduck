@@ -584,10 +584,9 @@ const PermissionsTab: React.FC = () => {
   const intl = useIntl();
   const [permissions, setPermissions] = useState<PermissionsByScope>();
   const [isLoading, setIsLoading] = useState(true);
-  const [notificationsEnabled, setNotificationsEnabled] = useStorageState(
-    StorageKeys.NOTIFICATIONS_ENABLED,
-    undefined
-  );
+  const [notificationsEnabled, setNotificationsEnabled] = useStorageState<
+    'enabled' | 'disabled' | undefined
+  >(StorageKeys.NOTIFICATIONS_ENABLED, undefined);
   const [debugMode, setDebugMode] = useStorageState<boolean>(
     StorageKeys.DEBUG_MODE,
     false
@@ -1091,9 +1090,10 @@ const NavItem: React.FC<NavItemProps> = ({ children, isActive, onClick }) => (
 // =============================================================================
 
 function OptionsPage() {
+  const intl = useIntl();
   // DEV: stub auth/analytics when providers are not available
-  const userProfile = null;
-  const isAuthenticated = false;
+  const userProfile = null as { email: string } | null;
+  const isAuthenticated = false as boolean;
   const resetAnalytics = async () => {};
   const showInternal = false;
   const [apiKey, setApiKey] = useState('dev-mode');

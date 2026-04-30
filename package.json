@@ -1,0 +1,24 @@
+{
+  "name": "superduck-monorepo",
+  "private": true,
+  "description": "Root tooling for SuperDuck — installs git pre-commit hooks via husky + lint-staged across chrome-crx (TS) and chrome-native-host (Go).",
+  "scripts": {
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^15.2.10"
+  },
+  "lint-staged": {
+    "chrome-crx/src/**/*.{ts,tsx,js,json}": [
+      "bash scripts/lint-staged-prettier.sh"
+    ],
+    "chrome-crx/src/**/*.{ts,tsx}": [
+      "bash scripts/lint-staged-eslint.sh"
+    ],
+    "chrome-native-host/**/*.go": [
+      "gofmt -w",
+      "bash scripts/lint-staged-govet.sh"
+    ]
+  }
+}

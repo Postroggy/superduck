@@ -1231,9 +1231,9 @@ class ConversationCompactor {
           if (!Array.isArray(message.content)) {
             return total + JSON.stringify(message.content || '').length / 4;
           }
-          const imageCount = message.content.filter((item) => item?.type === 'image').length;
+          const imageCount = message.content.filter((item: { type?: string }) => item?.type === 'image').length;
           const nonImageText = JSON.stringify(
-            message.content.filter((item) => item?.type !== 'image')
+            message.content.filter((item: { type?: string }) => item?.type !== 'image')
           ).length;
           return total + imageCount * imageTokenEstimate + nonImageText / 4;
         }, 0)
@@ -1992,7 +1992,7 @@ const TimelineGroup = React.memo(function TimelineGroup({
                   >
                     {showCollapsed
                       ? intl.formatMessage({ id: 'hide_steps', defaultMessage: 'Hide steps' })
-                      : formatStepCountLabel(intl.formatMessage.bind(intl), collapsedCount)}
+                      : formatStepCountLabel(asFormatMessageLike(intl), collapsedCount)}
                   </button>
                 }
               />
@@ -2055,6 +2055,10 @@ type FormatMessageLike = (
   descriptor: { id: string; defaultMessage: string },
   values?: Record<string, any>
 ) => string;
+
+function asFormatMessageLike(intl: { formatMessage: (...args: any[]) => any }): FormatMessageLike {
+  return (descriptor, values) => intl.formatMessage(descriptor, values) as string;
+}
 
 function formatWithFallback(
   formatMessage: FormatMessageLike | undefined,
@@ -5382,7 +5386,7 @@ const BrowserToolCell = React.memo(function BrowserToolCell({
         toolName,
         input,
         toolResult,
-        intlBrowserTool.formatMessage.bind(intlBrowserTool)
+        asFormatMessageLike(intlBrowserTool)
       ),
     [toolName, input, toolResult, intlBrowserTool]
   );
@@ -6093,7 +6097,7 @@ function ContentBlocksRenderer({
               />
               {showCollapsed
                 ? intl.formatMessage({ id: 'hide_steps', defaultMessage: 'Hide steps' })
-                : formatStepCountLabel(intl.formatMessage.bind(intl), toolUseCount)}
+                : formatStepCountLabel(asFormatMessageLike(intl), toolUseCount)}
             </button>
           </div>
 
@@ -6191,7 +6195,7 @@ function ContentBlocksRenderer({
             />
             {showCollapsed
               ? intl.formatMessage({ id: 'hide_steps', defaultMessage: 'Hide steps' })
-              : formatStepCountLabel(intl.formatMessage.bind(intl), toolUseCount)}
+              : formatStepCountLabel(asFormatMessageLike(intl), toolUseCount)}
           </button>
         </div>
 
@@ -6410,7 +6414,7 @@ const BlockRenderer = React.memo(function BlockRenderer({
         block.name,
         input,
         toolResult,
-        intlBlock.formatMessage.bind(intlBlock)
+        asFormatMessageLike(intlBlock)
       );
       derivedDisplayName = info.text;
       derivedIcon = resolveToolIcon(info.icon, 16);
@@ -8288,7 +8292,7 @@ export function SidepanelApp() {
     apiKey,
     authToken,
     modelRef: selectedModelRef,
-    tabId: query.tabId ?? undefined,
+    tabId: query.tabId ?? null,
     sessionId: activeSessionId,
     currentDomain,
     currentUrl: currentPageUrl,
@@ -9640,6 +9644,7 @@ export function SidepanelApp() {
     const timeout = setTimeout(async () => {
       if (!active) return;
       try {
+        if (query.tabId === undefined) return;
         await tabGroupManager.promoteToMainTab(secondaryState.mainTabId!, query.tabId);
         window.location.reload();
       } catch {
@@ -9661,6 +9666,10 @@ export function SidepanelApp() {
           setSecondaryState((prev) => ({ ...prev, checking: false }));
         } else {
           try {
+            if (query.tabId === undefined) {
+              setSecondaryState((prev) => ({ ...prev, checking: false }));
+              return;
+            }
             await tabGroupManager.promoteToMainTab(secondaryState.mainTabId!, query.tabId);
             window.location.reload();
           } catch {

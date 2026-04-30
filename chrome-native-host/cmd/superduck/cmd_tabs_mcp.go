@@ -101,9 +101,9 @@ func printGroupResult(raw string) error {
 		Output     string `json:"output"`
 		Error      string `json:"error"`
 		TabContext *struct {
-			TabGroupId      int `json:"tabGroupId"`
-			CurrentTabId    int `json:"currentTabId"`
-			ExecutedOnTabId int `json:"executedOnTabId"`
+			TabGroupID      int `json:"tabGroupId"`
+			CurrentTabID    int `json:"currentTabId"`
+			ExecutedOnTabID int `json:"executedOnTabId"`
 			TabCount        int `json:"tabCount"`
 			AvailableTabs   []struct {
 				ID    int    `json:"id"`
@@ -122,9 +122,9 @@ func printGroupResult(raw string) error {
 	}
 
 	if data.TabContext != nil {
-		fmt.Printf("tab group %d  (%d tabs", data.TabContext.TabGroupId, data.TabContext.TabCount)
-		if data.TabContext.CurrentTabId != 0 {
-			fmt.Printf(", current tab %d", data.TabContext.CurrentTabId)
+		fmt.Printf("tab group %d  (%d tabs", data.TabContext.TabGroupID, data.TabContext.TabCount)
+		if data.TabContext.CurrentTabID != 0 {
+			fmt.Printf(", current tab %d", data.TabContext.CurrentTabID)
 		}
 		fmt.Println(")")
 		if len(data.TabContext.AvailableTabs) > 0 {
