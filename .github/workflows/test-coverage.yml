@@ -13,6 +13,15 @@ on:
       - 'chrome-native-host/**'
       - '.github/workflows/test-coverage.yml'
 
+# dorny/test-reporter creates check-runs and writes annotations on the PR,
+# both of which require explicit token scopes when the repo defaults
+# GITHUB_TOKEN to read-only. Without these, the "Publish test report" step
+# fails with `HttpError: Resource not accessible by integration`.
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
 jobs:
   chrome-crx:
     name: chrome-crx coverage gate
