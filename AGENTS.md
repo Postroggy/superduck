@@ -157,3 +157,21 @@ go run ./testdata/server -addr :8765 &    # 本地测试服
 - 提交信息使用 conventional commits(`feat:`/`fix:`/`refactor:` 等)。
 - 常用 scope:`cli`、`crx`、`scroll`、`sidepanel` 等。
 - 通过 `gh pr create` 开 PR,不要在未经用户确认时直接 merge / force push。
+- PR 模板见 [`.github/pull_request_template.md`](.github/pull_request_template.md);Issue 模板见 [`.github/ISSUE_TEMPLATE/`](.github/ISSUE_TEMPLATE/)(bug / feature / chore / agent-task)。
+
+## Issue / PR 标签体系 (Labeling System)
+
+仓库的 label 列表是**源代码化**的:唯一来源是 [`.github/labels.yml`](.github/labels.yml),由 [`.github/workflows/labels-sync.yml`](.github/workflows/labels-sync.yml) 在 push 到 `main` 时自动同步到 GitHub(也支持手动触发)。修改 label 必须改 `labels.yml`,不要在 GitHub UI 里直接改。
+
+label 命名规则统一为 `<group>: <slug>`(全小写、kebab-case),分为以下几组,Issue / PR 模板已预填合理默认值:
+
+| Group | 用途 | 示例 |
+|---|---|---|
+| `type:` | 工作类型(每个 issue 必填一个) | `type: bug`、`type: feature`、`type: chore`、`type: docs`、`type: test`、`type: perf`、`type: security`、`type: agent-task`、`type: question`、`type: enhancement` |
+| `priority:` | 优先级(bug / agent-task 必填) | `priority: P0` 紧急、`priority: P1` 高、`priority: P2` 中、`priority: P3` 低 |
+| `area:` | 影响的子项目,对齐仓库概览 | `area: chrome-crx`、`area: chrome-native-host`、`area: coworkd`、`area: desktop`、`area: mac-native-addon`、`area: npm`、`area: ci`、`area: docs`、`area: testing`、`area: tooling` |
+| `status:` | 工作流状态,triager / 机器人维护 | `status: triage`、`status: ready`、`status: in-progress`、`status: blocked`、`status: needs-review`、`status: stale`、`status: wontfix`、`status: duplicate` |
+| `needs:` | 当前阻塞点 | `needs: repro`、`needs: design`、`needs: tests`、`needs: docs` |
+| 其他 | 可发现性 / 元信息 | `good first issue`、`help wanted`、`agent: ready`、`breaking-change`、`dependencies` |
+
+**给代理 (agent) 的提示**:挑取任务时优先看 `agent: ready` + `status: ready`;按 `priority:` 和 `area:` 过滤。新建 issue 时至少打上 `type:` + 一个 `area:`,用 `priority:` 表达紧急程度。

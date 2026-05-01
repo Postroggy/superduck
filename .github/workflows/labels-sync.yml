@@ -1,0 +1,47 @@
+name: Sync issue labels
+
+# Mirrors `.github/labels.yml` (the canonical label catalog) onto GitHub
+# whenever it changes on `main`. Also runnable on demand.
+#
+# Uses EndBug/label-sync, pinned by major. The action is idempotent:
+#   - creates labels that are missing
+#   - updates color / description if drift is detected
+#   - with `delete-other-labels: true`, removes labels that are not declared
+#     in labels.yml (so the file is the source of truth)
+#
+# To dry-run the diff without applying changes, trigger the workflow manually
+# from the Actions tab; the run summary lists the planned changes.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/labels.yml
+      - .github/workflows/labels-sync.yml
+  workflow_dispatch:
+    inputs:
+      delete-other-labels:
+        description: "Delete labels that are not declared in labels.yml"
+        required: false
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+permissions:
+  issues: write
+  pull-requests: write
+  contents: read
+
+jobs:
+  sync:
+    name: Apply label catalog
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sync labels
+        uses: EndBug/label-sync@v2
+        with:
+          config-file: .github/labels.yml
+          delete-other-labels: ${{ github.event_name == 'workflow_dispatch' && inputs.delete-other-labels == 'true' || github.event_name == 'push' }}
