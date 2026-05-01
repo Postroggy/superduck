@@ -29,6 +29,11 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Run tests with coverage thresholds
         run: bun run test:coverage
+      - name: Run tests with timing instrumentation
+        run: bun run test:perf
+      - name: Print test performance report
+        if: always()
+        run: bun run test:perf:report
       - name: Upload JUnit test report (timing data)
         if: always()
         uses: actions/upload-artifact@v4

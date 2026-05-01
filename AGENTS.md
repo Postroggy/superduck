@@ -33,6 +33,8 @@ bun run lint         # eslint
 bun run format       # prettier
 bun run test         # vitest run (单元 + 集成)
 bun run test:coverage # vitest 覆盖率 + 阈值门禁 (lines/statements/branches ≥ 90%, functions ≥ 55%)
+bun run test:perf    # 运行测试并写出 JUnit XML 报告 (test-results.junit.xml)
+bun run test:perf:report # 解析 JUnit 报告,打印每个 suite 耗时、慢测试 (>= 300ms) 与 Top10
 # CI=1 bun run test  # 额外输出 verbose 计时 + JUnit 报告 (test-results.junit.xml),
 #                    # 用于 BuildPulse / Datadog CI / GitHub test-reporter 跟踪测试耗时
 ```

@@ -14,7 +14,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:integration": "vitest run tests/integration",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:perf": "vitest run --reporter=verbose --reporter=junit --outputFile.junit=test-results.junit.xml",
+    "test:perf:report": "node scripts/test-perf-report.mjs test-results.junit.xml"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
