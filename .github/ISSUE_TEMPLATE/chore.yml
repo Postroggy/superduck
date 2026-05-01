@@ -1,0 +1,70 @@
+name: Chore / Tech Debt
+description: Refactors, build / CI work, dependency upgrades, test / docs maintenance, or tech-debt cleanup.
+title: "[chore]: "
+labels:
+  - "type: chore"
+  - "status: triage"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template for non-user-facing maintenance: refactors, lint / type cleanup, dependency
+        bumps, CI work, infra, or tech-debt items surfaced by tooling.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - chrome-crx
+        - chrome-native-host
+        - coworkd
+        - npm / release
+        - ci / tooling (root)
+        - tests / coverage
+        - docs (README / AGENTS.md)
+        - other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind of work
+      options:
+        - refactor (code structure / readability)
+        - dependency upgrade
+        - build / CI
+        - test / coverage improvement
+        - lint / type cleanup
+        - documentation
+        - tech debt / TODO cleanup
+        - other
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What needs to change and why?
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: How will we know this chore is done? Reference commands from `AGENTS.md` (e.g. `bun run typecheck`, `make lint`).
+      placeholder: |
+        - [ ] `bun run lint` passes with no new warnings
+        - [ ] `make test` still passes
+        - [ ] No behavior change for end users
+    validations:
+      required: true
+
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      description: Linked issues, PRs, lint output, dependency advisories, or AGENTS.md sections.
