@@ -162,3 +162,18 @@
 - name: "dependencies"
   color: "0366d6"
   description: "Dependency update (typically opened by Dependabot / Renovate)."
+
+# -----------------------------------------------------------------------------
+# Source — where the issue originated. Used by the error-to-insight pipeline
+# (`.github/workflows/sentry-issue.yml`, `pagerduty-incident-issue.yml`) to
+# tag auto-filed issues so triagers / agents can filter on origin.
+# -----------------------------------------------------------------------------
+- name: "source: sentry"
+  color: "362d59"
+  description: "Auto-filed from a Sentry alert via repository_dispatch."
+- name: "source: pagerduty"
+  color: "06ac38"
+  description: "Auto-filed from a PagerDuty incident via repository_dispatch."
+- name: "incident"
+  color: "b60205"
+  description: "Tracks a live or recent production incident."
