@@ -3,4 +3,5 @@
 node_modules
 dist
 coverage
+docs/api
 mac-native-addon/.build
