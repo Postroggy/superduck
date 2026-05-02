@@ -63,14 +63,15 @@ jobs:
   sync:
     name: Create or update GitHub issue from Sentry alert
     runs-on: ubuntu-latest
+    env:
+      EXPECTED_TOKEN: ${{ secrets.SENTRY_DISPATCH_TOKEN }}
     steps:
       - name: Validate dispatch secret
-        if: ${{ secrets.SENTRY_DISPATCH_TOKEN != '' }}
+        if: env.EXPECTED_TOKEN != ''
         env:
           PROVIDED: ${{ github.event.client_payload.token }}
-          EXPECTED: ${{ secrets.SENTRY_DISPATCH_TOKEN }}
         run: |
-          if [ "$PROVIDED" != "$EXPECTED" ]; then
+          if [ "$PROVIDED" != "$EXPECTED_TOKEN" ]; then
             echo "::error::repository_dispatch token mismatch — refusing to act"
             exit 1
           fi

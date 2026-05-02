@@ -6,6 +6,18 @@ GOLANGCI_LINT_VERSION ?= v2.6.0
 # Build output directory
 BUILD_DIR := build
 
+# Product analytics (PostHog). When POSTHOG_KEY is set in the environment, the
+# write-only project token is compiled into the binary so end-user installs
+# emit telemetry by default. Leave POSTHOG_KEY unset for local development —
+# the analytics package then no-ops unless SUPERDUCK_POSTHOG_KEY is exported.
+#
+# Never check the key into git. Keep it in your shell rc, a gitignored
+# `.env.local`, or a CI secret (e.g. GitHub Actions secret POSTHOG_KEY).
+POSTHOG_KEY ?=
+ANALYTICS_LDFLAGS := $(if $(POSTHOG_KEY),-X chrome-native-host/internal/analytics.PostHogWriteKey=$(POSTHOG_KEY),)
+GO_LDFLAGS := $(ANALYTICS_LDFLAGS)
+GO_BUILD_FLAGS := $(if $(strip $(GO_LDFLAGS)),-ldflags "$(GO_LDFLAGS)",)
+
 all: native-host mcp-server superduck
 
 native-host:
@@ -21,21 +33,22 @@ mcp-server:
 superduck:
 	@echo "Building superduck CLI..."
 	@mkdir -p $(BUILD_DIR)
-	go build -o $(BUILD_DIR)/superduck ./cmd/superduck
+	go build $(GO_BUILD_FLAGS) -o $(BUILD_DIR)/superduck ./cmd/superduck
 
 # Cross-compile both binaries (superduck CLI + chrome-native-host companion)
 # into the npm sub-packages. Users install via `npm install -g superduck-cli`
 # and `superduck init` reads chrome-native-host from the same bin dir.
 release-binaries:
 	@echo "Cross-building superduck + chrome-native-host for all platforms..."
-	GOOS=darwin  GOARCH=arm64 go build -o ../npm/packages/superduck-darwin-arm64/bin/superduck ./cmd/superduck
-	GOOS=darwin  GOARCH=arm64 go build -o ../npm/packages/superduck-darwin-arm64/bin/chrome-native-host ./cmd/native-host
-	GOOS=darwin  GOARCH=amd64 go build -o ../npm/packages/superduck-darwin-x64/bin/superduck ./cmd/superduck
-	GOOS=darwin  GOARCH=amd64 go build -o ../npm/packages/superduck-darwin-x64/bin/chrome-native-host ./cmd/native-host
-	GOOS=linux   GOARCH=arm64 go build -o ../npm/packages/superduck-linux-arm64/bin/superduck ./cmd/superduck
-	GOOS=linux   GOARCH=arm64 go build -o ../npm/packages/superduck-linux-arm64/bin/chrome-native-host ./cmd/native-host
-	GOOS=linux   GOARCH=amd64 go build -o ../npm/packages/superduck-linux-x64/bin/superduck ./cmd/superduck
-	GOOS=linux   GOARCH=amd64 go build -o ../npm/packages/superduck-linux-x64/bin/chrome-native-host ./cmd/native-host
+	@if [ -z "$(POSTHOG_KEY)" ]; then echo "WARN: POSTHOG_KEY not set — release binaries will ship without product analytics."; fi
+	GOOS=darwin  GOARCH=arm64 go build $(GO_BUILD_FLAGS) -o ../npm/packages/superduck-darwin-arm64/bin/superduck ./cmd/superduck
+	GOOS=darwin  GOARCH=arm64 go build                  -o ../npm/packages/superduck-darwin-arm64/bin/chrome-native-host ./cmd/native-host
+	GOOS=darwin  GOARCH=amd64 go build $(GO_BUILD_FLAGS) -o ../npm/packages/superduck-darwin-x64/bin/superduck ./cmd/superduck
+	GOOS=darwin  GOARCH=amd64 go build                  -o ../npm/packages/superduck-darwin-x64/bin/chrome-native-host ./cmd/native-host
+	GOOS=linux   GOARCH=arm64 go build $(GO_BUILD_FLAGS) -o ../npm/packages/superduck-linux-arm64/bin/superduck ./cmd/superduck
+	GOOS=linux   GOARCH=arm64 go build                  -o ../npm/packages/superduck-linux-arm64/bin/chrome-native-host ./cmd/native-host
+	GOOS=linux   GOARCH=amd64 go build $(GO_BUILD_FLAGS) -o ../npm/packages/superduck-linux-x64/bin/superduck ./cmd/superduck
+	GOOS=linux   GOARCH=amd64 go build                  -o ../npm/packages/superduck-linux-x64/bin/chrome-native-host ./cmd/native-host
 	@echo "Done. Binaries placed in npm/packages/*/bin/"
 
 clean:

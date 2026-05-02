@@ -42,14 +42,15 @@ jobs:
   sync:
     name: Sync PagerDuty incident → GitHub issue
     runs-on: ubuntu-latest
+    env:
+      EXPECTED_TOKEN: ${{ secrets.PAGERDUTY_DISPATCH_TOKEN }}
     steps:
       - name: Validate dispatch secret
-        if: ${{ secrets.PAGERDUTY_DISPATCH_TOKEN != '' }}
+        if: env.EXPECTED_TOKEN != ''
         env:
           PROVIDED: ${{ github.event.client_payload.token }}
-          EXPECTED: ${{ secrets.PAGERDUTY_DISPATCH_TOKEN }}
         run: |
-          if [ "$PROVIDED" != "$EXPECTED" ]; then
+          if [ "$PROVIDED" != "$EXPECTED_TOKEN" ]; then
             echo "::error::repository_dispatch token mismatch — refusing to act"
             exit 1
           fi
