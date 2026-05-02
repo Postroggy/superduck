@@ -1,0 +1,52 @@
+name: Min Release Age
+
+# Enforce a cooldown on dependency bumps in any PR.
+#
+# Pairs with .github/dependabot.yml's `cooldown:` block: Dependabot waits
+# before opening PRs, this workflow rejects manual / agent / fork PRs that
+# try to bypass the cooldown.
+
+on:
+  pull_request:
+    paths:
+      - '**/package.json'
+      - '**/go.mod'
+  workflow_dispatch:
+    inputs:
+      days:
+        description: 'Minimum release age in days'
+        required: false
+        default: '3'
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  check:
+    name: Min release age (>= ${{ inputs.days || '3' }}d)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Need history so the script can diff against the PR base.
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Determine base ref
+        id: base
+        run: |
+          if [ -n "${{ github.event.pull_request.base.sha }}" ]; then
+            echo "ref=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=origin/main" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run min-release-age check
+        env:
+          MIN_RELEASE_AGE_DAYS: ${{ inputs.days || '3' }}
+        run: node scripts/check-min-release-age.mjs --base ${{ steps.base.outputs.ref }}
