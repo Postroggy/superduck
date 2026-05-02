@@ -33,12 +33,24 @@ export default defineConfig({
     pool: 'threads',
     poolOptions: {
       threads: {
-        singleThread: false
+        singleThread: false,
+        // Cap workers to keep CI memory predictable while still parallelizing
+        // across test files. `useAtomics` lets the worker pool share state
+        // efficiently and avoids the overhead of structuredClone for each
+        // task hand-off.
+        useAtomics: true,
+        minThreads: 1,
+        maxThreads: 4
       }
     },
+    fileParallelism: true,
     isolate: true,
     sequence: {
-      shuffle: true
+      shuffle: true,
+      // Randomize the order of tests *within* a file too, on top of the
+      // file-level shuffle. Any in-file ordering dependency surfaces
+      // immediately.
+      hooks: 'parallel'
     },
     // Test-performance tracking:
     //   * The default + verbose reporters print per-test timings on every run

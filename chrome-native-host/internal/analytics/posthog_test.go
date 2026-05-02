@@ -172,6 +172,7 @@ func TestBuildCaptureBodyDoesNotAllowOverridingLibFields(t *testing.T) {
 }
 
 func TestLoadOrCreateDistinctIDPersistsAcrossCalls(t *testing.T) {
+	// NOTE: not Parallel — mutates HOME via t.Setenv.
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
 	// On macOS UserHomeDir checks $HOME first, so the override above is enough.
