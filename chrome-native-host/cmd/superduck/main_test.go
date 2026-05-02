@@ -8,6 +8,7 @@ import (
 )
 
 func TestExtractSubcommand(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		cmd, want string
 		rest      []string
@@ -36,6 +37,7 @@ func TestExtractSubcommand(t *testing.T) {
 }
 
 func TestClassify(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		err      error
 		wantCode int

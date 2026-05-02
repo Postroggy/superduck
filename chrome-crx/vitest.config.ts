@@ -16,6 +16,30 @@ export default defineConfig({
       'tests/**/*.spec.ts'
     ],
     globals: false,
+    // Test isolation & parallelism:
+    //   * `pool: 'threads'` runs each test file in a worker thread so tests
+    //     across files execute in parallel, dramatically reducing wall-clock
+    //     time on multi-core machines and CI runners.
+    //   * `poolOptions.threads.singleThread: false` makes the parallelism
+    //     explicit (default already, but locked in here so a future tweak
+    //     does not silently serialize the suite).
+    //   * `isolate: true` gives every test file a fresh module graph and
+    //     globals, eliminating cross-file leakage of mocks, timers, env
+    //     vars, and module state — agents can rely on tests being
+    //     order-independent and reproducible.
+    //   * `sequence.shuffle: true` randomizes file order each run so any
+    //     hidden ordering dependency surfaces immediately rather than
+    //     hiding behind a stable execution sequence.
+    pool: 'threads',
+    poolOptions: {
+      threads: {
+        singleThread: false
+      }
+    },
+    isolate: true,
+    sequence: {
+      shuffle: true
+    },
     // Test-performance tracking:
     //   * The default + verbose reporters print per-test timings on every run
     //     so timings show up in CI logs.
