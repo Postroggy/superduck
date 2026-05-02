@@ -41,12 +41,19 @@ permissions:
 jobs:
   droid:
     name: Run @droid command
+    # Skip events triggered by bots — in particular factory-droid[bot] itself,
+    # whose summary comments contain "@droid" links that would otherwise
+    # re-trigger this workflow and fail in droid-action's prepare step.
     if: |
-      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@droid')) ||
-      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@droid')) ||
-      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@droid')) ||
-      (github.event_name == 'issues' && (contains(github.event.issue.body, '@droid') || contains(github.event.issue.title, '@droid'))) ||
-      (github.event_name == 'pull_request' && (contains(github.event.pull_request.body, '@droid') || contains(github.event.pull_request.title, '@droid')))
+      github.actor != 'factory-droid[bot]' &&
+      github.event.sender.type != 'Bot' &&
+      (
+        (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@droid')) ||
+        (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@droid')) ||
+        (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@droid')) ||
+        (github.event_name == 'issues' && (contains(github.event.issue.body, '@droid') || contains(github.event.issue.title, '@droid'))) ||
+        (github.event_name == 'pull_request' && (contains(github.event.pull_request.body, '@droid') || contains(github.event.pull_request.title, '@droid')))
+      )
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
