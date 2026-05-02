@@ -1,0 +1,80 @@
+# SuperDuck CODEOWNERS
+#
+# Reference: https://docs.github.com/en/repositories/managing-your-repositories-settings-and-features/customizing-your-repository/about-code-owners
+#
+# Order matters: the LAST matching pattern for a file wins. Keep generic
+# patterns at the top and progressively narrow down by directory below.
+#
+# Owners listed here are auto-requested as reviewers when a PR touches the
+# matching paths. Combined with branch-protection rules ("Require review
+# from Code Owners"), this guarantees that every change to a sensitive
+# surface is signed off by someone who actually maintains it — including
+# changes authored by AI agents.
+#
+# All owners must have write access to the repo.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Default fallback — every file not matched by a more specific rule below
+# ─────────────────────────────────────────────────────────────────────────────
+*                                   @arthur-zhang @jh0904
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Repository-wide config & meta
+# ─────────────────────────────────────────────────────────────────────────────
+/AGENTS.md                          @arthur-zhang @jh0904
+/CLAUDE.md                          @arthur-zhang @jh0904
+/README.md                          @arthur-zhang @jh0904
+/README.zh-CN.md                    @arthur-zhang @jh0904
+/.env.example                       @arthur-zhang @jh0904
+/.gitignore                         @arthur-zhang @jh0904
+/package.json                       @arthur-zhang @jh0904
+/bun.lock                           @arthur-zhang @jh0904
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CI / GitHub automation — extra scrutiny because it can ship anywhere
+# ─────────────────────────────────────────────────────────────────────────────
+/.github/                           @arthur-zhang @jh0904
+/.github/workflows/                 @arthur-zhang @jh0904
+/.github/CODEOWNERS                 @arthur-zhang @jh0904
+/.github/labels.yml                 @arthur-zhang @jh0904
+/.husky/                            @arthur-zhang @jh0904
+/scripts/                           @arthur-zhang @jh0904
+
+# ─────────────────────────────────────────────────────────────────────────────
+# chrome-crx — browser extension (TypeScript, Vite, Bun)
+# ─────────────────────────────────────────────────────────────────────────────
+/chrome-crx/                        @jh0904 @arthur-zhang
+/chrome-crx/manifest.json           @jh0904 @arthur-zhang
+/chrome-crx/vite.config.ts          @jh0904 @arthur-zhang
+/chrome-crx/vitest.config.ts        @jh0904 @arthur-zhang
+/chrome-crx/eslint.config.js        @jh0904 @arthur-zhang
+/chrome-crx/tsconfig.json           @jh0904 @arthur-zhang
+/chrome-crx/src/                    @jh0904 @arthur-zhang
+/chrome-crx/src/mcp-runtime/        @jh0904 @arthur-zhang
+/chrome-crx/tests/                  @jh0904 @arthur-zhang
+
+# ─────────────────────────────────────────────────────────────────────────────
+# chrome-native-host — Go native messaging host, MCP server, superduck CLI
+# ─────────────────────────────────────────────────────────────────────────────
+/chrome-native-host/                @arthur-zhang @jh0904
+/chrome-native-host/Makefile        @arthur-zhang @jh0904
+/chrome-native-host/.golangci.yml   @arthur-zhang @jh0904
+/chrome-native-host/go.mod          @arthur-zhang @jh0904
+/chrome-native-host/go.sum          @arthur-zhang @jh0904
+/chrome-native-host/cmd/            @arthur-zhang @jh0904
+/chrome-native-host/internal/       @arthur-zhang @jh0904
+/chrome-native-host/internal/analytics/ @arthur-zhang @jh0904
+/chrome-native-host/testdata/       @arthur-zhang @jh0904
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Other apps in the monorepo
+# ─────────────────────────────────────────────────────────────────────────────
+/npm/                               @arthur-zhang @jh0904
+/npm/SKILL.md                       @arthur-zhang @jh0904
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Skills & agent configuration — keep AI tooling owners in the loop
+# ─────────────────────────────────────────────────────────────────────────────
+/.claude/                           @arthur-zhang @jh0904
+/.claude/skills/                    @arthur-zhang @jh0904
+/.factory/                          @arthur-zhang @jh0904
