@@ -1,0 +1,96 @@
+name: Release (superduck CLI)
+
+# Builds the cross-platform superduck CLI binaries with the PostHog write-only
+# project token compiled in via -ldflags, then uploads the per-arch tarballs as
+# release artifacts (and optionally publishes the npm sub-packages).
+#
+# The PostHog key never lives in the repository — it is supplied at build time
+# from the POSTHOG_KEY repository secret. If the secret is unset the build
+# still succeeds but the resulting binaries ship without product analytics.
+#
+# Trigger: pushing a tag like `v0.2.3` (semver) or running the workflow
+# manually from the Actions tab.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build (defaults to current ref)'
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build release binaries
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: chrome-native-host
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: chrome-native-host/go.mod
+          cache: true
+          cache-dependency-path: chrome-native-host/go.sum
+
+      - name: Build cross-platform binaries with PostHog key
+        env:
+          POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
+        run: |
+          if [ -z "$POSTHOG_KEY" ]; then
+            echo "::warning::POSTHOG_KEY repo secret is not set — release binaries will ship without product analytics."
+          else
+            echo "POSTHOG_KEY is set (${#POSTHOG_KEY} chars); compiling into binaries."
+          fi
+          make release-binaries
+
+      - name: Verify key is embedded (or absent) as expected
+        env:
+          POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
+        run: |
+          # Sanity check on the linux-x64 binary we just built.
+          BIN=../npm/packages/superduck-linux-x64/bin/superduck
+          if [ -n "$POSTHOG_KEY" ]; then
+            if strings "$BIN" | grep -qF "$POSTHOG_KEY"; then
+              echo "OK: PostHog key embedded in $BIN"
+            else
+              echo "::error::POSTHOG_KEY was set but not found in built binary"
+              exit 1
+            fi
+          else
+            if strings "$BIN" | grep -qE "phc_[A-Za-z0-9]{10,}"; then
+              echo "::error::Found a phc_ token in binary even though POSTHOG_KEY was unset — possible leak"
+              exit 1
+            fi
+            echo "OK: no PostHog key embedded (POSTHOG_KEY was unset)"
+          fi
+
+      - name: Package per-arch tarballs
+        working-directory: ${{ github.workspace }}
+        run: |
+          mkdir -p release
+          for pkg in superduck-darwin-arm64 superduck-darwin-x64 superduck-linux-arm64 superduck-linux-x64; do
+            tar -czf "release/${pkg}.tar.gz" -C "npm/packages/${pkg}" bin
+          done
+          ls -la release/
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: superduck-binaries
+          path: release/*.tar.gz
+          retention-days: 30
+
+      - name: Attach to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*.tar.gz
+          generate_release_notes: true

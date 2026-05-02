@@ -1,0 +1,141 @@
+name: Bug Report
+description: Report a reproducible bug in SuperDuck (chrome-crx extension or chrome-native-host CLI / native messaging host).
+title: "[bug]: "
+labels:
+  - "type: bug"
+  - "status: triage"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report.
+
+        Before submitting, please:
+        - Search existing issues to avoid duplicates.
+        - Update to the latest `main` build (`bun run build` for chrome-crx, `make` for chrome-native-host) and confirm the bug still reproduces.
+        - For security vulnerabilities, do **not** use this template; use [GitHub Security Advisories](https://github.com/superduck-ai/superduck/security/advisories/new) instead.
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected component
+      description: Which sub-project does the bug affect? See `AGENTS.md` for the layout.
+      options:
+        - chrome-crx (browser extension / sidepanel / service worker / MCP runtime)
+        - chrome-native-host (superduck CLI / native messaging host / MCP server)
+        - coworkd (cowork daemon)
+        - npm (release distribution)
+        - desktop / mac-native-addon
+        - Other / not sure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: How severe is the impact? See `Issue Labeling System` in `AGENTS.md`.
+      options:
+        - "P0 - critical (data loss, broken main flow, security)"
+        - "P1 - high (core feature broken, no workaround)"
+        - "P2 - medium (feature degraded, workaround exists)"
+        - "P3 - low (cosmetic / minor)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: A clear, concise description of the bug.
+      placeholder: "When I click X in the side panel, the agent crashes with ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Minimal numbered steps so anyone can reproduce.
+      placeholder: |
+        1. Load `dist/` as an unpacked extension at `chrome://extensions`.
+        2. Open the side panel (`Cmd+E`).
+        3. Send the prompt "..." to model "...".
+        4. Observe the failure.
+      render: markdown
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      placeholder: "I expected the agent to navigate and screenshot the page."
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include error messages, stack traces, and Sentry / Honeycomb trace IDs if available.
+      render: shell
+    validations:
+      required: true
+
+  - type: input
+    id: chrome-version
+    attributes:
+      label: Chrome version
+      description: From `chrome://version`. Required for chrome-crx bugs.
+      placeholder: "e.g. 128.0.6613.85"
+
+  - type: input
+    id: extension-version
+    attributes:
+      label: chrome-crx / extension version
+      description: From `manifest.json` or `chrome://extensions`.
+      placeholder: "e.g. 0.1.0"
+
+  - type: input
+    id: superduck-version
+    attributes:
+      label: superduck CLI / native-host version
+      description: Output of `./superduck --version` (or git SHA if built from source).
+      placeholder: "e.g. 780a172 or v0.1.0"
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Linux x64
+        - Linux arm64
+        - Windows
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: |
+        Paste relevant log output. For chrome-crx, open DevTools on the side panel / service worker.
+        For chrome-native-host, check `~/Library/Logs/com.superduck.*` (macOS) or stderr.
+        Please scrub any tokens / API keys before pasting.
+      render: shell
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Submission checklist
+      options:
+        - label: I searched existing issues and confirmed this is not a duplicate.
+          required: true
+        - label: I reproduced this on the latest `main` build.
+          required: true
+        - label: I scrubbed secrets / personal data from logs and screenshots.
+          required: true

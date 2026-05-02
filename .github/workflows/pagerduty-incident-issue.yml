@@ -1,0 +1,186 @@
+name: PagerDuty → GitHub issue
+
+# Turns PagerDuty incidents into GitHub issues so on-call work has a
+# durable, linkable record alongside Sentry-driven issues.
+#
+# Wiring
+# ------
+# Configure a PagerDuty Generic Webhook v3 (or the GitHub extension) to
+# POST `repository_dispatch` events with `event_type: pagerduty-incident`.
+# Suggested payload (PagerDuty `event_type` and `incident.*` fields are
+# already part of the v3 webhook body):
+#
+#   {
+#     "event_type": "pagerduty-incident",
+#     "client_payload": {
+#       "token":          "<shared secret>",
+#       "incident_id":    "PXXXXXX",
+#       "incident_url":   "https://<subdomain>.pagerduty.com/incidents/PXXXXXX",
+#       "title":          "API 5xx surge — checkout",
+#       "service":        "chrome-native-host",
+#       "urgency":        "high",
+#       "status":         "triggered",          // or "acknowledged" / "resolved"
+#       "created_at":     "2026-05-01T03:21:00Z",
+#       "html_url":       "https://...",
+#       "summary":        "Free-text description from PD",
+#       "assignees":      ["alice@example.com"]
+#     }
+#   }
+#
+# The flow mirrors `sentry-issue.yml`: dedupe-by-marker, comment on repeat
+# triggers, auto-resolve when PagerDuty marks the incident `resolved`.
+
+on:
+  repository_dispatch:
+    types: [pagerduty-incident]
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  sync:
+    name: Sync PagerDuty incident → GitHub issue
+    runs-on: ubuntu-latest
+    env:
+      EXPECTED_TOKEN: ${{ secrets.PAGERDUTY_DISPATCH_TOKEN }}
+    steps:
+      - name: Validate dispatch secret
+        if: env.EXPECTED_TOKEN != ''
+        env:
+          PROVIDED: ${{ github.event.client_payload.token }}
+        run: |
+          if [ "$PROVIDED" != "$EXPECTED_TOKEN" ]; then
+            echo "::error::repository_dispatch token mismatch — refusing to act"
+            exit 1
+          fi
+
+      - name: Reconcile incident with GitHub issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const p = context.payload.client_payload || {};
+            if (!p.incident_id) {
+              core.setFailed("client_payload.incident_id is required");
+              return;
+            }
+
+            const incidentUrl =
+              p.incident_url ||
+              p.html_url ||
+              `https://app.pagerduty.com/incidents/${p.incident_id}`;
+            const status = (p.status || "triggered").toLowerCase();
+
+            const areaByService = {
+              "chrome-crx": "area: chrome-crx",
+              "chrome-native-host": "area: chrome-native-host",
+              "coworkd": "area: coworkd",
+              "desktop": "area: desktop",
+              "mac-native-addon": "area: mac-native-addon",
+              "npm": "area: npm",
+            };
+            const areaLabel =
+              areaByService[p.service] || "area: tooling";
+
+            const priority =
+              (p.urgency || "").toLowerCase() === "high"
+                ? "priority: P0"
+                : "priority: P1";
+
+            const marker = `<!-- pagerduty-incident-id: ${p.incident_id} -->`;
+            const title = `[pagerduty] ${(p.title || "Untitled incident").slice(0, 200)}`;
+
+            const assignees = Array.isArray(p.assignees)
+              ? p.assignees
+                  .map((a) => (typeof a === "string" ? a : a?.login))
+                  .filter(Boolean)
+              : [];
+
+            const body = [
+              marker,
+              "",
+              `**PagerDuty incident:** ${incidentUrl}`,
+              `**Service:** \`${p.service || "unknown"}\``,
+              `**Urgency:** \`${p.urgency || "unknown"}\``,
+              `**Status:** \`${status}\``,
+              `**Created:** ${p.created_at || "n/a"}`,
+              assignees.length
+                ? `**Assignees:** ${assignees.join(", ")}`
+                : "",
+              "",
+              "### Summary",
+              p.summary || "(no summary provided)",
+              "",
+              "---",
+              "_Auto-filed by `.github/workflows/pagerduty-incident-issue.yml`._",
+              "_Status updates from PagerDuty will be appended as comments; " +
+                "the issue auto-closes when PagerDuty marks the incident resolved._",
+            ]
+              .filter(Boolean)
+              .join("\n");
+
+            const labels = [
+              "type: bug",
+              "source: pagerduty",
+              "incident",
+              areaLabel,
+              priority,
+              "status: in-progress",
+            ];
+
+            const search = await github.rest.search.issuesAndPullRequests({
+              q: [
+                `repo:${context.repo.owner}/${context.repo.repo}`,
+                "is:issue",
+                "in:body",
+                `"pagerduty-incident-id: ${p.incident_id}"`,
+              ].join(" "),
+              per_page: 5,
+            });
+            const existing = search.data.items.find((i) => !i.pull_request);
+
+            if (existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body: [
+                  `PagerDuty status update: \`${status}\``,
+                  p.summary ? `> ${p.summary}` : "",
+                  `${incidentUrl}`,
+                ]
+                  .filter(Boolean)
+                  .join("\n"),
+              });
+
+              if (status === "resolved" && existing.state === "open") {
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: existing.number,
+                  state: "closed",
+                  state_reason: "completed",
+                });
+              }
+              core.setOutput("issue_number", existing.number);
+              core.setOutput("action", "updated");
+              return;
+            }
+
+            // Don't open a fresh issue for an already-resolved incident —
+            // it would just be noise.
+            if (status === "resolved") {
+              core.info("Incident already resolved and no existing issue — skipping.");
+              return;
+            }
+
+            const created = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body,
+              labels,
+              assignees: assignees.length ? assignees : undefined,
+            });
+            core.setOutput("issue_number", created.data.number);
+            core.setOutput("action", "created");

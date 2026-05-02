@@ -112,6 +112,7 @@ import {
   getMappedModelName
 } from '../utils/modelMapping';
 import { compressBase64Image } from '../utils/imageCompressor';
+import { trackEvent } from '../mcpPermissions';
 import { EmptyState } from './EmptyState';
 import { useTabEvent } from './hooks';
 import { ScrollContainer, type ScrollContainerHandle } from './ScrollContainer';
@@ -7369,6 +7370,10 @@ export function SidepanelApp() {
     console.warn(`[PERF] SidepanelApp rendered ${renderCountRef.current} times`);
   }
 
+  useEffect(() => {
+    void trackEvent('claude_chrome.sidebar.opened', {});
+  }, []);
+
   const query = useQueryState();
 
   // CRITICAL FIX: Stabilize feature values to prevent infinite re-renders
@@ -9143,6 +9148,15 @@ export function SidepanelApp() {
     isPurlMode && lightningResult ? lightningResult.currentStatus : currentStatus;
   const effectiveRuntimeError =
     isPurlMode && lightningResult ? lightningResult.error : runtimeError;
+  useEffect(() => {
+    const msg = effectiveRuntimeError || lnError;
+    if (!msg) return;
+    void trackEvent('claude_chrome.sidebar.error_shown', {
+      // Truncate to keep PostHog cardinality bounded and avoid leaking user content.
+      message: msg.slice(0, 80),
+      source: lnError ? 'chat' : 'runtime'
+    });
+  }, [effectiveRuntimeError, lnError]);
   const effectiveSetMessages =
     isPurlMode && lightningResult ? lightningResult.setMessages : setMessages;
   const effectiveHasInteractiveTools = isPurlMode && lightningResult ? false : hasInteractiveTools;
@@ -10007,6 +10021,14 @@ export function SidepanelApp() {
     }
 
     const attachmentsToSend = pendingAttachments;
+    void trackEvent('claude_chrome.sidebar.message_sent', {
+      input_length: value.length,
+      attachment_count: attachmentsToSend.length,
+      has_attachment: attachmentsToSend.length > 0,
+      is_shortcut: value.startsWith('/'),
+      model: selectedModelRef.current || '',
+      permission_mode: permissionMode
+    });
     setInput('');
     setPendingAttachments([]);
     setAttachmentCount(0);
@@ -10019,6 +10041,7 @@ export function SidepanelApp() {
   }, [input, pendingAttachments, effectiveSendPrompt, effectiveIsAgentRunning, authToken, apiKey]);
 
   const insertShortcutChip = useCallback((command: string, label?: string) => {
+    void trackEvent('claude_chrome.sidebar.shortcut_used', { command });
     inputRef.current?.clear();
     inputRef.current?.insertShortcut(command, label || command);
     inputRef.current?.focus();
@@ -10229,7 +10252,7 @@ export function SidepanelApp() {
       seen.add(trimmedValue);
 
       // Get base label
-      let baseLabel =
+      const baseLabel =
         label && label.trim() ? label : getModelDisplayName(trimmedValue, modelConfig);
 
       // Add mapped model name if configured
@@ -10323,6 +10346,10 @@ export function SidepanelApp() {
       }
 
       console.log('[Model Change] Switching to:', nextModel);
+      void trackEvent('claude_chrome.sidebar.model_switched', {
+        from: selectedModel || '',
+        to: nextModel
+      });
       setSelectedModel(nextModel);
       setIsModelMenuOpen(false);
       void setStorageValue(StorageKeys.SELECTED_MODEL, nextModel);
@@ -10503,7 +10530,7 @@ export function SidepanelApp() {
   const handleStartWorkflowRecording = useCallback(async () => {
     setShowWorkflowModeSelectionModal(false);
 
-    // Start recording with voice enabled
+    void trackEvent('claude_chrome.sidebar.workflow_record_started', {});
     await startRecording(true);
   }, [setShowWorkflowModeSelectionModal, startRecording]);
 
@@ -11661,6 +11688,10 @@ export function SidepanelApp() {
                   // Save the generated prompt. Let the shortcut modal generate its own command name
                   // instead of reusing the recording title or page title.
                   void workflowTitle;
+                  void trackEvent('claude_chrome.sidebar.workflow_record_stopped', {
+                    step_count: steps.length,
+                    saved: true
+                  });
                   setPromptToSave({ prompt: summary });
                   stopRecording();
                 }}

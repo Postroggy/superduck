@@ -1,0 +1,179 @@
+# SuperDuck issue / PR label catalog.
+#
+# This file is the SOURCE OF TRUTH for repository labels. The
+# `.github/workflows/labels-sync.yml` workflow uses `EndBug/label-sync`
+# to mirror this list onto GitHub on every push to `main` (and can be
+# triggered manually via `workflow_dispatch`).
+#
+# Conventions (used across issue templates, PR template, and AGENTS.md):
+#
+#   - "type:"     What kind of work it is.        Required on every issue.
+#   - "priority:" How urgent it is (P0..P3).      Required on bugs / agent tasks.
+#   - "area:"     Which sub-project it touches.   Mirrors AGENTS.md repo overview.
+#   - "status:"   Workflow state.                 Maintained by triagers / bots.
+#   - "needs:"    What is blocking forward motion.
+#   - "good-*":   Discoverability helpers for new contributors / agents.
+#
+# Naming rule: `<group>: <slug>` lowercased, kebab-case slug, no emoji.
+
+# -----------------------------------------------------------------------------
+# Type — what kind of change / report this is.
+# -----------------------------------------------------------------------------
+- name: "type: bug"
+  color: "d73a4a"
+  description: "Something is broken or behaves incorrectly."
+- name: "type: feature"
+  color: "1f6feb"
+  description: "New user-facing functionality."
+- name: "type: enhancement"
+  color: "a2eeef"
+  description: "Improvement to an existing feature."
+- name: "type: chore"
+  color: "ededed"
+  description: "Refactor, dependency bump, build or CI maintenance."
+- name: "type: docs"
+  color: "0075ca"
+  description: "Documentation-only change (README, AGENTS.md, comments)."
+- name: "type: test"
+  color: "0e8a16"
+  description: "Adds or updates tests / coverage."
+- name: "type: perf"
+  color: "fbca04"
+  description: "Performance improvement."
+- name: "type: security"
+  color: "b60205"
+  description: "Security vulnerability or hardening."
+- name: "type: agent-task"
+  color: "5319e7"
+  description: "Self-contained task suitable for an autonomous AI coding agent."
+- name: "type: question"
+  color: "cc317c"
+  description: "Discussion or clarification request (prefer Discussions)."
+
+# -----------------------------------------------------------------------------
+# Priority — P0 (drop everything) through P3 (nice to have).
+# -----------------------------------------------------------------------------
+- name: "priority: P0"
+  color: "b60205"
+  description: "Critical — data loss, broken main flow, security incident. Drop everything."
+- name: "priority: P1"
+  color: "d93f0b"
+  description: "High — core feature broken with no workaround."
+- name: "priority: P2"
+  color: "fbca04"
+  description: "Medium — feature degraded but workaround exists."
+- name: "priority: P3"
+  color: "0e8a16"
+  description: "Low — cosmetic or minor; address opportunistically."
+
+# -----------------------------------------------------------------------------
+# Area — sub-project this issue / PR touches. Mirrors AGENTS.md.
+# -----------------------------------------------------------------------------
+- name: "area: chrome-crx"
+  color: "1d76db"
+  description: "chrome-crx browser extension (sidepanel, service worker, MCP runtime, content script)."
+- name: "area: chrome-native-host"
+  color: "0052cc"
+  description: "Go native messaging host, MCP server, and superduck CLI."
+- name: "area: coworkd"
+  color: "5319e7"
+  description: "coworkd Go daemon."
+- name: "area: desktop"
+  color: "006b75"
+  description: "Desktop wrapper / packaging."
+- name: "area: mac-native-addon"
+  color: "bfd4f2"
+  description: "macOS native Node addon (Swift / C++)."
+- name: "area: npm"
+  color: "cb2431"
+  description: "npm distribution packages under npm/."
+- name: "area: ci"
+  color: "ededed"
+  description: "GitHub Actions, lint-staged, husky, scripts/."
+- name: "area: docs"
+  color: "0075ca"
+  description: "README, AGENTS.md, SKILL.md, inline docs."
+- name: "area: testing"
+  color: "0e8a16"
+  description: "Unit / integration / coverage / test perf."
+- name: "area: tooling"
+  color: "c5def5"
+  description: "Repo-wide tooling not tied to a single sub-project."
+
+# -----------------------------------------------------------------------------
+# Status — workflow state. Triagers and bots own these.
+# -----------------------------------------------------------------------------
+- name: "status: triage"
+  color: "fef2c0"
+  description: "Newly filed; awaiting triage."
+- name: "status: ready"
+  color: "0e8a16"
+  description: "Triaged and ready to be picked up (humans or agents)."
+- name: "status: in-progress"
+  color: "1d76db"
+  description: "Actively being worked on."
+- name: "status: blocked"
+  color: "d73a4a"
+  description: "Blocked on something external (issue, decision, dependency)."
+- name: "status: needs-review"
+  color: "fbca04"
+  description: "Implementation submitted; awaiting review."
+- name: "status: stale"
+  color: "ededed"
+  description: "No activity for a long time; will be closed if not refreshed."
+- name: "status: wontfix"
+  color: "ffffff"
+  description: "Will not be addressed; closing rationale should be in a comment."
+- name: "status: duplicate"
+  color: "cfd3d7"
+  description: "Duplicates another issue (link the original)."
+
+# -----------------------------------------------------------------------------
+# Needs — what is required to move forward.
+# -----------------------------------------------------------------------------
+- name: "needs: repro"
+  color: "fbca04"
+  description: "Cannot reproduce; reporter should provide a minimal repro."
+- name: "needs: design"
+  color: "c5def5"
+  description: "Design / spec decision required before implementation."
+- name: "needs: tests"
+  color: "0e8a16"
+  description: "Implementation lacks tests; add coverage before merging."
+- name: "needs: docs"
+  color: "0075ca"
+  description: "Docs (README / AGENTS.md) need updating to match the change."
+
+# -----------------------------------------------------------------------------
+# Discoverability helpers.
+# -----------------------------------------------------------------------------
+- name: "good first issue"
+  color: "7057ff"
+  description: "Approachable for newcomers to the codebase."
+- name: "help wanted"
+  color: "008672"
+  description: "Maintainers welcome external contributions here."
+- name: "agent: ready"
+  color: "5319e7"
+  description: "Issue is fully specified and safe for an autonomous AI agent to pick up."
+- name: "breaking-change"
+  color: "b60205"
+  description: "Introduces a backward-incompatible change for users."
+- name: "dependencies"
+  color: "0366d6"
+  description: "Dependency update (typically opened by Dependabot / Renovate)."
+
+# -----------------------------------------------------------------------------
+# Source — where the issue originated. Used by the error-to-insight pipeline
+# (`.github/workflows/sentry-issue.yml`, `pagerduty-incident-issue.yml`) to
+# tag auto-filed issues so triagers / agents can filter on origin.
+# -----------------------------------------------------------------------------
+- name: "source: sentry"
+  color: "362d59"
+  description: "Auto-filed from a Sentry alert via repository_dispatch."
+- name: "source: pagerduty"
+  color: "06ac38"
+  description: "Auto-filed from a PagerDuty incident via repository_dispatch."
+- name: "incident"
+  color: "b60205"
+  description: "Tracks a live or recent production incident."

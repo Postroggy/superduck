@@ -1,11 +1,13 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"time"
 
+	"chrome-native-host/internal/analytics"
 	"chrome-native-host/internal/cliclient"
 )
 
@@ -152,18 +154,27 @@ var gflags = globalFlags{
 	Timeout:    30 * time.Second,
 }
 
+var errNoArgs = errors.New("no command")
+
 func main() {
+	tracker := analytics.New(analytics.Options{})
+	commandStart := time.Now()
+
 	if len(os.Args) < 2 {
+		emitAndFlush(tracker, "_no_args", "", "", commandStart, errNoArgs)
 		fmt.Fprintf(os.Stderr, usage, version, cliclient.DefaultSocketPath)
 		os.Exit(ExitUsage)
 	}
 	args := splitGlobalFlags(os.Args[1:])
 	if len(args) == 0 {
+		emitAndFlush(tracker, "_no_args", "", "", commandStart, errNoArgs)
 		fmt.Fprintf(os.Stderr, usage, version, cliclient.DefaultSocketPath)
 		os.Exit(ExitUsage)
 	}
 
 	cmd, rest := args[0], args[1:]
+	sub := extractSubcommand(cmd, rest)
+
 	var err error
 	switch cmd {
 	case "context":
@@ -231,30 +242,120 @@ func main() {
 	case "help", "--help", "-h":
 		fmt.Fprintf(os.Stderr, usage, version, cliclient.DefaultSocketPath)
 	default:
+		emitAndFlush(tracker, "_unknown", "", cmd, commandStart, errNoArgs)
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n", cmd)
 		fmt.Fprintf(os.Stderr, usage, version, cliclient.DefaultSocketPath)
 		os.Exit(ExitUsage)
 	}
 
+	emitAndFlush(tracker, cmd, sub, "", commandStart, err)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
-		os.Exit(classifyExit(err))
+		if errors.Is(err, cliclient.ErrNotConnected) {
+			fmt.Fprintln(os.Stderr, "hint: SuperDuck native host not reachable. Make sure Chrome is running with the SuperDuck extension loaded, then try `superduck doctor`.")
+		}
+		os.Exit(exitCodeFor(err))
 	}
 }
 
-func classifyExit(err error) int {
-	if errors.Is(err, cliclient.ErrNotConnected) {
-		fmt.Fprintln(os.Stderr, "hint: SuperDuck native host not reachable. Make sure Chrome is running with the SuperDuck extension loaded, then try `superduck doctor`.")
-		return ExitNotConnected
+// emitAndFlush sends one cli.command event and bounds the wait so a slow
+// PostHog endpoint can never delay user-visible exit by more than 500ms.
+// badCommand is non-empty only on the unknown-command path.
+func emitAndFlush(tracker *analytics.Client, cmd, sub, badCommand string, start time.Time, err error) {
+	props := map[string]any{
+		"command":     cmd,
+		"ok":          err == nil,
+		"duration_ms": time.Since(start).Milliseconds(),
+		"json_mode":   gflags.JSON,
+		"tab_present": gflags.Tab != 0,
+		"version":     version,
 	}
-	if errors.Is(err, cliclient.ErrTimeout) {
-		return ExitTimeout
+	if sub != "" {
+		props["subcommand"] = sub
+	}
+	if badCommand != "" {
+		props["bad_command"] = badCommand
+	}
+	if err != nil {
+		code, kind := classify(err)
+		props["exit_code"] = code
+		props["error_kind"] = kind
+	}
+	tracker.Capture("cli.command", props)
+	flushCtx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	tracker.Flush(flushCtx)
+	cancel()
+}
+
+// extractSubcommand pulls the second-level verb out of families that take
+// one (tab_group, gif, shortcuts, navigate). Returns "" for flat commands.
+func extractSubcommand(cmd string, rest []string) string {
+	pickFirst := func(aliases map[string]string) string {
+		if len(rest) == 0 {
+			return ""
+		}
+		if v, ok := aliases[rest[0]]; ok {
+			return v
+		}
+		return "unknown"
+	}
+	switch cmd {
+	case "tab_group":
+		return pickFirst(map[string]string{
+			"list": "list", "ls": "list",
+			"new": "new", "create": "new",
+			"help": "help", "--help": "help", "-h": "help",
+		})
+	case "gif":
+		return pickFirst(map[string]string{
+			"start": "start", "stop": "stop",
+			"export": "export", "clear": "clear",
+		})
+	case "shortcuts":
+		return pickFirst(map[string]string{
+			"list": "list", "ls": "list",
+			"get": "get", "show": "get",
+			"help": "help", "--help": "help", "-h": "help",
+		})
+	case "navigate":
+		for _, a := range rest {
+			if len(a) > 0 && a[0] == '-' {
+				continue
+			}
+			if a == "back" || a == "forward" {
+				return a
+			}
+			return "url"
+		}
+		return ""
+	}
+	return ""
+}
+
+// classify maps a cliclient error to (process exit code, low-cardinality label
+// for PostHog). Single source of truth so the two never drift.
+func classify(err error) (int, string) {
+	if err == nil {
+		return 0, ""
+	}
+	switch {
+	case errors.Is(err, cliclient.ErrNotConnected):
+		return ExitNotConnected, "not_connected"
+	case errors.Is(err, cliclient.ErrTimeout):
+		return ExitTimeout, "timeout"
+	case errors.Is(err, errNoArgs):
+		return ExitUsage, "usage_error"
 	}
 	var te *cliclient.ToolError
 	if errors.As(err, &te) {
-		return ExitToolError
+		return ExitToolError, "tool_error"
 	}
-	return ExitUsage
+	return ExitUsage, "usage_error"
+}
+
+func exitCodeFor(err error) int {
+	code, _ := classify(err)
+	return code
 }
 
 func clientOpts() cliclient.Options {

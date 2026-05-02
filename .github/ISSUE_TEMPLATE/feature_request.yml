@@ -1,0 +1,85 @@
+name: Feature Request
+description: Propose a new feature or enhancement for SuperDuck.
+title: "[feat]: "
+labels:
+  - "type: feature"
+  - "status: triage"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for proposing an enhancement! Please check existing issues and discussions first to avoid duplicates.
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected component
+      options:
+        - chrome-crx (browser extension / sidepanel / service worker / MCP runtime)
+        - chrome-native-host (superduck CLI / native messaging host / MCP server)
+        - coworkd (cowork daemon)
+        - npm (release distribution)
+        - desktop / mac-native-addon
+        - Cross-cutting / repo tooling
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority (proposer's view)
+      options:
+        - "P1 - high (unblocks a critical workflow)"
+        - "P2 - medium (notable improvement)"
+        - "P3 - low (nice-to-have)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What user problem does this solve? Quote real workflows or pain points if possible.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: |
+        Sketch the user-facing behavior and, if you have one, the implementation outline.
+        Reference relevant entry points from `AGENTS.md` (e.g. `chrome-crx/src/mcp-runtime/cdp.ts`).
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What other options did you consider, and why is the proposed one preferred?
+
+  - type: textarea
+    id: ux
+    attributes:
+      label: UX / API impact
+      description: Mockups, command-line help text, MCP tool schemas, or React UI sketches.
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope checks
+      options:
+        - label: This change is backward compatible (no breaking changes for existing users).
+        - label: This requires a new dependency (please justify in the proposal).
+        - label: This requires a feature flag (GrowthBook / Statsig) for rollout.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Submission checklist
+      options:
+        - label: I searched existing issues and discussions for similar proposals.
+          required: true
+        - label: I am willing to discuss / iterate on the design before implementation.
+          required: true

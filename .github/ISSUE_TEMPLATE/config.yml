@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Discussion / Question
+    url: https://github.com/superduck-ai/superduck/discussions
+    about: Ask a question or start a discussion. Use issues only for actionable bug reports and feature requests.
+  - name: Security Vulnerability
+    url: https://github.com/superduck-ai/superduck/security/advisories/new
+    about: Privately report a security vulnerability via GitHub Security Advisories. Do NOT open a public issue.

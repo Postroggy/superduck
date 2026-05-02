@@ -1,0 +1,67 @@
+name: Sentry release & commit linking
+
+# Pushes a new Sentry release on every merge to `main` and associates the
+# commits in the release with the GitHub commits. This is the "outbound"
+# half of the error-to-insight pipeline: it lets Sentry resolve issues by
+# commit, suspect-commit annotate stack frames, and deep-link Sentry events
+# back to GitHub blobs / PRs.
+#
+# Counterpart to `.github/workflows/sentry-issue.yml`, which handles the
+# inbound "Sentry → GitHub issue" direction.
+#
+# Required configuration (all optional — workflow no-ops if SENTRY_AUTH_TOKEN
+# is not configured, so forks and contributors without Sentry access are not
+# blocked):
+#
+#   secrets.SENTRY_AUTH_TOKEN   — Sentry internal integration token with
+#                                 `project:releases` scope.
+#   vars.SENTRY_ORG             — e.g. "superduck"
+#   vars.SENTRY_PROJECT         — e.g. "chrome-crx"
+#   vars.SENTRY_ENVIRONMENT     — e.g. "production"  (defaults below)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'chrome-crx/**'
+      - 'chrome-native-host/**'
+      - '.github/workflows/sentry-release.yml'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Sentry environment to deploy the release into"
+        required: false
+        default: "production"
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Create Sentry release
+    runs-on: ubuntu-latest
+    if: ${{ vars.SENTRY_ORG != '' && vars.SENTRY_PROJECT != '' }}
+    env:
+      SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+      SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Skip when token is missing
+        if: ${{ env.SENTRY_AUTH_TOKEN == '' }}
+        run: |
+          echo "::warning::SENTRY_AUTH_TOKEN is not configured; skipping Sentry release."
+          echo "SENTRY_SKIP=1" >> "$GITHUB_ENV"
+
+      - name: Create Sentry release & associate commits
+        if: ${{ env.SENTRY_SKIP != '1' }}
+        uses: getsentry/action-release@v3
+        with:
+          environment: ${{ inputs.environment || vars.SENTRY_ENVIRONMENT || 'production' }}
+          version: ${{ github.sha }}
+          set_commits: auto
+          ignore_missing: true
+          ignore_empty: true

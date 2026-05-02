@@ -1,0 +1,94 @@
+name: Agent Task
+description: A self-contained task suitable for an autonomous AI coding agent (Claude Code, Codex, Cursor, droid, etc.) to pick up.
+title: "[agent]: "
+labels:
+  - "type: agent-task"
+  - "status: ready"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This template is optimized for autonomous agents.
+        See [`AGENTS.md`](../../AGENTS.md) for repo conventions.
+
+        **Required for an agent to pick this up:** scope, file pointers, acceptance criteria, and the exact
+        verification commands. Keep the task small and reviewable in a single PR.
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - chrome-crx
+        - chrome-native-host
+        - coworkd
+        - npm / release
+        - root tooling
+    validations:
+      required: true
+
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: One-paragraph description of what success looks like.
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context / file pointers
+      description: |
+        Point the agent at the exact files / directories that are in scope. Use repo-relative paths.
+      placeholder: |
+        - chrome-crx/src/mcp-runtime/shared.ts
+        - chrome-crx/src/lib/utils.ts
+        - chrome-native-host/cmd/superduck/cmd_tabs_mcp.go
+    validations:
+      required: true
+
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Constraints
+      description: What MUST NOT change? Public APIs, file layouts, dependencies?
+      placeholder: |
+        - Do not break the existing MCP tool schema.
+        - Do not introduce new top-level dependencies.
+        - Match existing naming conventions in AGENTS.md.
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Concrete, checkable outcomes.
+      placeholder: |
+        - [ ] New unit test in `chrome-crx/src/mcp-runtime/shared.test.ts`
+        - [ ] `bun run lint` and `bun run typecheck` pass
+        - [ ] `bun run test:coverage` thresholds still hold
+    validations:
+      required: true
+
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification commands
+      description: The exact commands the agent should run before opening a PR.
+      placeholder: |
+        cd chrome-crx && bun install && bun run lint && bun run typecheck && bun run test
+        cd chrome-native-host && make lint && make test
+      render: shell
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - "P1 - high"
+        - "P2 - medium"
+        - "P3 - low"
+    validations:
+      required: true

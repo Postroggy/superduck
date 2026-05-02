@@ -19,16 +19,16 @@ jobs:
       run:
         working-directory: chrome-native-host
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: chrome-native-host/go.mod
           cache: true
           cache-dependency-path: chrome-native-host/go.sum
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v7
+        uses: golangci/golangci-lint-action@v9
         with:
           version: v2.6.0
           working-directory: chrome-native-host

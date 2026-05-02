@@ -1,0 +1,242 @@
+name: Sentry → GitHub issue
+
+# Turns Sentry alerts into actionable GitHub issues.
+#
+# How it is wired up
+# ------------------
+# Sentry's "GitHub" alert action / internal integration POSTs a
+# `repository_dispatch` event to this repo with `event_type: sentry-issue`.
+# The payload (`client_payload`) carries Sentry's issue metadata:
+#
+#   {
+#     "event_type": "sentry-issue",
+#     "client_payload": {
+#       "issue_id":      "1234567",
+#       "issue_url":     "https://<org>.sentry.io/issues/1234567/",
+#       "project":       "chrome-crx",
+#       "environment":   "production",
+#       "title":         "TypeError: Cannot read properties of undefined ...",
+#       "culprit":       "service-worker.ts in handleMessage",
+#       "level":         "error",
+#       "event_count":   42,
+#       "user_count":    7,
+#       "release":       "chrome-crx@1.4.2",
+#       "first_seen":    "2026-04-30T12:34:56Z",
+#       "last_seen":     "2026-05-01T03:21:00Z",
+#       "stacktrace":    "<short traceback or empty>",
+#       "tags":          { "browser": "chrome", "platform": "javascript" }
+#     }
+#   }
+#
+# The job:
+#   1. Searches existing open issues for one tagged with the same Sentry
+#      `issue_id` (we stash it in a hidden HTML comment in the body).
+#   2. If found → adds a comment with the new occurrence count and bumps
+#      labels (e.g. flips `priority: P2` → `priority: P1` once thresholds
+#      are hit). This avoids issue-spam on noisy alerts.
+#   3. If not found → opens a new issue with `type: bug`, `source: sentry`,
+#      and an `area:` label inferred from `project`.
+#
+# Required secrets / vars
+#   SENTRY_DISPATCH_TOKEN   shared with the Sentry webhook (validated below).
+#   SENTRY_ORG              vars.SENTRY_ORG   — used to build issue links.
+#   SENTRY_PROJECT          vars.SENTRY_PROJECT (optional; falls back to
+#                           payload.project).
+#
+# Trigger manually for testing:
+#   gh api repos/$REPO/dispatches -f event_type=sentry-issue \
+#      -f client_payload='{"issue_id":"test-1","title":"Boom","project":"chrome-crx","issue_url":"https://example.sentry.io/issues/test-1/","level":"error","environment":"production","event_count":1,"user_count":1}'
+
+on:
+  repository_dispatch:
+    types: [sentry-issue]
+
+permissions:
+  issues: write
+  contents: read
+
+env:
+  SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+  SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+
+jobs:
+  sync:
+    name: Create or update GitHub issue from Sentry alert
+    runs-on: ubuntu-latest
+    env:
+      EXPECTED_TOKEN: ${{ secrets.SENTRY_DISPATCH_TOKEN }}
+    steps:
+      - name: Validate dispatch secret
+        if: env.EXPECTED_TOKEN != ''
+        env:
+          PROVIDED: ${{ github.event.client_payload.token }}
+        run: |
+          if [ "$PROVIDED" != "$EXPECTED_TOKEN" ]; then
+            echo "::error::repository_dispatch token mismatch — refusing to act"
+            exit 1
+          fi
+
+      - name: Sync Sentry issue → GitHub issue
+        uses: actions/github-script@v7
+        env:
+          SENTRY_ORG_ENV: ${{ env.SENTRY_ORG }}
+          SENTRY_PROJECT_ENV: ${{ env.SENTRY_PROJECT }}
+        with:
+          script: |
+            const p = context.payload.client_payload || {};
+            if (!p.issue_id) {
+              core.setFailed("client_payload.issue_id is required");
+              return;
+            }
+
+            const sentryOrg = process.env.SENTRY_ORG_ENV || "";
+            const sentryProject =
+              p.project || process.env.SENTRY_PROJECT_ENV || "unknown";
+
+            const issueUrl =
+              p.issue_url ||
+              (sentryOrg
+                ? `https://${sentryOrg}.sentry.io/issues/${p.issue_id}/`
+                : `https://sentry.io/organizations/_/issues/${p.issue_id}/`);
+
+            // Map Sentry project → repo `area:` label (best-effort; falls back
+            // to "area: tooling" so the issue is still routable).
+            const areaByProject = {
+              "chrome-crx": "area: chrome-crx",
+              "chrome-native-host": "area: chrome-native-host",
+              "coworkd": "area: coworkd",
+              "desktop": "area: desktop",
+              "mac-native-addon": "area: mac-native-addon",
+              "npm": "area: npm",
+            };
+            const areaLabel = areaByProject[sentryProject] || "area: tooling";
+
+            // Map Sentry level → priority. Errors that have impacted multiple
+            // users escalate automatically.
+            const userCount = Number(p.user_count || 0);
+            const eventCount = Number(p.event_count || 0);
+            let priority = "priority: P2";
+            if (p.level === "fatal" || userCount >= 50 || eventCount >= 1000) {
+              priority = "priority: P0";
+            } else if (
+              p.level === "error" &&
+              (userCount >= 5 || eventCount >= 100)
+            ) {
+              priority = "priority: P1";
+            } else if (p.level === "warning") {
+              priority = "priority: P3";
+            }
+
+            const sentryMarker = `<!-- sentry-issue-id: ${p.issue_id} -->`;
+            const title =
+              `[sentry] ${(p.title || "Unknown error").slice(0, 200)}`;
+
+            const tagLines = Object.entries(p.tags || {})
+              .map(([k, v]) => `- \`${k}\`: \`${v}\``)
+              .join("\n");
+
+            const body = [
+              sentryMarker,
+              "",
+              `**Sentry issue:** ${issueUrl}`,
+              `**Project:** \`${sentryProject}\``,
+              `**Environment:** \`${p.environment || "unknown"}\``,
+              `**Level:** \`${p.level || "error"}\``,
+              `**Release:** \`${p.release || "unknown"}\``,
+              `**First seen:** ${p.first_seen || "n/a"}`,
+              `**Last seen:** ${p.last_seen || "n/a"}`,
+              `**Events:** ${eventCount}  •  **Users impacted:** ${userCount}`,
+              "",
+              "### Culprit",
+              "```",
+              p.culprit || "(unknown)",
+              "```",
+              "",
+              p.stacktrace
+                ? "### Stacktrace (truncated)\n```\n" +
+                  String(p.stacktrace).slice(0, 4000) +
+                  "\n```"
+                : "",
+              tagLines ? "### Tags\n" + tagLines : "",
+              "",
+              "---",
+              "_Auto-filed by `.github/workflows/sentry-issue.yml`._ ",
+              "_Comments are appended for repeat occurrences; re-open this " +
+                "issue if Sentry resurfaces it._",
+            ]
+              .filter(Boolean)
+              .join("\n");
+
+            const labels = [
+              "type: bug",
+              "source: sentry",
+              areaLabel,
+              priority,
+              "status: triage",
+            ];
+
+            // Look for an existing open issue carrying our marker so we can
+            // dedupe rather than spam.
+            const search = await github.rest.search.issuesAndPullRequests({
+              q: [
+                `repo:${context.repo.owner}/${context.repo.repo}`,
+                "is:issue",
+                "in:body",
+                `"sentry-issue-id: ${p.issue_id}"`,
+              ].join(" "),
+              per_page: 5,
+            });
+
+            const existing = search.data.items.find(
+              (i) => !i.pull_request,
+            );
+
+            if (existing) {
+              core.info(
+                `Found existing issue #${existing.number} for sentry id ${p.issue_id}`,
+              );
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body: [
+                  `Sentry resurfaced this issue (level \`${p.level || "error"}\`).`,
+                  `- Events: **${eventCount}**, users impacted: **${userCount}**`,
+                  `- Last seen: ${p.last_seen || "n/a"}`,
+                  `- ${issueUrl}`,
+                ].join("\n"),
+              });
+
+              if (existing.state === "closed") {
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: existing.number,
+                  state: "open",
+                  state_reason: "reopened",
+                });
+              }
+
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                labels: [priority, "status: triage"],
+              });
+
+              core.setOutput("issue_number", existing.number);
+              core.setOutput("action", "updated");
+              return;
+            }
+
+            const created = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body,
+              labels,
+            });
+
+            core.info(`Created issue #${created.data.number}`);
+            core.setOutput("issue_number", created.data.number);
+            core.setOutput("action", "created");
