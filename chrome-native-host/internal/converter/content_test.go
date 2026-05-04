@@ -3,6 +3,7 @@ package converter
 import "testing"
 
 func TestToMCPContentPreservesScreenshotTextTabContextAndImage(t *testing.T) {
+	t.Parallel()
 	result := map[string]interface{}{
 		"output":      "Successfully captured screenshot (100x200, png) - ID: img_123",
 		"base64Image": "aGVsbG8=",

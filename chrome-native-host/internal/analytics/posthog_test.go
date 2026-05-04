@@ -132,6 +132,7 @@ func TestCaptureNoOpWhenDisabled(t *testing.T) {
 }
 
 func TestCaptureRejectsEmptyEventName(t *testing.T) {
+	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Errorf("empty event name should not produce a capture call")
 	}))
@@ -151,6 +152,7 @@ func TestCaptureRejectsEmptyEventName(t *testing.T) {
 }
 
 func TestBuildCaptureBodyDoesNotAllowOverridingLibFields(t *testing.T) {
+	t.Parallel()
 	body := buildCaptureBody("k", "u", "evt", map[string]any{
 		"$lib":   "evil",
 		"custom": 42,
@@ -170,6 +172,7 @@ func TestBuildCaptureBodyDoesNotAllowOverridingLibFields(t *testing.T) {
 }
 
 func TestLoadOrCreateDistinctIDPersistsAcrossCalls(t *testing.T) {
+	// NOTE: not Parallel — mutates HOME via t.Setenv.
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
 	// On macOS UserHomeDir checks $HOME first, so the override above is enough.

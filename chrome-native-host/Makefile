@@ -1,4 +1,4 @@
-.PHONY: all clean native-host mcp-server superduck install test test-coverage test-perf lint lint-install release-binaries
+.PHONY: all clean native-host mcp-server superduck install test test-race test-coverage test-perf lint lint-install release-binaries
 
 # Pinned linter version. Bump deliberately and re-run `make lint`.
 GOLANGCI_LINT_VERSION ?= v2.6.0
@@ -65,7 +65,15 @@ install: all
 
 test:
 	@echo "Running tests..."
-	go test ./...
+	go test -parallel=4 ./...
+
+# Race-enabled tests live in a separate target because `-race` requires CGO and
+# a working C toolchain (gcc/clang). Default `make test` stays portable; CI and
+# anyone with a full toolchain can opt into stricter concurrency checking via
+# `make test-race`.
+test-race:
+	@echo "Running tests with race detector (requires CGO + C toolchain)..."
+	CGO_ENABLED=1 go test -race -parallel=4 ./...
 
 # Test-performance tracking. Emits per-test timings (-v) and a machine-readable
 # JSON event stream (test-results.json) that CI can publish as an artifact and

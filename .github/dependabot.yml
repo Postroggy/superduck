@@ -1,0 +1,181 @@
+# Dependabot configuration for SuperDuck.
+#
+# Reference: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+#
+# Goals:
+# 1. Keep TypeScript (chrome-crx + npm sub-packages + root tooling),
+#    Go (chrome-native-host), and GitHub Actions ecosystems patched without
+#    manual chasing.
+# 2. Group routine, low-risk patch/minor bumps into a single PR per ecosystem
+#    so reviewers (and the Factory Droid review bot) are not buried.
+# 3. Apply our `min_release_age` policy via the global `cooldown` block —
+#    every dependency must wait a few days after release before Dependabot
+#    will open a PR for it. This gives the ecosystem time to surface bad
+#    releases (yanks, postmortems, security advisories) before we adopt them.
+# 4. Tag every PR with our existing labels so they flow through the same
+#    triage as the rest of the repo.
+
+version: 2
+
+# Global cooldown — applies to every ecosystem unless overridden below.
+# We wait longer for major bumps because they are most likely to be yanked
+# or to ship breaking regressions discovered post-publish.
+cooldown:
+  default-days: 3
+  semver-minor-days: 5
+  semver-major-days: 7
+
+updates:
+  # ─────────────────────────────────────────────────────────────────────────
+  # GitHub Actions used across .github/workflows
+  # ─────────────────────────────────────────────────────────────────────────
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Shanghai"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "area: ci"
+      - "type: chore"
+    commit-message:
+      prefix: "chore(actions)"
+      include: "scope"
+    groups:
+      gh-actions-minor:
+        patterns: ["*"]
+        update-types:
+          - "minor"
+          - "patch"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Root tooling (husky + lint-staged) — npm ecosystem at repo root
+  # ─────────────────────────────────────────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Shanghai"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "area: tooling"
+      - "type: chore"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    versioning-strategy: "increase-if-necessary"
+    groups:
+      root-tooling-minor:
+        patterns: ["*"]
+        update-types:
+          - "minor"
+          - "patch"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Chrome extension (TypeScript / Vite / Bun) — uses npm-compatible manifest
+  # ─────────────────────────────────────────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/chrome-crx"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Shanghai"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "area: chrome-crx"
+      - "type: chore"
+    commit-message:
+      prefix: "chore(crx-deps)"
+      include: "scope"
+    versioning-strategy: "increase-if-necessary"
+    groups:
+      crx-prod-minor:
+        dependency-type: "production"
+        update-types:
+          - "minor"
+          - "patch"
+      crx-dev-minor:
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      # Major framework bumps need manual coordination across the side panel,
+      # service worker, and React ecosystem. Pin to current major and let a
+      # human (or a deliberate agent task) handle React 19+ migration.
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/react-dom"
+        update-types: ["version-update:semver-major"]
+      # Build tooling majors also break configs in non-trivial ways.
+      - dependency-name: "vite"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "vitest"
+        update-types: ["version-update:semver-major"]
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # npm distribution wrappers (root + per-platform subpackages)
+  # ─────────────────────────────────────────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/npm"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Shanghai"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "area: npm"
+      - "type: chore"
+    commit-message:
+      prefix: "chore(npm-deps)"
+      include: "scope"
+    groups:
+      npm-pkg-minor:
+        patterns: ["*"]
+        update-types:
+          - "minor"
+          - "patch"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Go native host / CLI / MCP server
+  # ─────────────────────────────────────────────────────────────────────────
+  - package-ecosystem: "gomod"
+    directory: "/chrome-native-host"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Shanghai"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "area: chrome-native-host"
+      - "type: chore"
+    commit-message:
+      prefix: "chore(go-deps)"
+      include: "scope"
+    groups:
+      go-direct-minor:
+        dependency-type: "direct"
+        update-types:
+          - "minor"
+          - "patch"
+      go-indirect-minor:
+        dependency-type: "indirect"
+        update-types:
+          - "minor"
+          - "patch"

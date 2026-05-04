@@ -3,6 +3,7 @@ package main
 import "testing"
 
 func TestBuildCallToolResultPreservesStructuredContent(t *testing.T) {
+	t.Parallel()
 	result := map[string]interface{}{
 		"output":      "Successfully captured screenshot (100x200, png) - ID: img_123",
 		"base64Image": "aGVsbG8=",
@@ -39,6 +40,7 @@ func TestBuildCallToolResultPreservesStructuredContent(t *testing.T) {
 }
 
 func TestBuildCallToolResultMarksToolErrors(t *testing.T) {
+	t.Parallel()
 	result := map[string]interface{}{
 		"error": "something went wrong",
 	}

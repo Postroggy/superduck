@@ -7,6 +7,7 @@ import (
 )
 
 func TestRegisterToolsUsesValidSchemas(t *testing.T) {
+	t.Parallel()
 	if got, want := len(toolDefinitions), 19; got != want {
 		t.Fatalf("toolDefinitions length = %d, want %d", got, want)
 	}

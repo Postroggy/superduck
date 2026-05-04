@@ -1,0 +1,37 @@
+name: Validate AGENTS.md
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'AGENTS.md'
+      - 'chrome-crx/package.json'
+      - 'chrome-native-host/Makefile'
+      - 'scripts/validate-agents-md.mjs'
+      - '.github/workflows/validate-agents-md.yml'
+  pull_request:
+    paths:
+      - 'AGENTS.md'
+      - 'chrome-crx/package.json'
+      - 'chrome-native-host/Makefile'
+      - 'scripts/validate-agents-md.mjs'
+      - '.github/workflows/validate-agents-md.yml'
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: Validate AGENTS.md commands & links
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Validate AGENTS.md
+        run: node scripts/validate-agents-md.mjs
+
+      - name: Sanity check - AGENTS.md exists at repo root
+        run: test -f AGENTS.md

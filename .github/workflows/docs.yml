@@ -1,0 +1,178 @@
+name: Generate API Docs
+
+# Automatically generate API reference docs:
+#   - chrome-crx (TypeScript) via TypeDoc
+#   - chrome-native-host (Go) via `go doc` snapshots
+#
+# On `main` pushes, the rendered TypeDoc site is published to GitHub Pages so
+# `https://<org>.github.io/<repo>/` always reflects the latest extension API.
+# On PRs the docs are only built (no publish) to catch broken JSDoc / unresolved
+# symbols early.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'chrome-crx/src/**'
+      - 'chrome-crx/typedoc.json'
+      - 'chrome-crx/package.json'
+      - 'chrome-crx/tsconfig.json'
+      - 'chrome-native-host/**/*.go'
+      - 'chrome-native-host/go.mod'
+      - '.github/workflows/docs.yml'
+  pull_request:
+    paths:
+      - 'chrome-crx/src/**'
+      - 'chrome-crx/typedoc.json'
+      - 'chrome-crx/package.json'
+      - 'chrome-crx/tsconfig.json'
+      - 'chrome-native-host/**/*.go'
+      - 'chrome-native-host/go.mod'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  typedoc:
+    name: TypeDoc (chrome-crx)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install chrome-crx deps
+        working-directory: chrome-crx
+        run: bun install --frozen-lockfile
+
+      - name: Generate TypeDoc site
+        working-directory: chrome-crx
+        run: bun run docs
+
+      - name: Upload TypeDoc artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: typedoc-site
+          path: chrome-crx/docs/api
+          retention-days: 14
+
+  godoc:
+    name: go doc snapshots (chrome-native-host)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: chrome-native-host/go.mod
+
+      - name: Render package docs to text
+        working-directory: chrome-native-host
+        run: |
+          set -euo pipefail
+          mkdir -p ../docs-build/godoc
+          # Iterate over every Go package and snapshot its public API into a
+          # plain-text file. This produces a deterministic, reviewable record
+          # of the exported surface that an agent can grep through.
+          go list ./... | while read -r pkg; do
+            safe=$(echo "$pkg" | tr '/' '_')
+            echo "==> $pkg"
+            (echo "# $pkg"; echo; go doc -all "$pkg") > "../docs-build/godoc/${safe}.txt"
+          done
+          ls -la ../docs-build/godoc
+
+      - name: Upload godoc artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: godoc-snapshots
+          path: docs-build/godoc
+          retention-days: 14
+
+  publish-pages:
+    name: Publish docs to GitHub Pages
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [typedoc, godoc]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download TypeDoc artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: typedoc-site
+          path: site/typedoc
+
+      - name: Download godoc artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: godoc-snapshots
+          path: site/godoc
+
+      - name: Generate godoc index.html
+        run: |
+          cd site/godoc
+          {
+            echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>godoc snapshots</title>'
+            echo '<style>body{font-family:-apple-system,system-ui,sans-serif;max-width:720px;margin:4rem auto;padding:0 1rem;line-height:1.5}</style>'
+            echo '</head><body><h1>chrome-native-host godoc snapshots</h1><ul>'
+            for f in *.txt; do
+              [ -f "$f" ] || continue
+              printf '<li><a href="%s">%s</a></li>\n' "$f" "$f"
+            done
+            echo '</ul></body></html>'
+          } > index.html
+
+      - name: Write index.html
+        run: |
+          cat > site/index.html <<'HTML'
+          <!doctype html>
+          <html lang="en">
+            <head>
+              <meta charset="utf-8" />
+              <title>SuperDuck API Reference</title>
+              <meta name="viewport" content="width=device-width, initial-scale=1" />
+              <style>
+                body { font-family: -apple-system, system-ui, sans-serif; max-width: 720px; margin: 4rem auto; padding: 0 1rem; line-height: 1.5; }
+                h1 { margin-bottom: 0.25rem; }
+                code { background: #f4f4f5; padding: 0.1rem 0.3rem; border-radius: 4px; }
+              </style>
+            </head>
+            <body>
+              <h1>SuperDuck API Reference</h1>
+              <p>Auto-generated on each push to <code>main</code>.</p>
+              <ul>
+                <li><a href="typedoc/index.html">chrome-crx (TypeScript) – TypeDoc</a></li>
+                <li><a href="godoc/index.html">chrome-native-host (Go) – godoc snapshots</a></li>
+              </ul>
+            </body>
+          </html>
+          HTML
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4
