@@ -17,6 +17,14 @@ SuperDuck 是一个浏览器 AI 助手,由多个子项目组成:
 
 主要工作区: `chrome-crx`(扩展功能)与 `chrome-native-host`(CLI / 原生桥)。
 
+## Monorepo 工作区
+
+仓库根用两套 workspace 工具把多个子项目绑成一个 monorepo,新增子模块时请同步登记:
+
+- **JS/TS** — 根 `package.json` 声明 `"workspaces": ["chrome-crx", "npm/packages/*"]`,Bun / npm / yarn 任一都能识别。在仓库根 `bun install` 会同时安装所有子包依赖,并把 husky / lint-staged 等开发工具集中放在根 `node_modules/`。
+- **Go** — 仓库根 [`go.work`](go.work) 通过 `use` 指令把 `./chrome-native-host` 纳入工作区。在仓库根直接 `go build ./...` / `go test ./...` 就能跨模块编译,IDE / 代理也能基于此识别每个 Go 子项目的 module 边界。新增 Go 模块(例如未来真正落地 `coworkd/`)时,先 `cd <dir> && go mod init <name>`,再在 `go.work` 的 `use (...)` 块中追加路径并提交,不要让多模块项目散落在根 module 之外。
+- `go.work.sum` 是本地缓存,**不**提交;`go.work` 是工作区契约,**必须**提交。
+
 ## 构建命令
 
 ### chrome-crx(Chrome 扩展)
@@ -109,6 +117,9 @@ node scripts/validate-agents-md.mjs
 | `SUPERDUCK_POSTHOG_KEY` | chrome-native-host | PostHog write key,留空则不发送埋点 |
 | `SUPERDUCK_POSTHOG_HOST` | chrome-native-host | 自定义 PostHog 域名,默认 `https://us.i.posthog.com` |
 | `SUPERDUCK_ANALYTICS_DISABLED` | chrome-native-host | `1/true` 强制关闭埋点 |
+| `SUPERDUCK_SENTRY_DSN` | chrome-native-host | Sentry/GlitchTip DSN,留空则不上报错误 |
+| `SUPERDUCK_ERRORTRACK_DISABLED` | chrome-native-host | `1/true` 强制关闭错误上报 |
+| `SUPERDUCK_ENV` | chrome-native-host | 错误上报的 environment tag,默认 `production` |
 | `POSTHOG_KEY` | chrome-native-host Makefile | release 构建时通过 `-ldflags -X` 注入到二进制 |
 | `SLOW_TEST_MS` / `TOP_N` / `FAIL_OVER_MS` | chrome-crx 测试报告 | `chrome-crx/scripts/test-perf-report.mjs` 的阈值与门禁 |
 | `CI` | 通用 | CI 环境自动注入,本地不要手动设置 |
@@ -163,6 +174,21 @@ node scripts/validate-agents-md.mjs
 - 提交信息 scope 用小写短名(`cli`、`crx`、`sidepanel`)。
 
 新代码若违反 TS 命名规则会触发 ESLint warning;Go 侧请在提交前跑 `go vet ./...`。
+
+## 事故响应 / Runbooks
+
+仓库根目录的 [`runbooks/`](runbooks/) 目录收录了各组件的事故响应手册,值班工程师与代理在排障时优先查阅:
+
+| 场景 | Runbook |
+|---|---|
+| Chrome 扩展崩溃 / side panel 打不开 | [runbooks/chrome-extension-crash.md](runbooks/chrome-extension-crash.md) |
+| Native messaging host 断连 | [runbooks/native-host-disconnect.md](runbooks/native-host-disconnect.md) |
+| MCP server 无响应 | [runbooks/mcp-server-unresponsive.md](runbooks/mcp-server-unresponsive.md) |
+| 发布回滚 | [runbooks/release-rollback.md](runbooks/release-rollback.md) |
+| CI pipeline 持续失败 | [runbooks/ci-pipeline-failure.md](runbooks/ci-pipeline-failure.md) |
+| 密钥泄露应急 | [runbooks/secrets-leak-response.md](runbooks/secrets-leak-response.md) |
+
+入口索引见 [runbooks/README.md](runbooks/README.md);新增事故类型时请补充 runbook 并在该索引登记。
 
 ## 目录入口速查
 
