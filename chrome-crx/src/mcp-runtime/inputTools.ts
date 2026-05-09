@@ -1181,7 +1181,7 @@ async function executeHover(
   }
 } // =============================================================================
 // MCP Section: Tool Definitions and Helper Functions
-// Converted from compiled JS (lines ~3500-6300 of mcpPermissions-D-cKe6e4.js)
+// Converted from the legacy compiled MCP runtime bundle (lines ~3500-6300)
 
 // =============================================================================
 // Tool: form_input (Ee)

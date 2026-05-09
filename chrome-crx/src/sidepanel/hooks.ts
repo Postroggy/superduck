@@ -1,5 +1,5 @@
 import { useRef, useEffect, useCallback } from "react";
-import { getTabEventManager } from "../mcpPermissions";
+import { getTabEventManager } from "../mcpRuntime";
 
 type TabChangeInfo = chrome.tabs.OnUpdatedInfo & {
   active?: boolean;
