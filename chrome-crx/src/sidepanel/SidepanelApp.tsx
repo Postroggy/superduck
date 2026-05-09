@@ -9149,14 +9149,14 @@ export function SidepanelApp() {
   const effectiveRuntimeError =
     isPurlMode && lightningResult ? lightningResult.error : runtimeError;
   useEffect(() => {
-    const msg = effectiveRuntimeError || lnError;
+    const lnErr = lightningResult?.error ?? null;
+    const msg = effectiveRuntimeError || lnErr;
     if (!msg) return;
     void trackEvent('claude_chrome.sidebar.error_shown', {
-      // Truncate to keep PostHog cardinality bounded and avoid leaking user content.
       message: msg.slice(0, 80),
-      source: lnError ? 'chat' : 'runtime'
+      source: lnErr ? 'chat' : 'runtime'
     });
-  }, [effectiveRuntimeError, lnError]);
+  }, [effectiveRuntimeError, lightningResult?.error]);
   const effectiveSetMessages =
     isPurlMode && lightningResult ? lightningResult.setMessages : setMessages;
   const effectiveHasInteractiveTools = isPurlMode && lightningResult ? false : hasInteractiveTools;

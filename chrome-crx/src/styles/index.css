@@ -422,58 +422,6 @@ b, strong, .font-bold, .font-bolder {
     font-weight: 530
 }
 
-@font-face {
-    font-family: Anthropic Sans;
-    src: url(/assets/AnthropicSans-Romans-Variable-25x258-Bpr3wWwO.woff2) format("woff2");
-    font-weight: 300 800;
-    font-style: normal;
-    font-display: swap;
-    font-feature-settings: "dlig" 0
-}
-
-@font-face {
-    font-family: Anthropic Sans;
-    src: url(/assets/AnthropicSans-Italics-Variable-25x258-DiJh4Brh.woff2) format("woff2");
-    font-weight: 300 800;
-    font-style: italic;
-    font-display: swap;
-    font-feature-settings: "dlig" 0
-}
-
-@font-face {
-    font-family: Anthropic Serif;
-    src: url(/assets/AnthropicSerif-Romans-Variable-25x258-B6fyXDVc.woff2) format("woff2");
-    font-weight: 300 800;
-    font-style: normal;
-    font-display: swap;
-    font-feature-settings: "dlig" 0
-}
-
-@font-face {
-    font-family: Anthropic Serif;
-    src: url(/assets/AnthropicSerif-Italics-Variable-25x258-DH989fus.woff2) format("woff2");
-    font-weight: 300 800;
-    font-style: italic;
-    font-display: swap;
-    font-feature-settings: "dlig" 0
-}
-
-@font-face {
-    font-family: Anthropic Mono;
-    src: url(/assets/AnthropicMono20250717_TKVF-B2MNN231.woff2) format("woff2");
-    font-weight: 300 800;
-    font-style: normal;
-    font-display: swap
-}
-
-@font-face {
-    font-family: JetBrains Mono;
-    src: url(/assets/JetBrainsMono-Regular-BQaDgvhP.woff2) format("woff2");
-    font-weight: 400;
-    font-style: normal;
-    font-display: swap
-}
-
 @layer base {
     :root {
         --font-anthropic-sans: "Anthropic Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
