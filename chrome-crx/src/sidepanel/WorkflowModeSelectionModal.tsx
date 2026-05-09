@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { FormattedMessage, useIntl } from 'react-intl';
 import { GlobeIcon } from './icons';
-import { Button } from '../components/SchedulingFields';
+import { Button } from '../components/ui';
 
 // Import the hero image
 import recordWorkflowHeroImage from '../../record-workflow-hero-CjmRJsCN.png';

@@ -14,14 +14,14 @@ import {
   PenIcon,
   TrashIcon,
   VerticalDotsIcon,
-  getModelsConfig,
   Modal,
   ModalFooter,
   TextInput,
   ErrorMessage,
-  TextArea,
-  SchedulingFields,
-} from "./SchedulingFields";
+  TextArea
+} from './ui';
+import { getModelsConfig } from './providers/AppProviders';
+import { SchedulingFields } from './scheduling/SchedulingFields';
 import {
   SavedPromptsService,
   getStorageValue,

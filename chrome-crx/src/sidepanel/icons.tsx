@@ -1,5 +1,5 @@
 import React from 'react';
-import { SuperDuckIcon } from '@/components/SchedulingFields';
+import { SuperDuckIcon } from '@/components/ui';
 import cursorAiSvg from '../assets/IconCursorAi.svg?raw';
 
 type IconProps = React.ComponentProps<typeof SuperDuckIcon>;

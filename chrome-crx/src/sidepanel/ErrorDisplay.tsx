@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
-import { Button } from "@/components/SchedulingFields";
+import { Button } from '@/components/ui';
 
 interface ErrorDisplayProps {
   error: string | null | undefined;

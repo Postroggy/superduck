@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { FormattedMessage, useIntl } from 'react-intl';
 import { X, MoreHorizontal, Trash2 } from 'lucide-react';
-import { Button } from '../components/SchedulingFields';
-import { TextInput, TextArea, ErrorMessage, Label } from '../components/SchedulingFields';
-import { SchedulingFields } from '../components/SchedulingFields';
+import { Button, ErrorMessage, Label, TextArea, TextInput } from '../components/ui';
+import { SchedulingFields } from '../components/scheduling/SchedulingFields';
 import type {
   NewSavedPrompt,
   PromptType,
