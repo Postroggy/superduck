@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { FormattedMessage } from 'react-intl';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Trash2, Mic } from 'lucide-react';
-import { Button, TextArea } from '../components/SchedulingFields';
+import { Button, TextArea } from '../components/ui';
 import { ScreenshotPreview } from './ScreenshotPreview';
 
 export interface WorkflowStep {

@@ -1,5 +1,5 @@
 import React, { useRef, useCallback, useImperativeHandle, useLayoutEffect } from "react";
-import { cn, useComposedRefs } from "@/components/SchedulingFields";
+import { cn, useComposedRefs } from '@/components/ui';
 
 interface PinToBottomConfig {
   disabled: boolean;

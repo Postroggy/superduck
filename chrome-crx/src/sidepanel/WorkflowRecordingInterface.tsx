@@ -2,7 +2,7 @@ import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { FormattedMessage, useIntl } from 'react-intl';
 import { type SupportedLocale } from './prompts';
 import { GlobeIcon } from './icons';
-import { Button, TextInput } from '../components/SchedulingFields';
+import { Button, TextInput } from '../components/ui';
 import { Trash2, Play, Pause, Mic, MicOff, X } from 'lucide-react';
 import { WorkflowStepsList, WorkflowStep } from './WorkflowStepsList';
 import { Tooltip } from './Tooltip';
