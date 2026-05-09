@@ -91,8 +91,9 @@ import {
   computerTool,
   navigateTool,
   javascriptTool,
-  cdpDebugger
-} from '../mcpPermissions';
+  cdpDebugger,
+  trackEvent,
+} from '../mcpRuntime';
 import { MessagesClient } from '../mcpServersStore';
 import {
   generateConversationTitle as generateConversationTitleFunction,
@@ -112,7 +113,6 @@ import {
   getMappedModelName
 } from '../utils/modelMapping';
 import { compressBase64Image } from '../utils/imageCompressor';
-import { trackEvent } from '../mcpPermissions';
 import { EmptyState } from './EmptyState';
 import { useTabEvent } from './hooks';
 import { ScrollContainer, type ScrollContainerHandle } from './ScrollContainer';
@@ -8320,7 +8320,7 @@ export function SidepanelApp() {
       }
       try {
         // Pass the inline permission handler directly to executeTool.
-        // processToolResults in mcpPermissions handles the permission flow
+        // processToolResults in mcpRuntime handles the permission flow
         // (prompt → re-execute) using this handler, matching the bundle's
         // deferred-Promise pattern where the sidepanel manages the UI inline.
         const result = await executeTool({
