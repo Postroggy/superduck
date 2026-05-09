@@ -22,7 +22,7 @@
         "src/accessibility-tree.ts"
       ],
       "matches": [
-        "\u003Call_urls>"
+        "<all_urls>"
       ],
       "run_at": "document_start"
     },
@@ -32,7 +32,7 @@
         "src/agent-visual-indicator.ts"
       ],
       "matches": [
-        "\u003Call_urls>"
+        "<all_urls>"
       ],
       "run_at": "document_idle"
     }
@@ -48,7 +48,7 @@
     ]
   },
   "host_permissions": [
-    "\u003Call_urls>"
+    "<all_urls>"
   ],
   "icons": {
     "128": "icon-128.png"
@@ -81,7 +81,7 @@
   "web_accessible_resources": [
     {
       "matches": [
-        "\u003Call_urls>"
+        "<all_urls>"
       ],
       "resources": [
         "src/accessibility-tree.ts",
