@@ -1,10 +1,10 @@
 @import "tailwindcss" source(none);
 
 @source "../../src";
-@source "../../newtab.html";
+@source "../../public/newtab.html";
 @source "../../offscreen.html";
 @source "../../options.html";
-@source "../../pairing.html";
+@source "../../public/pairing.html";
 @source "../../sidepanel.html";
 
 @custom-variant dark (&:where([data-mode=dark], [data-mode=dark] *));
