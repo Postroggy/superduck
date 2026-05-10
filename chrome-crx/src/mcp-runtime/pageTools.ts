@@ -4,11 +4,30 @@ import { cdpDebugger } from './cdp';
 import {
   takeSnapshotUnlocked,
   SnapshotMaxCharsError,
-  withSnapshotLock,
   normalizeSnapshotForDiff,
+  withSnapshotLock,
 } from './axSnapshot';
 import { registerRefsInPage, pruneStaleRefs } from './refBridge';
-import { diffArrays } from 'diff';
+import {
+  coerceToolInputTypes,
+  filterAndApproveDomains,
+  filterDomainsByCategory,
+  formatTabsContext,
+  getPlanModeSystemReminder,
+  parseArrayInput,
+  shouldShowPlanMode,
+  toolsToProviderSchema
+} from './pageToolsSupport/helpers';
+import {
+  DIFF_NO_BASELINE_PREFIX,
+  DIFF_NO_CHANGES,
+  formatCompactDiff,
+  snapshotCacheGet,
+  snapshotCacheSet,
+  snapshotVariantKey,
+  type SnapshotVariant
+} from './pageToolsSupport/snapshotCache';
+import type { ToolContext, ToolDefinition, ToolResult } from './pageToolsSupport/types';
 
 // read_page snapshot diff cache: per-(session, tab) baseline for diff:true.
 // 必须按 sessionId 隔离 — 否则两个 sidepanel/agent 共用同一 tab 时会互相污染
@@ -18,184 +37,6 @@ import { diffArrays } from 'diff';
 // against current tab.url and treats a mismatch as no baseline.
 // variantKey 把会改变快照形态的参数（filter/depth/maxChars/urls）打进 key，
 // 防止"先 interactive 再 diff:true"读到不同形态当同基线，产生大量伪 diff。
-interface SnapshotCacheEntry {
-  url: string;
-  variantKey: string;
-  content: string;
-  lastUsedAt: number;
-}
-
-// 上限设为 20：覆盖典型并发 agent 同时操作的标签数，且 LRU 扫描在此规模下成本可忽略。
-const SNAPSHOT_CACHE_MAX = 20;
-const snapshotCache = new Map<string, SnapshotCacheEntry>();
-
-// session 缺失时回退到固定占位符（如 MCP_NATIVE 等无 session 调用），保留隔离意图。
-function snapshotCacheKey(sessionId: string | undefined, tabId: number): string {
-  return `${sessionId ?? '_nosession'}:${tabId}`;
-}
-
-const DIFF_NO_CHANGES = '(no changes since last read_page)';
-const DIFF_NO_BASELINE_PREFIX = '(no previous snapshot for this URL, returning full content)';
-
-interface SnapshotVariant {
-  filter: 'all' | 'interactive';
-  depth: number;
-  maxChars: number;
-  urls: boolean;
-}
-
-function snapshotVariantKey(v: SnapshotVariant): string {
-  return `${v.filter}|d=${v.depth}|m=${v.maxChars}|u=${v.urls ? 1 : 0}`;
-}
-
-function snapshotCacheSet(
-  sessionId: string | undefined,
-  tabId: number,
-  url: string,
-  variantKey: string,
-  content: string
-): void {
-  if (!url) return;
-  const key = snapshotCacheKey(sessionId, tabId);
-  snapshotCache.set(key, { url, variantKey, content, lastUsedAt: Date.now() });
-  if (snapshotCache.size > SNAPSHOT_CACHE_MAX) {
-    let oldestKey: string | null = null;
-    let oldestTs = Infinity;
-    for (const [k, entry] of snapshotCache) {
-      if (entry.lastUsedAt < oldestTs) {
-        oldestTs = entry.lastUsedAt;
-        oldestKey = k;
-      }
-    }
-    if (oldestKey != null) snapshotCache.delete(oldestKey);
-  }
-}
-
-function snapshotCacheGet(
-  sessionId: string | undefined,
-  tabId: number,
-  currentUrl: string,
-  variantKey: string
-): SnapshotCacheEntry | undefined {
-  if (!currentUrl) return undefined;
-  const key = snapshotCacheKey(sessionId, tabId);
-  const entry = snapshotCache.get(key);
-  if (!entry) return undefined;
-  if (entry.url !== currentUrl || entry.variantKey !== variantKey) {
-    snapshotCache.delete(key);
-    return undefined;
-  }
-  entry.lastUsedAt = Date.now();
-  return entry;
-}
-
-// tab 级失效（关闭、URL 变更）需要扫所有 session 下该 tab 的条目。
-function invalidateAllSessionsForTab(tabId: number): void {
-  const suffix = `:${tabId}`;
-  for (const key of snapshotCache.keys()) {
-    if (key.endsWith(suffix)) snapshotCache.delete(key);
-  }
-}
-
-/**
- * 行级 diff，输出保留原文（含 ref=ref_N），比较时按 normalized 文本判等。
- * 这样新增行里仍带可点击的 ref，agent 看到 diff 后能直接调用 click(ref=...)。
- * >3 行的未变动区块折叠为 `... (N unchanged) ...`。
- */
-function formatCompactDiff(
-  prevContent: string,
-  currContent: string
-): { added: number; removed: number; body: string } {
-  const prevLines = prevContent.split('\n');
-  const currLines = currContent.split('\n');
-  const parts = diffArrays(prevLines, currLines, {
-    comparator: (a, b) => normalizeSnapshotForDiff(a) === normalizeSnapshotForDiff(b),
-  });
-  let added = 0;
-  let removed = 0;
-  const out: string[] = [];
-  for (const p of parts) {
-    const lines = p.value;
-    if (p.added) {
-      added += lines.length;
-      for (const line of lines) out.push('+' + line);
-    } else if (p.removed) {
-      removed += lines.length;
-      for (const line of lines) out.push('-' + line);
-    } else if (lines.length > 3) {
-      out.push(' ' + lines[0]);
-      out.push(`... (${lines.length - 2} unchanged) ...`);
-      out.push(' ' + lines[lines.length - 1]);
-    } else {
-      for (const line of lines) out.push(' ' + line);
-    }
-  }
-  return { added, removed, body: out.join('\n') };
-}
-
-// Service worker 单次启动只执行一次模块顶层代码；为防止极端场景（HMR、测试重入）
-// 重复注册导致同一事件多次清缓存，用 Symbol 标记 globalThis 实现幂等。
-const SNAPSHOT_LISTENERS_INSTALLED = Symbol.for('chrome-crx.snapshot-cache.listeners-installed');
-if (!(globalThis as any)[SNAPSHOT_LISTENERS_INSTALLED]) {
-  (globalThis as any)[SNAPSHOT_LISTENERS_INSTALLED] = true;
-  chrome.tabs.onRemoved.addListener((tabId) => {
-    invalidateAllSessionsForTab(tabId);
-  });
-  chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-    if (changeInfo.url !== undefined) invalidateAllSessionsForTab(tabId);
-  });
-  // SPA pushState/replaceState 不一定触发 onUpdated.url，再加 webNavigation 双保险。
-  chrome.webNavigation?.onHistoryStateUpdated.addListener(({ tabId, frameId }) => {
-    if (frameId === 0) invalidateAllSessionsForTab(tabId);
-  });
-}
-
-// =============================================================================
-
-interface ToolContext {
-  tabId?: number;
-  toolUseId?: string;
-  sessionId?: string;
-  messages?: any[];
-  permissionManager: any;
-  createApiMessage?: (params: any, label: string) => Promise<any>;
-  setTurnApprovedDomains?: (domains: string[]) => void;
-  skipIndicator?: boolean;
-  tabGroupId?: number;
-  model?: string;
-  messagesClient?: any;
-}
-
-interface ToolResult {
-  output?: string;
-  error?: string;
-  base64Image?: string;
-  imageFormat?: string;
-  imageId?: string;
-  type?: string;
-  tool?: string;
-  url?: string;
-  toolUseId?: string;
-  actionData?: any;
-  tabContext?: {
-    currentTabId?: number;
-    executedOnTabId?: number;
-    availableTabs?: any[];
-    tabCount?: number;
-    tabGroupId?: number;
-  };
-  [key: string]: any;
-}
-
-interface ToolDefinition {
-  name: string;
-  description: string;
-  parameters: Record<string, any>;
-  execute: (input: any, context?: any) => Promise<any>;
-  toProviderSchema: (context?: any) => Promise<any> | any;
-  setPromptsConfig?: (config: any) => void;
-}
-
 const javascriptTool: ToolDefinition = {
   name: 'javascript_tool',
   description:
@@ -590,19 +431,6 @@ function detectApp(url: string): string | undefined {
   }
 }
 
-function formatTabsContext(tabs: any[], tabGroupId?: number, selectedTabId?: number): string {
-  const result: Record<string, any> = {
-    availableTabs: tabs.map((tab: any) => ({
-      tabId: tab.id,
-      title: tab.title,
-      url: tab.url
-    }))
-  };
-  if (void 0 !== selectedTabId) result.selectedTabId = selectedTabId;
-  if (void 0 !== tabGroupId) result.tabGroupId = tabGroupId;
-  return JSON.stringify(result);
-}
-
 function formatInitialContext(contextData: {
   availableTabs?: any[];
   domainSkills?: any[];
@@ -628,92 +456,6 @@ function formatInitialContext(contextData: {
 function stripSystemReminders(text: string): string {
   return text.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/gi, '').trim();
 }
-
-function shouldShowPlanMode(mode: string, hasPlan: boolean): boolean {
-  return 'follow_a_plan' === mode && !hasPlan;
-}
-
-function getPlanModeSystemReminder(): string {
-  return '<system-reminder>You are in planning mode. Before executing any tools, you must first present a plan to the user using the update_plan tool. The plan should include: domains (list of domains you will visit) and approach (high-level steps you will take).</system-reminder>';
-}
-
-async function filterDomainsByCategory(domains: string[]): Promise<{
-  approved: string[];
-  filtered: string[];
-}> {
-  const approved: string[] = [];
-  const filtered: string[] = [];
-  for (const domain of domains) {
-    try {
-      const url = domain.startsWith('http') ? domain : `https://${domain}`;
-      const category = await domainCategoryCache.getCategory(url);
-      if (
-        !category ||
-        ('category1' !== category &&
-          'category2' !== category &&
-          'category_org_blocked' !== category)
-      ) {
-        approved.push(domain);
-      } else {
-        filtered.push(domain);
-      }
-    } catch {
-      approved.push(domain);
-    }
-  }
-  return { approved, filtered };
-}
-
-async function filterAndApproveDomains(
-  domains: string[],
-  permissionManager: any
-): Promise<string[]> {
-  if (!domains || 0 === domains.length) return [];
-  const { approved, filtered } = await filterDomainsByCategory(domains);
-  filtered.length; // side effect from original (logging removed by minifier)
-  permissionManager.setTurnApprovedDomains(approved);
-  return approved;
-}
-
-const toolsToProviderSchema = async (tools: ToolDefinition[], context?: any): Promise<any[]> => {
-  return await Promise.all(tools.map((tool) => tool.toProviderSchema(context)));
-};
-
-const coerceToolInputTypes = (
-  toolName: string,
-  input: any,
-  toolDefinitions: ToolDefinition[]
-): any => {
-  const toolDef = toolDefinitions.find((t) => t.name === toolName);
-  if (!toolDef || !toolDef.parameters || 'object' !== typeof input || !input) return input;
-  const coerced = { ...input };
-  for (const [paramName, paramDef] of Object.entries(toolDef.parameters)) {
-    if (paramName in coerced && paramDef && 'object' === typeof paramDef) {
-      const value = coerced[paramName];
-      const typeDef = paramDef as any;
-      if ('number' === typeDef.type && 'string' === typeof value) {
-        const num = Number(value);
-        if (!isNaN(num)) coerced[paramName] = num;
-      } else if ('boolean' === typeDef.type && 'string' === typeof value) {
-        coerced[paramName] = 'true' === value;
-      }
-    }
-  }
-  return coerced;
-};
-
-const parseArrayInput = (value: any, _context?: any): any[] => {
-  if (Array.isArray(value)) return value;
-  if ('string' === typeof value) {
-    try {
-      const parsed = JSON.parse(value);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  }
-  return [];
-};
 
 const findTool: ToolDefinition = {
   name: 'find',

@@ -1,392 +1,39 @@
-import { calculateOptimalDimensions, screenshotContextManager } from './shared';
-import { tabGroupManager, verifyDomainUnchanged } from './tabState';
+import { screenshotContextManager } from './shared';
+import { tabGroupManager } from './tabState';
+import { processScreenshotInContentScript } from './cdpContentScriptScreenshot';
+import {
+  calculateTargetDimensions,
+  checkDomainSecurity,
+  generateUniqueId,
+  screenshotToViewportCoords,
+  scrollViaContentScript
+} from './cdpHelpers';
+import { KEY_DEFINITIONS, MAC_KEYBOARD_COMMANDS } from './cdpKeyboard';
+import {
+  getConsoleMessagesByTab,
+  getConsoleTrackingEnabled,
+  getNetworkRequestsByTab,
+  getNetworkTrackingEnabled,
+  isDebuggerListenerRegistered,
+  setDebuggerListenerRegistered
+} from './cdpState';
+import type {
+  ClickOptions,
+  ConsoleMessage,
+  ConsoleTabData,
+  KeyDefinition,
+  KeyEventParams,
+  MouseEventParams,
+  NetworkRequest,
+  NetworkTabData,
+  ResizeParams,
+  ScreenshotOptions,
+  ScreenshotResult
+} from './cdpTypes';
 
 // =============================================================================
 // CDP Section - Chrome Debugger Protocol
 // =============================================================================
-
-// --- External dependencies (defined elsewhere in the codebase) ---
-// indicatorManager is tabGroupManager (TabGroupManager singleton defined in Section 5 above)
-
-// screenshotContextManager is defined earlier in this file (Section 2)
-
-// --- checkDomainSecurity (bundle: L, lines 959-965) ---
-// Delegates to verifyDomainUnchanged (same logic, defined in Section 2 above).
-async function checkDomainSecurity(
-  tabId: number,
-  url: string | undefined,
-  actionName: string
-): Promise<{ error: string } | null> {
-  if (!url) return null;
-  return verifyDomainUnchanged(tabId, url, actionName);
-}
-
-// --- calculateTargetDimensions (bundle: B, lines 902-916) ---
-// Delegates to calculateOptimalDimensions (same logic, defined in Section 2 above).
-function calculateTargetDimensions(
-  width: number,
-  height: number,
-  params: { pxPerToken: number; maxTargetPx: number; maxTargetTokens: number }
-): [number, number] {
-  return calculateOptimalDimensions(width, height, params);
-}
-
-// --- generateUniqueId (bundle: @lukeed/uuid v4, lines 179-189 of SavedPromptsService) ---
-// Generates UUID v4 strings. Uses crypto.randomUUID if available, otherwise manual generation.
-function generateUniqueId(): string {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  // Fallback: manual UUID v4
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
-  });
-}
-
-// PermissionTypes → PermissionActionType (imported from SavedPromptsService)
-
-// --- Global CDP state initialization ---
-if (!globalThis.__cdpDebuggerListenerRegistered) globalThis.__cdpDebuggerListenerRegistered = false;
-if (!globalThis.__cdpConsoleMessagesByTab) globalThis.__cdpConsoleMessagesByTab = new Map();
-if (!globalThis.__cdpNetworkRequestsByTab) globalThis.__cdpNetworkRequestsByTab = new Map();
-if (!globalThis.__cdpNetworkTrackingEnabled) globalThis.__cdpNetworkTrackingEnabled = new Set();
-if (!globalThis.__cdpConsoleTrackingEnabled) globalThis.__cdpConsoleTrackingEnabled = new Set();
-
-// --- MAC_KEYBOARD_COMMANDS constant (Y) ---
-const MAC_KEYBOARD_COMMANDS: Record<string, string | string[]> = {
-  backspace: 'deleteBackward',
-  enter: 'insertNewline',
-  numpadenter: 'insertNewline',
-  kp_enter: 'insertNewline',
-  escape: 'cancelOperation',
-  arrowup: 'moveUp',
-  arrowdown: 'moveDown',
-  arrowleft: 'moveLeft',
-  arrowRight: 'moveRight',
-  up: 'moveUp',
-  down: 'moveDown',
-  left: 'moveLeft',
-  right: 'moveRight',
-  f5: 'complete',
-  delete: 'deleteForward',
-  home: 'scrollToBeginningOfDocument',
-  end: 'scrollToEndOfDocument',
-  pageup: 'scrollPageUp',
-  pagedown: 'scrollPageDown',
-  'shift+backspace': 'deleteBackward',
-  'shift+enter': 'insertNewline',
-  'shift+escape': 'cancelOperation',
-  'shift+arrowup': 'moveUpAndModifySelection',
-  'shift+arrowdown': 'moveDownAndModifySelection',
-  'shift+arrowleft': 'moveLeftAndModifySelection',
-  'shift+arrowright': 'moveRightAndModifySelection',
-  'shift+up': 'moveUpAndModifySelection',
-  'shift+down': 'moveDownAndModifySelection',
-  'shift+left': 'moveLeftAndModifySelection',
-  'shift+right': 'moveRightAndModifySelection',
-  'shift+f5': 'complete',
-  'shift+delete': 'deleteForward',
-  'shift+home': 'moveToBeginningOfDocumentAndModifySelection',
-  'shift+end': 'moveToEndOfDocumentAndModifySelection',
-  'shift+pageup': 'pageUpAndModifySelection',
-  'shift+pagedown': 'pageDownAndModifySelection',
-  'shift+numpad5': 'delete',
-  'ctrl+tab': 'selectNextKeyView',
-  'ctrl+enter': 'insertLineBreak',
-  'ctrl+numpadenter': 'insertLineBreak',
-  'ctrl+kp_enter': 'insertLineBreak',
-  'ctrl+quote': 'insertSingleQuoteIgnoringSubstitution',
-  "ctrl+'": 'insertSingleQuoteIgnoringSubstitution',
-  'ctrl+a': 'moveToBeginningOfParagraph',
-  'ctrl+b': 'moveBackward',
-  'ctrl+d': 'deleteForward',
-  'ctrl+e': 'moveToEndOfParagraph',
-  'ctrl+f': 'moveForward',
-  'ctrl+h': 'deleteBackward',
-  'ctrl+k': 'deleteToEndOfParagraph',
-  'ctrl+l': 'centerSelectionInVisibleArea',
-  'ctrl+n': 'moveDown',
-  'ctrl+p': 'moveUp',
-  'ctrl+t': 'transpose',
-  'ctrl+v': 'moveUp',
-  'ctrl+y': 'yank',
-  'ctrl+o': ['insertNewlineIgnoringFieldEditor', 'moveBackward'],
-  'ctrl+backspace': 'deleteBackwardByDecomposingPreviousCharacter',
-  'ctrl+arrowup': 'scrollPageUp',
-  'ctrl+arrowdown': 'scrollPageDown',
-  'ctrl+arrowleft': 'moveToLeftEndOfLine',
-  'ctrl+arrowright': 'moveToRightEndOfLine',
-  'ctrl+up': 'scrollPageUp',
-  'ctrl+down': 'scrollPageDown',
-  'ctrl+left': 'moveToLeftEndOfLine',
-  'ctrl+right': 'moveToRightEndOfLine',
-  'shift+ctrl+enter': 'insertLineBreak',
-  'shift+control+numpadenter': 'insertLineBreak',
-  'shift+control+kp_enter': 'insertLineBreak',
-  'shift+ctrl+tab': 'selectPreviousKeyView',
-  'shift+ctrl+quote': 'insertDoubleQuoteIgnoringSubstitution',
-  "shift+ctrl+'": 'insertDoubleQuoteIgnoringSubstitution',
-  'ctrl+"': 'insertDoubleQuoteIgnoringSubstitution',
-  'shift+ctrl+a': 'moveToBeginningOfParagraphAndModifySelection',
-  'shift+ctrl+b': 'moveBackwardAndModifySelection',
-  'shift+ctrl+e': 'moveToEndOfParagraphAndModifySelection',
-  'shift+ctrl+f': 'moveForwardAndModifySelection',
-  'shift+ctrl+n': 'moveDownAndModifySelection',
-  'shift+ctrl+p': 'moveUpAndModifySelection',
-  'shift+ctrl+v': 'pageDownAndModifySelection',
-  'shift+ctrl+backspace': 'deleteBackwardByDecomposingPreviousCharacter',
-  'shift+ctrl+arrowup': 'scrollPageUp',
-  'shift+ctrl+arrowdown': 'scrollPageDown',
-  'shift+ctrl+arrowleft': 'moveToLeftEndOfLineAndModifySelection',
-  'shift+ctrl+arrowright': 'moveToRightEndOfLineAndModifySelection',
-  'shift+ctrl+up': 'scrollPageUp',
-  'shift+ctrl+down': 'scrollPageDown',
-  'shift+ctrl+left': 'moveToLeftEndOfLineAndModifySelection',
-  'shift+ctrl+right': 'moveToRightEndOfLineAndModifySelection',
-  'alt+backspace': 'deleteWordBackward',
-  'alt+enter': 'insertNewlineIgnoringFieldEditor',
-  'alt+numpadenter': 'insertNewlineIgnoringFieldEditor',
-  'alt+kp_enter': 'insertNewlineIgnoringFieldEditor',
-  'alt+escape': 'complete',
-  'alt+arrowup': ['moveBackward', 'moveToBeginningOfParagraph'],
-  'alt+arrowdown': ['moveForward', 'moveToEndOfParagraph'],
-  'alt+arrowleft': 'moveWordLeft',
-  'alt+arrowright': 'moveWordRight',
-  'alt+up': ['moveBackward', 'moveToBeginningOfParagraph'],
-  'alt+down': ['moveForward', 'moveToEndOfParagraph'],
-  'alt+left': 'moveWordLeft',
-  'alt+right': 'moveWordRight',
-  'alt+delete': 'deleteWordForward',
-  'alt+pageup': 'pageUp',
-  'alt+pagedown': 'pageDown',
-  'shift+alt+backspace': 'deleteWordBackward',
-  'shift+alt+enter': 'insertNewlineIgnoringFieldEditor',
-  'shift+alt+numpadenter': 'insertNewlineIgnoringFieldEditor',
-  'shift+alt+kp_enter': 'insertNewlineIgnoringFieldEditor',
-  'shift+alt+escape': 'complete',
-  'shift+alt+arrowup': 'moveParagraphBackwardAndModifySelection',
-  'shift+alt+arrowdown': 'moveParagraphForwardAndModifySelection',
-  'shift+alt+arrowleft': 'moveWordLeftAndModifySelection',
-  'shift+alt+arrowright': 'moveWordRightAndModifySelection',
-  'shift+alt+up': 'moveParagraphBackwardAndModifySelection',
-  'shift+alt+down': 'moveParagraphForwardAndModifySelection',
-  'shift+alt+left': 'moveWordLeftAndModifySelection',
-  'shift+alt+right': 'moveWordRightAndModifySelection',
-  'shift+alt+delete': 'deleteWordForward',
-  'shift+alt+pageup': 'pageUp',
-  'shift+alt+pagedown': 'pageDown',
-  'ctrl+alt+b': 'moveWordBackward',
-  'ctrl+alt+f': 'moveWordForward',
-  'ctrl+alt+backspace': 'deleteWordBackward',
-  'shift+ctrl+alt+b': 'moveWordBackwardAndModifySelection',
-  'shift+ctrl+alt+f': 'moveWordForwardAndModifySelection',
-  'shift+ctrl+alt+backspace': 'deleteWordBackward',
-  'cmd+numpadsubtract': 'cancel',
-  'cmd+backspace': 'deleteToBeginningOfLine',
-  'cmd+arrowup': 'moveToBeginningOfDocument',
-  'cmd+arrowdown': 'moveToEndOfDocument',
-  'cmd+arrowleft': 'moveToLeftEndOfLine',
-  'cmd+arrowright': 'moveToRightEndOfLine',
-  'cmd+home': 'moveToBeginningOfDocument',
-  'cmd+up': 'moveToBeginningOfDocument',
-  'cmd+down': 'moveToEndOfDocument',
-  'cmd+left': 'moveToLeftEndOfLine',
-  'cmd+right': 'moveToRightEndOfLine',
-  'shift+cmd+numpadsubtract': 'cancel',
-  'shift+cmd+backspace': 'deleteToBeginningOfLine',
-  'shift+cmd+arrowup': 'moveToBeginningOfDocumentAndModifySelection',
-  'shift+cmd+arrowdown': 'moveToEndOfDocumentAndModifySelection',
-  'shift+cmd+arrowleft': 'moveToLeftEndOfLineAndModifySelection',
-  'shift+cmd+arrowright': 'moveToRightEndOfLineAndModifySelection',
-  'cmd+a': 'selectAll',
-  'cmd+c': 'copy',
-  'cmd+x': 'cut',
-  'cmd+v': 'paste',
-  'cmd+z': 'undo',
-  'shift+cmd+z': 'redo'
-};
-
-// --- KEY_DEFINITIONS constant (V) ---
-interface KeyDefinition {
-  key: string;
-  code: string;
-  keyCode: number;
-  text?: string;
-  isKeypad?: boolean;
-  location?: number;
-  windowsVirtualKeyCode?: number;
-}
-
-const KEY_DEFINITIONS: Record<string, KeyDefinition> = {
-  enter: { key: 'Enter', code: 'Enter', keyCode: 13, text: '\r' },
-  return: { key: 'Enter', code: 'Enter', keyCode: 13, text: '\r' },
-  kp_enter: { key: 'Enter', code: 'Enter', keyCode: 13, text: '\r', isKeypad: true },
-  tab: { key: 'Tab', code: 'Tab', keyCode: 9 },
-  delete: { key: 'Delete', code: 'Delete', keyCode: 46 },
-  backspace: { key: 'Backspace', code: 'Backspace', keyCode: 8 },
-  escape: { key: 'Escape', code: 'Escape', keyCode: 27 },
-  esc: { key: 'Escape', code: 'Escape', keyCode: 27 },
-  space: { key: ' ', code: 'Space', keyCode: 32, text: ' ' },
-  ' ': { key: ' ', code: 'Space', keyCode: 32, text: ' ' },
-  arrowup: { key: 'ArrowUp', code: 'ArrowUp', keyCode: 38 },
-  arrowdown: { key: 'ArrowDown', code: 'ArrowDown', keyCode: 40 },
-  arrowleft: { key: 'ArrowLeft', code: 'ArrowLeft', keyCode: 37 },
-  arrowright: { key: 'ArrowRight', code: 'ArrowRight', keyCode: 39 },
-  up: { key: 'ArrowUp', code: 'ArrowUp', keyCode: 38 },
-  down: { key: 'ArrowDown', code: 'ArrowDown', keyCode: 40 },
-  left: { key: 'ArrowLeft', code: 'ArrowLeft', keyCode: 37 },
-  right: { key: 'ArrowRight', code: 'ArrowRight', keyCode: 39 },
-  home: { key: 'Home', code: 'Home', keyCode: 36 },
-  end: { key: 'End', code: 'End', keyCode: 35 },
-  pageup: { key: 'PageUp', code: 'PageUp', keyCode: 33 },
-  pagedown: { key: 'PageDown', code: 'PageDown', keyCode: 34 },
-  f1: { key: 'F1', code: 'F1', keyCode: 112 },
-  f2: { key: 'F2', code: 'F2', keyCode: 113 },
-  f3: { key: 'F3', code: 'F3', keyCode: 114 },
-  f4: { key: 'F4', code: 'F4', keyCode: 115 },
-  f5: { key: 'F5', code: 'F5', keyCode: 116 },
-  f6: { key: 'F6', code: 'F6', keyCode: 117 },
-  f7: { key: 'F7', code: 'F7', keyCode: 118 },
-  f8: { key: 'F8', code: 'F8', keyCode: 119 },
-  f9: { key: 'F9', code: 'F9', keyCode: 120 },
-  f10: { key: 'F10', code: 'F10', keyCode: 121 },
-  f11: { key: 'F11', code: 'F11', keyCode: 122 },
-  f12: { key: 'F12', code: 'F12', keyCode: 123 },
-  ';': { key: ';', code: 'Semicolon', keyCode: 186, text: ';' },
-  '=': { key: '=', code: 'Equal', keyCode: 187, text: '=' },
-  ',': { key: ',', code: 'Comma', keyCode: 188, text: ',' },
-  '-': { key: '-', code: 'Minus', keyCode: 189, text: '-' },
-  '.': { key: '.', code: 'Period', keyCode: 190, text: '.' },
-  '/': { key: '/', code: 'Slash', keyCode: 191, text: '/' },
-  '`': { key: '`', code: 'Backquote', keyCode: 192, text: '`' },
-  '[': { key: '[', code: 'BracketLeft', keyCode: 219, text: '[' },
-  '\\': { key: '\\', code: 'Backslash', keyCode: 220, text: '\\' },
-  ']': { key: ']', code: 'BracketRight', keyCode: 221, text: ']' },
-  "'": { key: "'", code: 'Quote', keyCode: 222, text: "'" },
-  '!': { key: '!', code: 'Digit1', keyCode: 49, text: '!' },
-  '@': { key: '@', code: 'Digit2', keyCode: 50, text: '@' },
-  '#': { key: '#', code: 'Digit3', keyCode: 51, text: '#' },
-  $: { key: '$', code: 'Digit4', keyCode: 52, text: '$' },
-  '%': { key: '%', code: 'Digit5', keyCode: 53, text: '%' },
-  '^': { key: '^', code: 'Digit6', keyCode: 54, text: '^' },
-  '&': { key: '&', code: 'Digit7', keyCode: 55, text: '&' },
-  '*': { key: '*', code: 'Digit8', keyCode: 56, text: '*' },
-  '(': { key: '(', code: 'Digit9', keyCode: 57, text: '(' },
-  ')': { key: ')', code: 'Digit0', keyCode: 48, text: ')' },
-  _: { key: '_', code: 'Minus', keyCode: 189, text: '_' },
-  '+': { key: '+', code: 'Equal', keyCode: 187, text: '+' },
-  '{': { key: '{', code: 'BracketLeft', keyCode: 219, text: '{' },
-  '}': { key: '}', code: 'BracketRight', keyCode: 221, text: '}' },
-  '|': { key: '|', code: 'Backslash', keyCode: 220, text: '|' },
-  ':': { key: ':', code: 'Semicolon', keyCode: 186, text: ':' },
-  '"': { key: '"', code: 'Quote', keyCode: 222, text: '"' },
-  '<': { key: '<', code: 'Comma', keyCode: 188, text: '<' },
-  '>': { key: '>', code: 'Period', keyCode: 190, text: '>' },
-  '?': { key: '?', code: 'Slash', keyCode: 191, text: '?' },
-  '~': { key: '~', code: 'Backquote', keyCode: 192, text: '~' },
-  capslock: { key: 'CapsLock', code: 'CapsLock', keyCode: 20 },
-  numlock: { key: 'NumLock', code: 'NumLock', keyCode: 144 },
-  scrolllock: { key: 'ScrollLock', code: 'ScrollLock', keyCode: 145 },
-  pause: { key: 'Pause', code: 'Pause', keyCode: 19 },
-  insert: { key: 'Insert', code: 'Insert', keyCode: 45 },
-  printscreen: { key: 'PrintScreen', code: 'PrintScreen', keyCode: 44 },
-  numpad0: { key: '0', code: 'Numpad0', keyCode: 96, isKeypad: true },
-  numpad1: { key: '1', code: 'Numpad1', keyCode: 97, isKeypad: true },
-  numpad2: { key: '2', code: 'Numpad2', keyCode: 98, isKeypad: true },
-  numpad3: { key: '3', code: 'Numpad3', keyCode: 99, isKeypad: true },
-  numpad4: { key: '4', code: 'Numpad4', keyCode: 100, isKeypad: true },
-  numpad5: { key: '5', code: 'Numpad5', keyCode: 101, isKeypad: true },
-  numpad6: { key: '6', code: 'Numpad6', keyCode: 102, isKeypad: true },
-  numpad7: { key: '7', code: 'Numpad7', keyCode: 103, isKeypad: true },
-  numpad8: { key: '8', code: 'Numpad8', keyCode: 104, isKeypad: true },
-  numpad9: { key: '9', code: 'Numpad9', keyCode: 105, isKeypad: true },
-  numpadmultiply: { key: '*', code: 'NumpadMultiply', keyCode: 106, isKeypad: true },
-  numpadadd: { key: '+', code: 'NumpadAdd', keyCode: 107, isKeypad: true },
-  numpadsubtract: { key: '-', code: 'NumpadSubtract', keyCode: 109, isKeypad: true },
-  numpaddecimal: { key: '.', code: 'NumpadDecimal', keyCode: 110, isKeypad: true },
-  numpaddivide: { key: '/', code: 'NumpadDivide', keyCode: 111, isKeypad: true }
-};
-
-// --- Interfaces for CDP types ---
-interface ConsoleMessage {
-  type: string;
-  text: string;
-  timestamp: number;
-  url?: string;
-  lineNumber?: number;
-  columnNumber?: number;
-  args?: any[];
-  stackTrace?: string;
-}
-
-interface ConsoleTabData {
-  domain: string;
-  messages: ConsoleMessage[];
-}
-
-interface NetworkRequest {
-  requestId: string;
-  url: string;
-  method: string;
-  status?: number;
-}
-
-interface NetworkTabData {
-  domain: string;
-  requests: NetworkRequest[];
-  requestMap: Map<string, NetworkRequest>;
-}
-
-interface MouseEventParams {
-  type: string;
-  x: number;
-  y: number;
-  button?: string;
-  buttons?: number;
-  clickCount?: number;
-  modifiers?: number;
-  deltaX?: number;
-  deltaY?: number;
-}
-
-interface KeyEventParams {
-  type: string;
-  key?: string;
-  code?: string;
-  windowsVirtualKeyCode?: number;
-  modifiers?: number;
-  text?: string;
-  unmodifiedText?: string;
-  location?: number;
-  commands?: string[];
-  isKeypad?: boolean;
-}
-
-interface ResizeParams {
-  pxPerToken: number;
-  maxTargetPx: number;
-  maxTargetTokens: number;
-}
-
-interface ScreenshotResult {
-  base64: string;
-  width: number;
-  height: number;
-  format: string;
-  viewportWidth: number;
-  viewportHeight: number;
-}
-
-interface ScreenshotOptions {
-  format?: string;
-  quality?: number;
-  skipIndicator?: boolean;
-}
-
-interface ClickOptions {
-  skipIndicator?: boolean;
-}
 
 // --- ChromeDebuggerProtocol class (J) ---
 class ChromeDebuggerProtocol {
@@ -394,27 +41,27 @@ class ChromeDebuggerProtocol {
   static MAX_REQUESTS_PER_TAB: number = 1000;
 
   static get debuggerListenerRegistered(): boolean {
-    return globalThis.__cdpDebuggerListenerRegistered;
+    return isDebuggerListenerRegistered();
   }
 
   static set debuggerListenerRegistered(value: boolean) {
-    globalThis.__cdpDebuggerListenerRegistered = value;
+    setDebuggerListenerRegistered(value);
   }
 
   static get consoleMessagesByTab(): Map<number, ConsoleTabData> {
-    return globalThis.__cdpConsoleMessagesByTab as Map<number, ConsoleTabData>;
+    return getConsoleMessagesByTab();
   }
 
   static get networkRequestsByTab(): Map<number, NetworkTabData> {
-    return globalThis.__cdpNetworkRequestsByTab as Map<number, NetworkTabData>;
+    return getNetworkRequestsByTab();
   }
 
   static get networkTrackingEnabled(): Set<number> {
-    return globalThis.__cdpNetworkTrackingEnabled;
+    return getNetworkTrackingEnabled();
   }
 
   static get consoleTrackingEnabled(): Set<number> {
-    return globalThis.__cdpConsoleTrackingEnabled;
+    return getConsoleTrackingEnabled();
   }
 
   isMac: boolean = false;
@@ -1221,125 +868,18 @@ class ChromeDebuggerProtocol {
     devicePixelRatio: number,
     resizeParams: ResizeParams
   ): Promise<ScreenshotResult> {
-    const scriptResults = await chrome.scripting.executeScript({
-      target: { tabId },
-      func: (
-        imgBase64: string,
-        vpWidth: number,
-        vpHeight: number,
-        dpr: number,
-        resize: ResizeParams,
-        maxBase64Chars: number,
-        initialJpegQuality: number,
-        jpegQualityStep: number,
-        minJpegQuality: number
-      ) => {
-        const dataUrl = `data:image/png;base64,${imgBase64}`;
-        return new Promise<ScreenshotResult>((resolve, reject) => {
-          const img = new Image();
-          img.onload = () => {
-            let imgWidth = img.width;
-            let imgHeight = img.height;
-
-            if (dpr > 1) {
-              imgWidth = Math.round(img.width / dpr);
-              imgHeight = Math.round(img.height / dpr);
-            }
-
-            const canvas = document.createElement('canvas');
-            canvas.width = imgWidth;
-            canvas.height = imgHeight;
-            const ctx = canvas.getContext('2d');
-            if (!ctx) {
-              return void reject(new Error('Failed to get canvas context'));
-            }
-
-            if (dpr > 1) {
-              ctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, imgWidth, imgHeight);
-            } else {
-              ctx.drawImage(img, 0, 0);
-            }
-
-            const aspectRatio = imgWidth / imgHeight;
-            const pxPerToken = resize.pxPerToken || 28;
-            const maxTargetTokens = resize.maxTargetTokens || 1568;
-            const currentTokens = Math.ceil((imgWidth / pxPerToken) * (imgHeight / pxPerToken));
-
-            let targetWidth = imgWidth;
-            let targetHeight = imgHeight;
-
-            if (currentTokens > maxTargetTokens) {
-              const scaleFactor = Math.sqrt(maxTargetTokens / currentTokens);
-              targetWidth = Math.round(imgWidth * scaleFactor);
-              targetHeight = Math.round(targetWidth / aspectRatio);
-            }
-
-            const compressToFit = (sourceCanvas: HTMLCanvasElement): string => {
-              let quality = initialJpegQuality;
-              let result = sourceCanvas.toDataURL('image/jpeg', quality).split(',')[1];
-              while (result.length > maxBase64Chars && quality > minJpegQuality) {
-                quality -= jpegQualityStep;
-                result = sourceCanvas.toDataURL('image/jpeg', quality).split(',')[1];
-              }
-              return result;
-            };
-
-            if (targetWidth >= imgWidth && targetHeight >= imgHeight) {
-              const compressed = compressToFit(canvas);
-              return void resolve({
-                base64: compressed,
-                width: imgWidth,
-                height: imgHeight,
-                format: 'jpeg',
-                viewportWidth: vpWidth,
-                viewportHeight: vpHeight
-              });
-            }
-
-            const targetCanvas = document.createElement('canvas');
-            targetCanvas.width = targetWidth;
-            targetCanvas.height = targetHeight;
-            const targetCtx = targetCanvas.getContext('2d');
-            if (!targetCtx) {
-              return void reject(new Error('Failed to get target canvas context'));
-            }
-
-            targetCtx.drawImage(canvas, 0, 0, imgWidth, imgHeight, 0, 0, targetWidth, targetHeight);
-
-            const compressed = compressToFit(targetCanvas);
-            resolve({
-              base64: compressed,
-              width: targetWidth,
-              height: targetHeight,
-              format: 'jpeg',
-              viewportWidth: vpWidth,
-              viewportHeight: vpHeight
-            });
-          };
-          img.onerror = () => {
-            reject(new Error('Failed to load screenshot image'));
-          };
-          img.src = dataUrl;
-        });
-      },
-      args: [
-        base64Data,
-        viewportWidth,
-        viewportHeight,
-        devicePixelRatio,
-        resizeParams,
-        ChromeDebuggerProtocol.MAX_BASE64_CHARS,
-        ChromeDebuggerProtocol.INITIAL_JPEG_QUALITY,
-        ChromeDebuggerProtocol.JPEG_QUALITY_STEP,
-        ChromeDebuggerProtocol.MIN_JPEG_QUALITY
-      ]
+    const result = await processScreenshotInContentScript({
+      tabId,
+      base64Data,
+      viewportWidth,
+      viewportHeight,
+      devicePixelRatio,
+      resizeParams,
+      maxBase64Chars: ChromeDebuggerProtocol.MAX_BASE64_CHARS,
+      initialJpegQuality: ChromeDebuggerProtocol.INITIAL_JPEG_QUALITY,
+      jpegQualityStep: ChromeDebuggerProtocol.JPEG_QUALITY_STEP,
+      minJpegQuality: ChromeDebuggerProtocol.MIN_JPEG_QUALITY
     });
-
-    if (!scriptResults || !scriptResults[0]?.result) {
-      throw new Error('Failed to process screenshot in content script');
-    }
-
-    const result = scriptResults[0].result as ScreenshotResult;
     screenshotContextManager.setContext(tabId, result);
     return result;
   }
@@ -1347,79 +887,6 @@ class ChromeDebuggerProtocol {
 
 // --- CDP instance (X) ---
 export const cdpDebugger = new ChromeDebuggerProtocol();
-
-// --- CDP helper functions ---
-
-/**
- * Convert screenshot-space coordinates to viewport-space coordinates (Q).
- */
-function screenshotToViewportCoords(
-  screenshotX: number,
-  screenshotY: number,
-  context: {
-    viewportWidth: number;
-    viewportHeight: number;
-    screenshotWidth: number;
-    screenshotHeight: number;
-  }
-): [number, number] {
-  const scaleX = context.viewportWidth / context.screenshotWidth;
-  const scaleY = context.viewportHeight / context.screenshotHeight;
-  return [Math.round(screenshotX * scaleX), Math.round(screenshotY * scaleY)];
-}
-
-/**
- * Scroll using content script injection for cases where CDP scroll doesn't work (Z).
- */
-async function scrollViaContentScript(
-  tabId: number,
-  pointX: number,
-  pointY: number,
-  deltaX: number,
-  deltaY: number
-): Promise<void> {
-  await chrome.scripting.executeScript({
-    target: { tabId },
-    func: (scrollDeltaX: number, scrollDeltaY: number, x: number, y: number) => {
-      const elementAtPoint = document.elementFromPoint(x, y);
-      if (
-        elementAtPoint &&
-        elementAtPoint !== document.body &&
-        elementAtPoint !== document.documentElement
-      ) {
-        const isScrollable = (el: Element): boolean => {
-          const style = window.getComputedStyle(el);
-          const overflowY = style.overflowY;
-          const overflowX = style.overflowX;
-          return (
-            (overflowY === 'auto' ||
-              overflowY === 'scroll' ||
-              overflowX === 'auto' ||
-              overflowX === 'scroll') &&
-            (el.scrollHeight > el.clientHeight || el.scrollWidth > el.clientWidth)
-          );
-        };
-
-        let current: Element | null = elementAtPoint;
-        while (current && !isScrollable(current)) {
-          current = current.parentElement;
-        }
-
-        if (current && isScrollable(current)) {
-          return void current.scrollBy({
-            left: scrollDeltaX,
-            top: scrollDeltaY,
-            behavior: 'instant'
-          });
-        }
-      }
-      window.scrollBy({ left: scrollDeltaX, top: scrollDeltaY, behavior: 'instant' });
-    },
-    args: [deltaX, deltaY, pointX, pointY]
-  });
-}
-
-// --- Computer tool definition (ee) ---
 
 export {
   checkDomainSecurity,
