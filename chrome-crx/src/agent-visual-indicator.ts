@@ -4,6 +4,41 @@ import { CursorRenderer } from './cursorAnimation/cursorRenderer';
   if ((window as any).__superduck_agent_indicator_loaded__) return;
   (window as any).__superduck_agent_indicator_loaded__ = true;
 
+  const SCRIPT_INSTANCE_ID = Math.random().toString(36).slice(2);
+  const INVALIDATE_EVENT = 'superduck:indicator-invalidate';
+  let isInvalidated = false;
+
+  document.dispatchEvent(new CustomEvent(INVALIDATE_EVENT, { detail: { id: SCRIPT_INSTANCE_ID } }));
+
+  function fullCleanup() {
+    if (isInvalidated) return;
+    isInvalidated = true;
+    (window as any).__superduck_agent_indicator_loaded__ = false;
+    try {
+      hideAgentIndicators();
+    } catch {
+      /* noop */
+    }
+    try {
+      hideStaticIndicator();
+    } catch {
+      /* noop */
+    }
+  }
+
+  document.addEventListener(INVALIDATE_EVENT, ((e: CustomEvent) => {
+    if (e.detail?.id !== SCRIPT_INSTANCE_ID) {
+      fullCleanup();
+    }
+  }) as EventListener);
+
+  const extAliveCheck = setInterval(() => {
+    if (!chrome.runtime?.id) {
+      clearInterval(extAliveCheck);
+      fullCleanup();
+    }
+  }, 2000);
+
   // I18n support
   const SUPPORTED_LOCALES = ['en-US', 'zh-CN'] as const;
   const DEFAULT_LOCALE = 'en-US';
