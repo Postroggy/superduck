@@ -1,15 +1,13 @@
-import { setStorageValue, StorageKeys } from "../extensionServices";
-import {
-  reconnectMcp,
-  tabGroupManager,
-  createErrorResponse,
-  executeTool,
-} from "../mcpRuntime";
+import { setStorageValue, StorageKeys } from '../extensionServices';
+import { reconnectMcp, tabGroupManager, createErrorResponse, executeTool } from '../mcpRuntime';
 
 const NATIVE_HOST_NAMES = [
-  "com.me.superduck_browser_extension",
-  "com.me.superduck_code_browser_extension",
+  'com.me.superduck_browser_extension',
+  'com.me.superduck_code_browser_extension'
 ] as const;
+
+const HEARTBEAT_ALARM = 'native-host-heartbeat';
+const HEARTBEAT_TIMEOUT_MS = 3000;
 
 type NativeMessage = { type: string; [key: string]: unknown };
 type ToolRequestMessage = {
@@ -19,7 +17,7 @@ type ToolRequestMessage = {
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+  return typeof value === 'object' && value !== null;
 }
 
 export interface NativeHostStatus {
@@ -32,6 +30,7 @@ export interface NativeHostManager {
   disconnect: () => Promise<boolean>;
   getStatus: () => Promise<NativeHostStatus>;
   sendMcpNotification: (method: string, params?: Record<string, unknown>) => boolean;
+  handleHeartbeatAlarm: () => Promise<void>;
 }
 
 export function createNativeHostManager(): NativeHostManager {
@@ -41,16 +40,17 @@ export function createNativeHostManager(): NativeHostManager {
   let mcpConnected = false;
   let statusResolve: ((value: NativeHostStatus) => void) | null = null;
   let statusTimeout: ReturnType<typeof setTimeout> | null = null;
+  let heartbeatResolve: ((alive: boolean) => void) | null = null;
 
   function handleDisconnectError(message?: string) {
-    if (message?.includes("native messaging host not found")) {
+    if (message?.includes('native messaging host not found')) {
       nativeHostInstalled = false;
     }
   }
 
   function parseOptionalInt(value: unknown): number | undefined {
-    if (typeof value === "number") return value;
-    if (typeof value === "string") {
+    if (typeof value === 'number') return value;
+    if (typeof value === 'string') {
       const parsed = parseInt(value, 10);
       return Number.isNaN(parsed) ? undefined : parsed;
     }
@@ -59,34 +59,42 @@ export function createNativeHostManager(): NativeHostManager {
 
   function buildErrorToolResponse(content: string | unknown[]) {
     const permissionDeniedSuffix =
-      "IMPORTANT: The user has explicitly declined this action. Do not attempt to use other tools or workarounds. Instead, acknowledge the denial and ask the user how they would prefer to proceed.";
+      'IMPORTANT: The user has explicitly declined this action. Do not attempt to use other tools or workarounds. Instead, acknowledge the denial and ask the user how they would prefer to proceed.';
 
     const errorContent =
-      typeof content === "string"
-        ? content.includes("Permission denied by user")
+      typeof content === 'string'
+        ? content.includes('Permission denied by user')
           ? `${content} - ${permissionDeniedSuffix}`
           : content
         : content.map((item) => {
             if (
-              typeof item === "object" &&
+              typeof item === 'object' &&
               item !== null &&
-              "text" in item &&
-              typeof item.text === "string" &&
-              item.text.includes("Permission denied by user")
+              'text' in item &&
+              typeof item.text === 'string' &&
+              item.text.includes('Permission denied by user')
             ) {
               return { ...item, text: `${item.text} - ${permissionDeniedSuffix}` };
             }
             return item;
           });
 
-    return { type: "tool_response", error: { content: errorContent } };
+    return { type: 'tool_response', error: { content: errorContent } };
   }
 
-  function sendToolResponse({ content, is_error }: { content: string | unknown[]; is_error?: boolean }) {
+  function sendToolResponse({
+    content,
+    is_error
+  }: {
+    content: string | unknown[];
+    is_error?: boolean;
+  }) {
     if (!nativePort) return;
-    if (!content || (typeof content !== "string" && !Array.isArray(content))) return;
+    if (!content || (typeof content !== 'string' && !Array.isArray(content))) return;
 
-    const response = is_error ? buildErrorToolResponse(content) : { type: "tool_response", result: { content } };
+    const response = is_error
+      ? buildErrorToolResponse(content)
+      : { type: 'tool_response', result: { content } };
 
     nativePort.postMessage(response);
   }
@@ -96,18 +104,18 @@ export function createNativeHostManager(): NativeHostManager {
       const method = message.method;
       const params = message.params;
 
-      if (method !== "execute_tool") {
+      if (method !== 'execute_tool') {
         sendToolResponse({ content: `Unknown method: ${method}` });
         return;
       }
 
-      if (!params || typeof params.tool !== "string") {
-        sendToolResponse(createErrorResponse("No tool specified"));
+      if (!params || typeof params.tool !== 'string') {
+        sendToolResponse(createErrorResponse('No tool specified'));
         return;
       }
 
       const args = isRecord(params.args) ? params.args : {};
-      const clientId = typeof params.client_id === "string" ? params.client_id : undefined;
+      const clientId = typeof params.client_id === 'string' ? params.client_id : undefined;
 
       const result = await executeTool({
         toolName: params.tool,
@@ -115,30 +123,37 @@ export function createNativeHostManager(): NativeHostManager {
         tabId: parseOptionalInt(args.tabId),
         tabGroupId: parseOptionalInt(args.tabGroupId),
         clientId,
-        source: "native-messaging",
-        permissionMode: "skip_all_permission_checks",
+        source: 'native-messaging',
+        permissionMode: 'skip_all_permission_checks'
       });
 
       sendToolResponse({
-        content: result.content ?? "",
-        is_error: result.is_error,
+        content: result.content ?? '',
+        is_error: result.is_error
       });
     } catch (err) {
       sendToolResponse(
         createErrorResponse(
-          `Tool execution failed: ${err instanceof Error ? err.message : "Unknown error"}`,
-        ),
+          `Tool execution failed: ${err instanceof Error ? err.message : 'Unknown error'}`
+        )
       );
     }
   }
 
   async function handleNativeMessage(message: NativeMessage) {
     switch (message.type) {
-      case "tool_request":
+      case 'tool_request':
         await handleToolRequest(message);
         break;
 
-      case "status_response":
+      case 'pong':
+        if (heartbeatResolve) {
+          heartbeatResolve(true);
+          heartbeatResolve = null;
+        }
+        break;
+
+      case 'status_response':
         if (statusResolve) {
           if (statusTimeout) {
             clearTimeout(statusTimeout);
@@ -149,19 +164,62 @@ export function createNativeHostManager(): NativeHostManager {
         }
         break;
 
-      case "mcp_connected":
+      case 'mcp_connected':
         mcpConnected = true;
         void setStorageValue(StorageKeys.MCP_CONNECTED, true);
         await tabGroupManager.initialize();
         tabGroupManager.startTabGroupChangeListener();
         break;
 
-      case "mcp_disconnected":
+      case 'mcp_disconnected':
         mcpConnected = false;
         void setStorageValue(StorageKeys.MCP_CONNECTED, false);
         tabGroupManager.stopTabGroupChangeListener();
         break;
     }
+  }
+
+  function startHeartbeat() {
+    chrome.alarms.create(HEARTBEAT_ALARM, { periodInMinutes: 0.5 });
+  }
+
+  function stopHeartbeat() {
+    chrome.alarms.clear(HEARTBEAT_ALARM);
+  }
+
+  async function handleHeartbeatAlarm(): Promise<void> {
+    if (!nativePort) return;
+
+    const timeout = new Promise<boolean>((resolve) =>
+      setTimeout(() => resolve(false), HEARTBEAT_TIMEOUT_MS)
+    );
+    const ping = new Promise<boolean>((resolve) => {
+      heartbeatResolve = resolve;
+      try {
+        nativePort!.postMessage({ type: 'ping' });
+      } catch {
+        resolve(false);
+      }
+    });
+
+    const alive = await Promise.race([timeout, ping]);
+    if (alive) return;
+
+    heartbeatResolve = null;
+    stopHeartbeat();
+    nativePort = null;
+    mcpConnected = false;
+    void setStorageValue(StorageKeys.MCP_CONNECTED, false);
+
+    const targets = await chrome.debugger.getTargets();
+    await Promise.allSettled(
+      targets
+        .filter((t) => t.attached && typeof t.tabId === 'number')
+        .map((t) => chrome.debugger.detach({ tabId: t.tabId! }).catch(() => {}))
+    );
+
+    tabGroupManager.stopTabGroupChangeListener();
+    reconnectMcp();
   }
 
   async function connect(): Promise<boolean> {
@@ -171,8 +229,9 @@ export function createNativeHostManager(): NativeHostManager {
       isConnecting = true;
 
       try {
-        if (!(await chrome.permissions.contains({ permissions: ["nativeMessaging"] }))) return false;
-        if (typeof chrome.runtime.connectNative !== "function") return false;
+        if (!(await chrome.permissions.contains({ permissions: ['nativeMessaging'] })))
+          return false;
+        if (typeof chrome.runtime.connectNative !== 'function') return false;
 
         for (const hostName of NATIVE_HOST_NAMES) {
           try {
@@ -188,7 +247,7 @@ export function createNativeHostManager(): NativeHostManager {
               };
 
               const onMessage = (message: NativeMessage) => {
-                if (settled || message.type !== "pong") return;
+                if (settled || message.type !== 'pong') return;
                 settled = true;
                 port.onDisconnect.removeListener(onDisconnect);
                 port.onMessage.removeListener(onMessage);
@@ -199,7 +258,7 @@ export function createNativeHostManager(): NativeHostManager {
               port.onMessage.addListener(onMessage);
 
               try {
-                port.postMessage({ type: "ping" });
+                port.postMessage({ type: 'ping' });
               } catch {
                 if (!settled) {
                   settled = true;
@@ -234,11 +293,13 @@ export function createNativeHostManager(): NativeHostManager {
               nativePort = null;
               mcpConnected = false;
               void setStorageValue(StorageKeys.MCP_CONNECTED, false);
+              stopHeartbeat();
               handleDisconnectError(errorMessage);
               reconnectMcp();
             });
 
-            nativePort.postMessage({ type: "get_status" });
+            nativePort.postMessage({ type: 'get_status' });
+            startHeartbeat();
             return true;
           } catch {
             // Try next host.
@@ -259,7 +320,8 @@ export function createNativeHostManager(): NativeHostManager {
 
   async function disconnect(): Promise<boolean> {
     try {
-      await chrome.permissions.remove({ permissions: ["nativeMessaging"] });
+      stopHeartbeat();
+      await chrome.permissions.remove({ permissions: ['nativeMessaging'] });
       nativePort?.disconnect();
       nativePort = null;
       isConnecting = false;
@@ -278,7 +340,7 @@ export function createNativeHostManager(): NativeHostManager {
 
       return new Promise((resolve) => {
         statusResolve = resolve;
-        port.postMessage({ type: "get_status" });
+        port.postMessage({ type: 'get_status' });
         statusTimeout = setTimeout(() => {
           statusResolve = null;
           resolve({ nativeHostInstalled, mcpConnected });
@@ -292,10 +354,10 @@ export function createNativeHostManager(): NativeHostManager {
   function sendMcpNotification(method: string, params?: Record<string, unknown>): boolean {
     if (!nativePort) return false;
     nativePort.postMessage({
-      type: "notification",
-      jsonrpc: "2.0",
+      type: 'notification',
+      jsonrpc: '2.0',
       method,
-      params: params || {},
+      params: params || {}
     });
     return true;
   }
@@ -305,5 +367,6 @@ export function createNativeHostManager(): NativeHostManager {
     disconnect,
     getStatus,
     sendMcpNotification,
+    handleHeartbeatAlarm
   };
 }

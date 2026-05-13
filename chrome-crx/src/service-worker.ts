@@ -183,6 +183,10 @@ chrome.webNavigation.onBeforeNavigate.addListener((details) => {
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === "native-host-heartbeat") {
+    void nativeHostManager.handleHeartbeatAlarm();
+    return;
+  }
   void scheduledTaskManager.handleAlarm(alarm);
 });
 
