@@ -14,6 +14,7 @@ import { registerRuntimeMessageListener } from "./background/runtimeMessages";
 import { createScheduledTaskManager } from "./background/scheduledTasks";
 import { createSidePanelController } from "./background/sidePanel";
 import { createStaticIndicatorController } from "./background/staticIndicator";
+import { createDownloadTracker } from "./background/downloadTracker";
 import { initModelMappingListener } from "./utils/modelMapping";
 
 const nativeHostManager = createNativeHostManager();
@@ -26,6 +27,10 @@ const extensionUrlHandler = createExtensionUrlHandler({
   disconnectNativeHost: nativeHostManager.disconnect,
 });
 const staticIndicatorController = createStaticIndicatorController();
+const downloadTracker = createDownloadTracker({
+  isAgentActive,
+  sendNotification: nativeHostManager.sendMcpNotification,
+});
 
 void connectBridge();
 void nativeHostManager.connect();
@@ -206,4 +211,12 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 
 registerExternalMessageListener({
   connectNativeHost: nativeHostManager.connect,
+});
+
+chrome.downloads.onCreated.addListener((item) => {
+  downloadTracker.handleDownloadCreated(item);
+});
+
+chrome.downloads.onChanged.addListener((delta) => {
+  downloadTracker.handleDownloadChanged(delta);
 });

@@ -116,7 +116,8 @@ export const superduckActiveContextTool: ToolDefinition<ActiveContextArgs> = {
   parameters: {
     tabId: {
       type: 'number',
-      description: 'Optional explicit tab id. Defaults to the active tab of the last focused window.'
+      description:
+        'Optional explicit tab id. Defaults to the active tab of the last focused window.'
     },
     full: { type: 'boolean', description: 'Return whole-page innerText instead of viewport text' }
   },
@@ -180,8 +181,7 @@ export const superduckActiveContextTool: ToolDefinition<ActiveContextArgs> = {
   },
   toProviderSchema: async () => ({
     name: 'superduck_active_context',
-    description:
-      "SuperDuck CLI: read user's active Chrome tab url/title/selection/text",
+    description: "SuperDuck CLI: read user's active Chrome tab url/title/selection/text",
     input_schema: {
       type: 'object',
       properties: {
@@ -255,7 +255,10 @@ export const superduckBackgroundFetchTool: ToolDefinition<BackgroundFetchArgs> =
         body = `[binary ${buf.byteLength} bytes, content-type=${contentType}, omitted]`;
       } else {
         const text = await res.text();
-        body = text.length > MAX ? text.slice(0, MAX) + `\n…[truncated ${text.length - MAX} bytes]` : text;
+        body =
+          text.length > MAX
+            ? text.slice(0, MAX) + `\n…[truncated ${text.length - MAX} bytes]`
+            : text;
       }
       const headers: Record<string, string> = {};
       res.headers.forEach((v, k) => {
@@ -301,7 +304,8 @@ export const superduckBackgroundFetchTool: ToolDefinition<BackgroundFetchArgs> =
 // ---------- superduck_list_tabs ----------
 export const superduckListTabsTool: ToolDefinition<Record<string, never>> = {
   name: 'superduck_list_tabs',
-  description: 'SuperDuck CLI: list all tabs across all windows (id, windowId, url, title, active).',
+  description:
+    'SuperDuck CLI: list all tabs across all windows (id, windowId, url, title, active).',
   parameters: {},
   execute: async () => {
     try {
@@ -358,15 +362,22 @@ export const superduckOpenTool: ToolDefinition<OpenArgs> = {
         tab = updated;
       }
       return {
-        output: JSON.stringify({ tabId: tab.id, windowId: tab.windowId, url, newTab: !!args?.newTab })
+        output: JSON.stringify({
+          tabId: tab.id,
+          windowId: tab.windowId,
+          url,
+          newTab: !!args?.newTab
+        })
       };
     } catch (err) {
-      return { error: `superduck_open failed: ${err instanceof Error ? err.message : String(err)}` };
+      return {
+        error: `superduck_open failed: ${err instanceof Error ? err.message : String(err)}`
+      };
     }
   },
   toProviderSchema: async () => ({
     name: 'superduck_open',
-    description: "SuperDuck CLI: navigate active tab (or open new tab)",
+    description: 'SuperDuck CLI: navigate active tab (or open new tab)',
     input_schema: {
       type: 'object',
       properties: {
@@ -406,7 +417,9 @@ export const superduckClickTool: ToolDefinition<ClickArgs> = {
             if (!el) return { ok: false, reason: `no element matches selector: ${selector}` };
           } else {
             const needle = text.toLowerCase();
-            const candidates = document.querySelectorAll('a,button,input,[role=button],[role=link]');
+            const candidates = document.querySelectorAll(
+              'a,button,input,[role=button],[role=link]'
+            );
             for (const c of Array.from(candidates)) {
               const t = (c.textContent || '').trim().toLowerCase();
               const v = (c as HTMLInputElement).value?.toLowerCase?.() || '';
@@ -431,7 +444,9 @@ export const superduckClickTool: ToolDefinition<ClickArgs> = {
       if (!r?.ok) return { error: r?.reason || 'click failed' };
       return { output: JSON.stringify({ tabId: tab.id, ...r }) };
     } catch (err) {
-      return { error: `superduck_click failed: ${err instanceof Error ? err.message : String(err)}` };
+      return {
+        error: `superduck_click failed: ${err instanceof Error ? err.message : String(err)}`
+      };
     }
   },
   toProviderSchema: async () => ({
@@ -482,8 +497,8 @@ export const superduckFillTool: ToolDefinition<FillArgs> = {
             el instanceof HTMLTextAreaElement
               ? HTMLTextAreaElement.prototype
               : el instanceof HTMLSelectElement
-              ? HTMLSelectElement.prototype
-              : HTMLInputElement.prototype;
+                ? HTMLSelectElement.prototype
+                : HTMLInputElement.prototype;
           const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
           if (setter) setter.call(el, value);
           else el.value = value;
@@ -496,7 +511,9 @@ export const superduckFillTool: ToolDefinition<FillArgs> = {
       if (!r?.ok) return { error: r?.reason || 'fill failed' };
       return { output: JSON.stringify({ tabId: tab.id, ...r }) };
     } catch (err) {
-      return { error: `superduck_fill failed: ${err instanceof Error ? err.message : String(err)}` };
+      return {
+        error: `superduck_fill failed: ${err instanceof Error ? err.message : String(err)}`
+      };
     }
   },
   toProviderSchema: async () => ({
@@ -518,7 +535,7 @@ export const superduckFillTool: ToolDefinition<FillArgs> = {
 export const superduckPressTool: ToolDefinition<PressArgs> = {
   name: 'superduck_press',
   description:
-    "SuperDuck CLI: dispatch a keyboard event on the active tab (e.g. Enter, Tab, Escape, ArrowDown). Targets the focused element or the optional selector.",
+    'SuperDuck CLI: dispatch a keyboard event on the active tab (e.g. Enter, Tab, Escape, ArrowDown). Targets the focused element or the optional selector.',
   parameters: {
     key: { type: 'string', description: 'Key name (Enter, Tab, Escape, ArrowDown, a, ...)' },
     selector: { type: 'string', description: 'Optional selector to focus before pressing' },
@@ -535,11 +552,12 @@ export const superduckPressTool: ToolDefinition<PressArgs> = {
         target: { tabId: tab.id },
         args: [key, selector],
         func: (key: string, selector: string) => {
-          let target: Element | null = null;
+          let target: Element;
           if (selector) {
-            target = document.querySelector(selector);
-            if (!target) return { ok: false, reason: `no element matches selector: ${selector}` };
-            (target as HTMLElement).focus();
+            const found = document.querySelector(selector);
+            if (!found) return { ok: false, reason: `no element matches selector: ${selector}` };
+            (found as HTMLElement).focus();
+            target = found;
           } else {
             target = (document.activeElement as Element) || document.body;
           }
@@ -563,7 +581,9 @@ export const superduckPressTool: ToolDefinition<PressArgs> = {
       if (!r?.ok) return { error: r?.reason || 'press failed' };
       return { output: JSON.stringify({ tabId: tab.id, ...r }) };
     } catch (err) {
-      return { error: `superduck_press failed: ${err instanceof Error ? err.message : String(err)}` };
+      return {
+        error: `superduck_press failed: ${err instanceof Error ? err.message : String(err)}`
+      };
     }
   },
   toProviderSchema: async () => ({
@@ -581,6 +601,103 @@ export const superduckPressTool: ToolDefinition<PressArgs> = {
   })
 };
 
+// ---------- superduck_downloads ----------
+interface DownloadsArgs {
+  query?: string;
+  limit?: number;
+  state?: string;
+}
+
+const superduckDownloadsTool: ToolDefinition<DownloadsArgs> = {
+  name: 'superduck_downloads',
+  description:
+    'SuperDuck CLI: query recent Chrome downloads. Returns filename, url, status, fileSize, startTime for each download. Optionally filter by filename text or state (in_progress, complete, interrupted).',
+  parameters: {
+    query: {
+      type: 'string',
+      description: 'Filter downloads by filename substring (case-insensitive)'
+    },
+    limit: {
+      type: 'number',
+      description: 'Maximum number of results to return (default 20, max 100)'
+    },
+    state: {
+      type: 'string',
+      description: 'Filter by download state: "in_progress", "complete", or "interrupted"'
+    }
+  },
+  execute: async (args) => {
+    try {
+      const limit = Math.min(Math.max(1, args?.limit ?? 20), 100);
+      const searchQuery: chrome.downloads.DownloadQuery = {
+        limit,
+        orderBy: ['-startTime']
+      };
+
+      if (args?.query) {
+        searchQuery.filenameRegex = args.query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      }
+
+      const validStates = ['in_progress', 'complete', 'interrupted'] as const;
+      if (args?.state && validStates.includes(args.state as (typeof validStates)[number])) {
+        searchQuery.state = args.state as chrome.downloads.DownloadState;
+      }
+
+      const items = await chrome.downloads.search(searchQuery);
+      const results = items.map((item) => ({
+        id: item.id,
+        filename: item.filename,
+        url: item.finalUrl || item.url,
+        state: item.state,
+        fileSize: item.fileSize,
+        totalBytes: item.totalBytes,
+        bytesReceived: item.bytesReceived,
+        startTime: item.startTime,
+        endTime: item.endTime || undefined,
+        mime: item.mime || undefined,
+        danger: item.danger !== 'safe' ? item.danger : undefined,
+        error: item.error || undefined
+      }));
+
+      return {
+        output: JSON.stringify(
+          { message: `Found ${results.length} download(s)`, downloads: results },
+          null,
+          2
+        )
+      };
+    } catch (err) {
+      return {
+        error: `superduck_downloads failed: ${err instanceof Error ? err.message : String(err)}`
+      };
+    }
+  },
+  toProviderSchema: async () => ({
+    name: 'superduck_downloads',
+    description:
+      'SuperDuck CLI: query recent Chrome downloads. Returns filename, url, status, fileSize, startTime.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'Filter downloads by filename substring'
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum number of results (default 20, max 100)'
+        },
+        state: {
+          type: 'string',
+          enum: ['in_progress', 'complete', 'interrupted'],
+          description: 'Filter by download state'
+        }
+      },
+      required: []
+    }
+  })
+};
+
 export const superduckTools = [
   superduckActiveContextTool,
   superduckBackgroundFetchTool,
@@ -588,7 +705,8 @@ export const superduckTools = [
   superduckOpenTool,
   superduckClickTool,
   superduckFillTool,
-  superduckPressTool
+  superduckPressTool,
+  superduckDownloadsTool
 ];
 
 export const superduckToolNames = superduckTools.map((t) => t.name);
