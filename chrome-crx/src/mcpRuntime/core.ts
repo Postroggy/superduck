@@ -1381,7 +1381,7 @@ function createDomainTransitionPermission(
   };
 }
 
-// --- Active tool contexts and pending prefix timeouts ---
+// --- Active tool contexts and group finalization ---
 const activeToolContexts = new Map<
   number,
   {
@@ -1393,6 +1393,52 @@ const activeToolContexts = new Map<
 >();
 const pendingPrefixTimeouts = new Map<number, ReturnType<typeof setTimeout> | null>();
 const PREFIX_CLEANUP_DELAY = 20000;
+
+const groupFinalizationState = new Map<
+  number,
+  {
+    lastActiveTabId: number;
+    timer: ReturnType<typeof setTimeout> | null;
+  }
+>();
+
+function findGroupMainTab(tabId: number): number | undefined {
+  return tabGroupManager.findMainTabIdSync(tabId);
+}
+
+function hasActiveToolsInGroup(mainTabId: number): boolean {
+  const memberIds = tabGroupManager.getGroupMemberIds(mainTabId);
+  for (const memberId of memberIds) {
+    if (activeToolContexts.has(memberId)) return true;
+  }
+  return false;
+}
+
+async function finalizeGroup(mainTabId: number): Promise<void> {
+  const state = groupFinalizationState.get(mainTabId);
+  if (!state) return;
+
+  const memberIds = tabGroupManager.getGroupMemberIds(mainTabId);
+  if (memberIds.length === 0) {
+    groupFinalizationState.delete(mainTabId);
+    return;
+  }
+
+  const resultTabId = state.lastActiveTabId;
+
+  await tabGroupManager.addCompletionPrefix(mainTabId).catch(() => {});
+
+  for (const tabId of memberIds) {
+    await cdpDebugger.detachDebugger(tabId).catch(() => {});
+  }
+
+  const tabsToClose = memberIds.filter((id) => id !== resultTabId);
+  if (tabsToClose.length > 0) {
+    await chrome.tabs.remove(tabsToClose).catch(() => {});
+  }
+
+  groupFinalizationState.delete(mainTabId);
+}
 
 // --- startToolContext (inline from executeTool) ---
 async function startToolContext(
@@ -1412,6 +1458,20 @@ async function startToolContext(
     isRunning: true,
     isMcp: true
   });
+
+  const mainTabId = findGroupMainTab(tabId);
+  if (mainTabId !== undefined) {
+    const state = groupFinalizationState.get(mainTabId);
+    if (state?.timer) {
+      clearTimeout(state.timer);
+      state.timer = null;
+    }
+    groupFinalizationState.set(mainTabId, {
+      lastActiveTabId: tabId,
+      timer: null
+    });
+  }
+
   if (pendingPrefixTimeouts.has(tabId)) {
     const existingTimeout = pendingPrefixTimeouts.get(tabId);
     if (existingTimeout) clearTimeout(existingTimeout);
@@ -1425,9 +1485,22 @@ async function startToolContext(
 
 // --- cleanupAfterToolExecution (Nr) ---
 function cleanupAfterToolExecution(tabId: number, _clientId?: string): void {
-  if (activeToolContexts.has(tabId)) {
-    activeToolContexts.get(tabId);
-    activeToolContexts.delete(tabId);
+  if (!activeToolContexts.has(tabId)) return;
+
+  activeToolContexts.delete(tabId);
+
+  const mainTabId = findGroupMainTab(tabId);
+  if (mainTabId !== undefined && !hasActiveToolsInGroup(mainTabId)) {
+    const state = groupFinalizationState.get(mainTabId);
+    if (state) {
+      if (state.timer) clearTimeout(state.timer);
+      state.timer = setTimeout(() => {
+        if (!hasActiveToolsInGroup(mainTabId)) {
+          void finalizeGroup(mainTabId);
+        }
+      }, PREFIX_CLEANUP_DELAY);
+    }
+  } else if (mainTabId === undefined) {
     const timeout = setTimeout(async () => {
       if (!activeToolContexts.has(tabId) && pendingPrefixTimeouts.has(tabId)) {
         tabGroupManager.addCompletionPrefix(tabId).catch(() => {});
@@ -1449,6 +1522,11 @@ function clearPrefixForTab(tabId: number): void {
   if (timeout) clearTimeout(timeout);
   pendingPrefixTimeouts.delete(tabId);
   tabGroupManager.removePrefix(tabId).catch(() => {});
+
+  const mainTabId = findGroupMainTab(tabId) ?? tabId;
+  const state = groupFinalizationState.get(mainTabId);
+  if (state?.timer) clearTimeout(state.timer);
+  groupFinalizationState.delete(mainTabId);
 }
 
 // --- resetMcpState (qr) --- EXPORT

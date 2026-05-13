@@ -729,6 +729,20 @@ class TabGroupManager {
     return this.groupMetadata.has(tabId);
   }
 
+  findMainTabIdSync(tabId: number): number | undefined {
+    if (this.groupMetadata.has(tabId)) return tabId;
+    for (const [mainTabId, meta] of this.groupMetadata.entries()) {
+      if (meta.memberStates.has(tabId)) return mainTabId;
+    }
+    return undefined;
+  }
+
+  getGroupMemberIds(mainTabId: number): number[] {
+    const meta = this.groupMetadata.get(mainTabId);
+    if (!meta) return [];
+    return Array.from(meta.memberStates.keys());
+  }
+
   async getMainTabId(tabId: number): Promise<number | null> {
     const group = await this.findGroupByTab(tabId);
     return group?.mainTabId || null;
