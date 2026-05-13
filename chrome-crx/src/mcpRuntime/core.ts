@@ -1427,6 +1427,7 @@ async function finalizeGroup(mainTabId: number): Promise<void> {
   const resultTabId = state.lastActiveTabId;
 
   await tabGroupManager.addCompletionPrefix(mainTabId).catch(() => {});
+  await tabGroupManager.setGroupColor(mainTabId, chrome.tabGroups.Color.GREEN).catch(() => {});
 
   for (const tabId of memberIds) {
     await cdpDebugger.detachDebugger(tabId).catch(() => {});
@@ -1470,6 +1471,7 @@ async function startToolContext(
       lastActiveTabId: tabId,
       timer: null
     });
+    tabGroupManager.setGroupColor(mainTabId, chrome.tabGroups.Color.ORANGE).catch(() => {});
   }
 
   if (pendingPrefixTimeouts.has(tabId)) {

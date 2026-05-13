@@ -1,4 +1,3 @@
-import { StorageKeys } from '../extensionServices';
 import type { ApiConversationMessage } from '../messageTypes';
 import { isImageContentBlock, isTextContentBlock, isToolResultContentBlock } from '../messageTypes';
 import { PermissionTools, checkUrlSecurity } from './shared';
@@ -261,13 +260,13 @@ const fileUploadTool: ToolDefinition<FileUploadToolInput> = {
         args: [params.ref, uploadAttr]
       });
 
-	      if (!markResult || 0 === markResult.length)
-	        return { error: 'Failed to execute script to find element' };
-	      const markOutput = markResult[0]?.result;
-	      if (!isScriptSuccessResult(markOutput)) {
-	        return { error: 'Unexpected response while locating file input element' };
-	      }
-	      if (markOutput.error) return { error: markOutput.error };
+      if (!markResult || 0 === markResult.length)
+        return { error: 'Failed to execute script to find element' };
+      const markOutput = markResult[0]?.result;
+      if (!isScriptSuccessResult(markOutput)) {
+        return { error: 'Unexpected response while locating file input element' };
+      }
+      if (markOutput.error) return { error: markOutput.error };
 
       // Use CDP to resolve element and set files
       const resolveResult = await cdpDebugger.sendCommand<CdpRuntimeEvaluateResult>(
@@ -458,13 +457,13 @@ const uploadImageTool: ToolDefinition<UploadImageToolInput> = {
       const uploadResult = await chrome.scripting.executeScript({
         target: { tabId: activeTabId },
         func: (
-	          ref: string | null,
-	          coordinate: [number, number] | null,
-	          base64: string,
-	          filename: string
-	        ) => {
-	          try {
-	            let targetElement: Element | null = null;
+          ref: string | null,
+          coordinate: [number, number] | null,
+          base64: string,
+          filename: string
+        ) => {
+          try {
+            let targetElement: Element | null = null;
             if (coordinate) {
               targetElement = document.elementFromPoint(coordinate[0], coordinate[1]);
               if (!targetElement)
@@ -500,17 +499,17 @@ const uploadImageTool: ToolDefinition<UploadImageToolInput> = {
                   targetElement = null;
                 }
               }
-	              if (!targetElement)
-	                return {
-	                  error: `No element found with reference: "${ref}". The element may have been removed from the page.`
-	                };
-	            }
+              if (!targetElement)
+                return {
+                  error: `No element found with reference: "${ref}". The element may have been removed from the page.`
+                };
+            }
 
-	            if (!targetElement) {
-	              return { error: 'No target element found for upload' };
-	            }
+            if (!targetElement) {
+              return { error: 'No target element found for upload' };
+            }
 
-	            targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
             // Decode base64 to binary
             const binaryString = atob(base64);
@@ -526,10 +525,10 @@ const uploadImageTool: ToolDefinition<UploadImageToolInput> = {
             dataTransfer.items.add(file);
 
             // Handle file input elements
-	            if (targetElement instanceof HTMLInputElement && targetElement.type === 'file') {
-	              const fileInput = targetElement;
-	              fileInput.files = dataTransfer.files;
-	              fileInput.focus();
+            if (targetElement instanceof HTMLInputElement && targetElement.type === 'file') {
+              const fileInput = targetElement;
+              fileInput.files = dataTransfer.files;
+              fileInput.focus();
               fileInput.dispatchEvent(new Event('change', { bubbles: true }));
               fileInput.dispatchEvent(new Event('input', { bubbles: true }));
               const fileChangeEvent = new CustomEvent('filechange', {
@@ -545,18 +544,18 @@ const uploadImageTool: ToolDefinition<UploadImageToolInput> = {
             // Handle drag & drop
             {
               let dropX: number, dropY: number;
-	              if (coordinate) {
-	                dropX = coordinate[0];
-	                dropY = coordinate[1];
-	              } else {
-	                const rect = targetElement.getBoundingClientRect();
-	                dropX = rect.left + rect.width / 2;
-	                dropY = rect.top + rect.height / 2;
-	              }
+              if (coordinate) {
+                dropX = coordinate[0];
+                dropY = coordinate[1];
+              } else {
+                const rect = targetElement.getBoundingClientRect();
+                dropX = rect.left + rect.width / 2;
+                dropY = rect.top + rect.height / 2;
+              }
 
-	              if (targetElement instanceof HTMLElement) {
-	                targetElement.focus();
-	              }
+              if (targetElement instanceof HTMLElement) {
+                targetElement.focus();
+              }
 
               const dragEnterEvent = new DragEvent('dragenter', {
                 bubbles: true,
@@ -567,7 +566,7 @@ const uploadImageTool: ToolDefinition<UploadImageToolInput> = {
                 screenX: dropX + window.screenX,
                 screenY: dropY + window.screenY
               });
-	              targetElement.dispatchEvent(dragEnterEvent);
+              targetElement.dispatchEvent(dragEnterEvent);
 
               const dragOverEvent = new DragEvent('dragover', {
                 bubbles: true,
@@ -578,7 +577,7 @@ const uploadImageTool: ToolDefinition<UploadImageToolInput> = {
                 screenX: dropX + window.screenX,
                 screenY: dropY + window.screenY
               });
-	              targetElement.dispatchEvent(dragOverEvent);
+              targetElement.dispatchEvent(dragOverEvent);
 
               const dropEvent = new DragEvent('drop', {
                 bubbles: true,
@@ -589,7 +588,7 @@ const uploadImageTool: ToolDefinition<UploadImageToolInput> = {
                 screenX: dropX + window.screenX,
                 screenY: dropY + window.screenY
               });
-	              targetElement.dispatchEvent(dropEvent);
+              targetElement.dispatchEvent(dropEvent);
 
               return {
                 output: `Successfully dropped image "${filename}" (${Math.round(blob.size / 1024)}KB) onto element at (${Math.round(dropX)}, ${Math.round(dropY)})`
@@ -609,16 +608,16 @@ const uploadImageTool: ToolDefinition<UploadImageToolInput> = {
         ]
       });
 
-	      if (!uploadResult || 0 === uploadResult.length)
-	        throw new Error('Failed to execute upload image');
+      if (!uploadResult || 0 === uploadResult.length)
+        throw new Error('Failed to execute upload image');
 
-	      const uploadOutput = uploadResult[0]?.result;
-	      if (!isScriptOutputResult(uploadOutput)) {
-	        throw new Error('Unexpected response while uploading image');
-	      }
-	      const validTabs = await tabGroupManager.getValidTabsWithMetadata(context.tabId);
-	      return {
-	        ...uploadOutput,
+      const uploadOutput = uploadResult[0]?.result;
+      if (!isScriptOutputResult(uploadOutput)) {
+        throw new Error('Unexpected response while uploading image');
+      }
+      const validTabs = await tabGroupManager.getValidTabsWithMetadata(context.tabId);
+      return {
+        ...uploadOutput,
         tabContext: {
           currentTabId: context.tabId,
           executedOnTabId: effectiveTabId,
@@ -813,14 +812,13 @@ const gifCreatorTool: ToolDefinition<GifCreatorToolInput> = {
 
       const tab = await chrome.tabs.get(params.tabId);
       if (!tab) throw new Error(`Tab ${params.tabId} not found`);
-      const groupId = tab.groupId ?? -1;
 
-      // For MCP native sessions, verify tab is in the MCP tab group
+      // For MCP native sessions, verify tab is in a managed tab group
       if (context.sessionId === MCP_NATIVE_SESSION) {
-        const stored = await chrome.storage.local.get(StorageKeys.MCP_TAB_GROUP_ID);
-        if (groupId !== stored[StorageKeys.MCP_TAB_GROUP_ID]) {
+        const isManaged = await tabGroupManager.isInGroup(params.tabId);
+        if (!isManaged) {
           return {
-            error: `Tab ${params.tabId} is not in the MCP tab group. GIF recording only works for tabs within the MCP tab group.`
+            error: `Tab ${params.tabId} is not in a managed tab group. GIF recording only works for tabs within a SuperDuck tab group.`
           };
         }
       }
@@ -946,7 +944,11 @@ const gifCreatorTool: ToolDefinition<GifCreatorToolInput> = {
             const gifResult = await new Promise<GifGenerationResult>((resolve, reject) => {
               chrome.runtime.sendMessage(
                 { type: 'GENERATE_GIF', frames: frameData, options: gifOptions },
-                (response: { success?: boolean; result?: GifGenerationResult; error?: string } | undefined) => {
+                (
+                  response:
+                    | { success?: boolean; result?: GifGenerationResult; error?: string }
+                    | undefined
+                ) => {
                   if (chrome.runtime.lastError) {
                     reject(new Error(chrome.runtime.lastError.message));
                   } else if (response?.success && response.result) {
@@ -1033,23 +1035,18 @@ const gifCreatorTool: ToolDefinition<GifCreatorToolInput> = {
                     output: `Successfully dropped ${filename} (${Math.round(blob.size / 1024)}KB) at (${x}, ${y})`
                   };
                 },
-                args: [
-                  gifResult.base64,
-                  gifFilename,
-                  dropCoordinate[0],
-                  dropCoordinate[1]
-                ]
+                args: [gifResult.base64, gifFilename, dropCoordinate[0], dropCoordinate[1]]
               });
 
-	              if (!dropResult || !dropResult[0]?.result)
-	                throw new Error('Failed to upload GIF to page');
+              if (!dropResult || !dropResult[0]?.result)
+                throw new Error('Failed to upload GIF to page');
 
-	              const dropOutput = dropResult[0].result;
-	              if (!isScriptOutputResult(dropOutput) || typeof dropOutput.output !== 'string') {
-	                throw new Error('Unexpected response while dropping GIF onto page');
-	              }
-	              outputMessage = `Successfully exported GIF with ${frames.length} frames. ${dropOutput.output}. Dimensions: ${gifResult.width}x${gifResult.height}. Recording cleared.`;
-	            }
+              const dropOutput = dropResult[0].result;
+              if (!isScriptOutputResult(dropOutput) || typeof dropOutput.output !== 'string') {
+                throw new Error('Unexpected response while dropping GIF onto page');
+              }
+              outputMessage = `Successfully exported GIF with ${frames.length} frames. ${dropOutput.output}. Dimensions: ${gifResult.width}x${gifResult.height}. Recording cleared.`;
+            }
 
             gifFrameStorage.clearFrames(gid);
             const validTabs = await tabGroupManager.getValidTabsWithMetadata(contextTabId);
