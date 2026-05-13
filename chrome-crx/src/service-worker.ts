@@ -2,6 +2,8 @@ import { getConfig, setStorageValue, StorageKeys } from "./extensionServices";
 import {
   connectBridge,
   initializeExtensionPermissions,
+  isAgentActive,
+  setOnAgentBecameIdle,
   tabGroupManager,
   trackEvent,
 } from "./mcpRuntime";
@@ -153,12 +155,24 @@ chrome.commands.onCommand.addListener((command) => {
   });
 });
 
+let pendingUpdateVersion: string | null = null;
+
+function tryApplyUpdate() {
+  if (!pendingUpdateVersion) return;
+  if (isAgentActive()) return;
+  chrome.runtime.reload();
+}
+
+setOnAgentBecameIdle(() => tryApplyUpdate());
+
 chrome.runtime.onUpdateAvailable.addListener((details) => {
+  pendingUpdateVersion = details.version;
   void setStorageValue(StorageKeys.UPDATE_AVAILABLE, true);
   void trackEvent("superduck.extension.update_available", {
     current_version: chrome.runtime.getManifest().version,
     new_version: details.version,
   });
+  tryApplyUpdate();
 });
 
 registerRuntimeMessageListener({

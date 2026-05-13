@@ -415,7 +415,9 @@ async function handleBridgeToolCall(message: BridgeMessage): Promise<void> {
   const args = isRecord(message.args) ? message.args : {};
   const permissionMode =
     typeof message.permission_mode === 'string' ? message.permission_mode : undefined;
-  const allowedDomains = isStringArray(message.allowed_domains) ? message.allowed_domains : undefined;
+  const allowedDomains = isStringArray(message.allowed_domains)
+    ? message.allowed_domains
+    : undefined;
   const handlePermissionPrompts = true === message.handle_permission_prompts;
   if (!toolUseId || !toolName) return;
   const tabId = parseOptionalNumber(args.tabId);
@@ -423,7 +425,7 @@ async function handleBridgeToolCall(message: BridgeMessage): Promise<void> {
   if (tabId !== undefined) {
     try {
       await chrome.tabs.get(tabId);
-      } catch {
+    } catch {
       return;
     }
   }
@@ -610,7 +612,8 @@ class ToolExecutor {
     url?: string,
     permissionManagerOverride?: PermissionManagerClass
   ): Promise<ToolResult> {
-    const action = isRecord(toolInput) && typeof toolInput.action === 'string' ? toolInput.action : undefined;
+    const action =
+      isRecord(toolInput) && typeof toolInput.action === 'string' ? toolInput.action : undefined;
     return await initializePermissions(
       `tool_execution_${toolName}${action ? '_' + action : ''}`,
       async (span: Span) => {
@@ -861,7 +864,11 @@ class ToolExecutor {
 }
 
 // --- recordToolAction helper (inline function from handleToolCall) ---
-async function recordToolAction(toolName: string, toolInput: unknown, tabId: number): Promise<void> {
+async function recordToolAction(
+  toolName: string,
+  toolInput: unknown,
+  tabId: number
+): Promise<void> {
   try {
     if (!['computer', 'navigate'].includes(toolName)) return;
     const input = toToolInputRecord(toolInput);
@@ -894,7 +901,7 @@ async function recordToolAction(toolName: string, toolInput: unknown, tabId: num
             ? 'Scrolled'
             : 'left_click_drag' === actionType
               ? 'Dragged'
-            : actionType;
+              : actionType;
       }
     } else if ('navigate' === toolName && typeof input.url === 'string') {
       actionData = {
@@ -975,12 +982,27 @@ let navigationBlockedError: string | undefined;
 let navigationBlockedTime: number | undefined;
 const NAVIGATION_BLOCK_TIMEOUT = 60000;
 
+let activeToolCount = 0;
+let onAgentBecameIdleCallback: (() => void) | null = null;
+
+export function isAgentActive(): boolean {
+  return activeToolCount > 0;
+}
+
+export function setOnAgentBecameIdle(cb: (() => void) | null): void {
+  onAgentBecameIdleCallback = cb;
+}
+
 async function getSelectedModel(): Promise<string> {
   const [storedModel, modelConfig] = await Promise.all([
     getStorageValue<string>(StorageKeys.SELECTED_MODEL),
     getFeatureValue('chrome_ext_models')
   ]);
-  return storedModel || (typeof modelConfig.default === 'string' ? modelConfig.default : '') || DEFAULT_MODEL;
+  return (
+    storedModel ||
+    (typeof modelConfig.default === 'string' ? modelConfig.default : '') ||
+    DEFAULT_MODEL
+  );
 }
 
 async function getOrCreateToolExecutor(tabId?: number, tabGroupId?: number): Promise<ToolExecutor> {
@@ -1041,9 +1063,7 @@ async function refreshMessagesClient(): Promise<MessagesClient | undefined> {
 }
 
 // --- createErrorResponse (Cr) --- EXPORT
-export const createErrorResponse = (
-  text: string
-): ErrorResponse => ({
+export const createErrorResponse = (text: string): ErrorResponse => ({
   content: [{ type: 'text', text }],
   is_error: true
 });
@@ -1065,6 +1085,7 @@ interface ExecuteToolOptions {
 
 // --- executeTool (Sr) --- EXPORT
 export async function executeTool(options: ExecuteToolOptions): Promise<ExecuteToolResponse> {
+  activeToolCount++;
   const requestId = crypto.randomUUID();
   const clientId = options.clientId;
   const startTime = Date.now();
@@ -1095,8 +1116,7 @@ export async function executeTool(options: ExecuteToolOptions): Promise<ExecuteT
   let toolResult: ExecuteToolResponse;
 
   try {
-    const skipTabLookup =
-      mcpToolNames.includes(options.toolName) && options.tabId === undefined;
+    const skipTabLookup = mcpToolNames.includes(options.toolName) && options.tabId === undefined;
     if (!skipTabLookup) {
       const tabInfo = await tabGroupManager.getTabForMcp(options.tabId, options.tabGroupId);
       tabId = tabInfo.tabId;
@@ -1177,8 +1197,7 @@ export async function executeTool(options: ExecuteToolOptions): Promise<ExecuteT
       processOptions.onPermissionRequired = async (
         permissionData: PermissionPromptRequest,
         permTabId: number
-      ) =>
-        await showPermissionPrompt(permissionData, permTabId ?? tabId);
+      ) => await showPermissionPrompt(permissionData, permTabId ?? tabId);
     }
 
     [toolResult] = await executor.processToolResults(
@@ -1231,6 +1250,12 @@ export async function executeTool(options: ExecuteToolOptions): Promise<ExecuteT
     ...(appName && { app: appName }),
     ...(errorType && { error_type: errorType })
   });
+
+  activeToolCount--;
+  if (activeToolCount <= 0) {
+    activeToolCount = 0;
+    onAgentBecameIdleCallback?.();
+  }
 
   return toolResult;
 }
@@ -1442,7 +1467,10 @@ export async function resetMcpState(): Promise<void> {
 let permissionPromptChain: Promise<boolean> = Promise.resolve(true);
 
 // --- showPermissionPrompt (Wr) ---
-async function showPermissionPrompt(permission: PermissionPromptRequest, tabId: number): Promise<boolean> {
+async function showPermissionPrompt(
+  permission: PermissionPromptRequest,
+  tabId: number
+): Promise<boolean> {
   const next = permissionPromptChain.then(() => showPermissionPromptInner(permission, tabId));
   permissionPromptChain = next.catch(() => false);
   return next;
