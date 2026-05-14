@@ -7,12 +7,17 @@ import { CursorRenderer } from './cursorAnimation/cursorRenderer';
   const SCRIPT_INSTANCE_ID = Math.random().toString(36).slice(2);
   const INVALIDATE_EVENT = 'superduck:indicator-invalidate';
   let isInvalidated = false;
+  let extAliveCheck: ReturnType<typeof setInterval> | null = null;
 
   document.dispatchEvent(new CustomEvent(INVALIDATE_EVENT, { detail: { id: SCRIPT_INSTANCE_ID } }));
 
   function fullCleanup() {
     if (isInvalidated) return;
     isInvalidated = true;
+    if (extAliveCheck !== null) {
+      clearInterval(extAliveCheck);
+      extAliveCheck = null;
+    }
     (window as any).__superduck_agent_indicator_loaded__ = false;
     try {
       hideAgentIndicators();
@@ -32,9 +37,9 @@ import { CursorRenderer } from './cursorAnimation/cursorRenderer';
     }
   }) as EventListener);
 
-  const extAliveCheck = setInterval(() => {
+  extAliveCheck = setInterval(() => {
     if (!chrome.runtime?.id) {
-      clearInterval(extAliveCheck);
+      if (extAliveCheck !== null) clearInterval(extAliveCheck);
       fullCleanup();
     }
   }, 2000);

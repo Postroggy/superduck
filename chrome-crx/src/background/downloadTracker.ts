@@ -78,7 +78,6 @@ export function createDownloadTracker(deps: {
 
   function handleDownloadChanged(delta: chrome.downloads.DownloadDelta): void {
     if (!Number.isInteger(delta.id) || delta.id < 0) return;
-    if (!deps.isAgentActive()) return;
 
     if (delta.filename?.current) {
       filenamesById.set(delta.id, delta.filename.current);
@@ -87,16 +86,17 @@ export function createDownloadTracker(deps: {
     const status = resolveStatus(delta);
     if (!status) return;
 
-    const filename = resolveFilename(delta);
-    const url = urlsById.get(delta.id) || '';
-
-    emitChange({
-      id: String(delta.id),
-      filename,
-      url,
-      status,
-      timestamp: Date.now()
-    });
+    if (deps.isAgentActive()) {
+      const filename = resolveFilename(delta);
+      const url = urlsById.get(delta.id) || '';
+      emitChange({
+        id: String(delta.id),
+        filename,
+        url,
+        status,
+        timestamp: Date.now()
+      });
+    }
 
     if (status === 'complete' || status === 'canceled' || status === 'failed') {
       filenamesById.delete(delta.id);

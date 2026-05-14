@@ -207,8 +207,14 @@ export function createNativeHostManager(): NativeHostManager {
 
     heartbeatResolve = null;
     stopHeartbeat();
+    const deadPort = nativePort;
     nativePort = null;
     mcpConnected = false;
+    try {
+      deadPort?.disconnect();
+    } catch {
+      /* already disconnected */
+    }
     void setStorageValue(StorageKeys.MCP_CONNECTED, false);
 
     const targets = await chrome.debugger.getTargets();
