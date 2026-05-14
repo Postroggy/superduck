@@ -25,7 +25,9 @@ import {
   FileDocumentIcon,
   LightbulbIcon,
   InboxIcon,
-  RetryIcon
+  RetryIcon,
+  DownloadIcon,
+  ClockIcon
 } from './icons';
 
 type FormatMessageValues = Record<string, string | number | boolean | null | undefined>;
@@ -319,6 +321,28 @@ export function getToolDisplayInfo(
     }
     case 'switch_browser':
       return { text: t('switching_browser', 'Switching browser'), icon: 'shuffle' };
+    case 'superduck_history': {
+      const query = getStringField(o, 'query');
+      if (query) {
+        const preview = query.length > 30 ? `${query.slice(0, 30)}...` : query;
+        return {
+          text: t('search_history', 'Search history: "{query}"', { query: preview }),
+          icon: 'history'
+        };
+      }
+      return { text: t('browse_history', 'Browse history'), icon: 'history' };
+    }
+    case 'superduck_downloads': {
+      const query = getStringField(o, 'query');
+      if (query) {
+        const preview = query.length > 30 ? `${query.slice(0, 30)}...` : query;
+        return {
+          text: t('search_downloads', 'Search downloads: "{query}"', { query: preview }),
+          icon: 'download'
+        };
+      }
+      return { text: t('query_downloads', 'Query downloads'), icon: 'download' };
+    }
     default: {
       const displayName = getToolDisplayName(toolName);
       return { text: displayName, icon: 'computer' };
@@ -348,7 +372,9 @@ export const BROWSER_TOOLS = new Set([
   'gif_creator',
   'execute_js',
   'execute_javascript',
-  'javascript_tool'
+  'javascript_tool',
+  'superduck_history',
+  'superduck_downloads'
 ]);
 
 export const MCP_TOOL_REGEX = /^mcp__[0-9a-f-]+__.+$/;
@@ -403,6 +429,10 @@ export function resolveToolIcon(iconName: string, size: number = 12): React.Reac
       return <ChecklistIcon size={size} className="text-text-300" />;
     case 'resize':
       return <VerticalResizeIcon size={size} className="text-text-300" />;
+    case 'history':
+      return <ClockIcon size={size} className="text-text-300" />;
+    case 'download':
+      return <DownloadIcon size={size} className="text-text-300" />;
     case 'shuffle':
       return <MonitorIcon size={size} className="text-text-300" />;
     case 'computer':
