@@ -1086,6 +1086,18 @@ interface ExecuteToolOptions {
 // --- executeTool (Sr) --- EXPORT
 export async function executeTool(options: ExecuteToolOptions): Promise<ExecuteToolResponse> {
   activeToolCount++;
+  try {
+    return await executeToolInner(options);
+  } finally {
+    activeToolCount--;
+    if (activeToolCount <= 0) {
+      activeToolCount = 0;
+      onAgentBecameIdleCallback?.();
+    }
+  }
+}
+
+async function executeToolInner(options: ExecuteToolOptions): Promise<ExecuteToolResponse> {
   const requestId = crypto.randomUUID();
   const clientId = options.clientId;
   const startTime = Date.now();
@@ -1250,12 +1262,6 @@ export async function executeTool(options: ExecuteToolOptions): Promise<ExecuteT
     ...(appName && { app: appName }),
     ...(errorType && { error_type: errorType })
   });
-
-  activeToolCount--;
-  if (activeToolCount <= 0) {
-    activeToolCount = 0;
-    onAgentBecameIdleCallback?.();
-  }
 
   return toolResult;
 }

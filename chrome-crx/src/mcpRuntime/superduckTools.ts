@@ -640,7 +640,7 @@ const superduckDownloadsTool: ToolDefinition<DownloadsArgs> = {
 
       const validStates = ['in_progress', 'complete', 'interrupted'] as const;
       if (args?.state && validStates.includes(args.state as (typeof validStates)[number])) {
-        searchQuery.state = args.state as chrome.downloads.DownloadState;
+        searchQuery.state = args.state as chrome.downloads.DownloadQuery['state'];
       }
 
       const items = await chrome.downloads.search(searchQuery);

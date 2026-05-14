@@ -812,6 +812,7 @@ const gifCreatorTool: ToolDefinition<GifCreatorToolInput> = {
 
       const tab = await chrome.tabs.get(params.tabId);
       if (!tab) throw new Error(`Tab ${params.tabId} not found`);
+      const groupId = tab.groupId ?? -1;
 
       // For MCP native sessions, verify tab is in a managed tab group
       if (context.sessionId === MCP_NATIVE_SESSION) {

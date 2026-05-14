@@ -78,6 +78,7 @@ export function createDownloadTracker(deps: {
 
   function handleDownloadChanged(delta: chrome.downloads.DownloadDelta): void {
     if (!Number.isInteger(delta.id) || delta.id < 0) return;
+    if (!deps.isAgentActive()) return;
 
     if (delta.filename?.current) {
       filenamesById.set(delta.id, delta.filename.current);
