@@ -3,7 +3,6 @@ import { DomainCategoryCache } from './domainCategory';
 import { getTabEventManager } from './tabEvents';
 
 const TAB_GROUP_TITLE = '🦆SuperDuck';
-const MCP_TAB_GROUP_TITLE = '🦆SuperDuck (MCP)';
 
 // =============================================================================
 // Section 5: TabGroupManager
@@ -729,6 +728,20 @@ class TabGroupManager {
     return this.groupMetadata.has(tabId);
   }
 
+  findMainTabIdSync(tabId: number): number | undefined {
+    if (this.groupMetadata.has(tabId)) return tabId;
+    for (const [mainTabId, meta] of this.groupMetadata.entries()) {
+      if (meta.memberStates.has(tabId)) return mainTabId;
+    }
+    return undefined;
+  }
+
+  getGroupMemberIds(mainTabId: number): number[] {
+    const meta = this.groupMetadata.get(mainTabId);
+    if (!meta) return [];
+    return Array.from(meta.memberStates.keys());
+  }
+
   async getMainTabId(tabId: number): Promise<number | null> {
     const group = await this.findGroupByTab(tabId);
     return group?.mainTabId || null;
@@ -1398,6 +1411,16 @@ class TabGroupManager {
     await this.updateTabGroupPrefix(mainTabId, null, '\u2705');
   }
 
+  async setGroupColor(mainTabId: number, color: chrome.tabGroups.Color): Promise<void> {
+    const meta = this.groupMetadata.get(mainTabId);
+    if (!meta) return;
+    try {
+      await chrome.tabGroups.update(meta.chromeGroupId, { color });
+    } catch {
+      // ignore \u2014 group may no longer exist
+    }
+  }
+
   async removePrefix(mainTabId: number): Promise<void> {
     await this.updateTabGroupPrefix(mainTabId, null);
   }
@@ -1493,10 +1516,10 @@ class TabGroupManager {
   async ensureMcpGroupCharacteristics(chromeGroupId: number): Promise<void> {
     try {
       const group = await chrome.tabGroups.get(chromeGroupId);
-      (group.title === MCP_TAB_GROUP_TITLE && group.color === chrome.tabGroups.Color.YELLOW) ||
+      (group.title === TAB_GROUP_TITLE && group.color === chrome.tabGroups.Color.ORANGE) ||
         (await chrome.tabGroups.update(chromeGroupId, {
-          title: MCP_TAB_GROUP_TITLE,
-          color: chrome.tabGroups.Color.YELLOW
+          title: TAB_GROUP_TITLE,
+          color: chrome.tabGroups.Color.ORANGE
         }));
     } catch (err) {
       // ignore
@@ -1554,10 +1577,6 @@ class TabGroupManager {
       if (!newTabId) throw new Error('Failed to create window with new tab');
       const group = await this.createGroup(newTabId);
       return (
-        await chrome.tabGroups.update(group.chromeGroupId, {
-          title: MCP_TAB_GROUP_TITLE,
-          color: chrome.tabGroups.Color.YELLOW
-        }),
         (this.mcpTabGroupId = group.chromeGroupId),
         await this.saveMcpTabGroupId(),
         {
@@ -1601,8 +1620,8 @@ class TabGroupManager {
       const groups = await chrome.tabGroups.query({});
       for (const group of groups)
         if (
-          group.color === chrome.tabGroups.Color.YELLOW &&
-          group.title?.includes(MCP_TAB_GROUP_TITLE)
+          group.color === chrome.tabGroups.Color.ORANGE &&
+          group.title?.includes(TAB_GROUP_TITLE)
         ) {
           if ((await chrome.tabs.query({ groupId: group.id })).length > 0) return group.id;
         }

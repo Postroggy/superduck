@@ -2,6 +2,8 @@ import { getConfig, setStorageValue, StorageKeys } from "./extensionServices";
 import {
   connectBridge,
   initializeExtensionPermissions,
+  isAgentActive,
+  setOnAgentBecameIdle,
   tabGroupManager,
   trackEvent,
 } from "./mcpRuntime";
@@ -12,6 +14,7 @@ import { registerRuntimeMessageListener } from "./background/runtimeMessages";
 import { createScheduledTaskManager } from "./background/scheduledTasks";
 import { createSidePanelController } from "./background/sidePanel";
 import { createStaticIndicatorController } from "./background/staticIndicator";
+import { createDownloadTracker } from "./background/downloadTracker";
 import { initModelMappingListener } from "./utils/modelMapping";
 
 const nativeHostManager = createNativeHostManager();
@@ -24,6 +27,10 @@ const extensionUrlHandler = createExtensionUrlHandler({
   disconnectNativeHost: nativeHostManager.disconnect,
 });
 const staticIndicatorController = createStaticIndicatorController();
+const downloadTracker = createDownloadTracker({
+  isAgentActive,
+  sendNotification: nativeHostManager.sendMcpNotification,
+});
 
 void connectBridge();
 void nativeHostManager.connect();
@@ -153,12 +160,24 @@ chrome.commands.onCommand.addListener((command) => {
   });
 });
 
+let pendingUpdateVersion: string | null = null;
+
+function tryApplyUpdate() {
+  if (!pendingUpdateVersion) return;
+  if (isAgentActive()) return;
+  chrome.runtime.reload();
+}
+
+setOnAgentBecameIdle(() => tryApplyUpdate());
+
 chrome.runtime.onUpdateAvailable.addListener((details) => {
+  pendingUpdateVersion = details.version;
   void setStorageValue(StorageKeys.UPDATE_AVAILABLE, true);
   void trackEvent("superduck.extension.update_available", {
     current_version: chrome.runtime.getManifest().version,
     new_version: details.version,
   });
+  tryApplyUpdate();
 });
 
 registerRuntimeMessageListener({
@@ -183,9 +202,21 @@ chrome.webNavigation.onBeforeNavigate.addListener((details) => {
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === "native-host-heartbeat") {
+    void nativeHostManager.handleHeartbeatAlarm();
+    return;
+  }
   void scheduledTaskManager.handleAlarm(alarm);
 });
 
 registerExternalMessageListener({
   connectNativeHost: nativeHostManager.connect,
+});
+
+chrome.downloads.onCreated.addListener((item) => {
+  downloadTracker.handleDownloadCreated(item);
+});
+
+chrome.downloads.onChanged.addListener((delta) => {
+  downloadTracker.handleDownloadChanged(delta);
 });

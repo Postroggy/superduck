@@ -111,6 +111,8 @@ class ChromeDebuggerProtocol {
   static MAX_LOGS_PER_TAB: number = 10000;
   static MAX_REQUESTS_PER_TAB: number = 1000;
 
+  private tabLocks = new Map<number, Promise<void>>();
+
   static get debuggerListenerRegistered(): boolean {
     return isDebuggerListenerRegistered();
   }
@@ -142,6 +144,24 @@ class ChromeDebuggerProtocol {
       navigator.platform.toUpperCase().indexOf('MAC') >= 0 ||
       navigator.userAgent.toUpperCase().indexOf('MAC') >= 0;
     this.initializeDebuggerEventListener();
+  }
+
+  private async withTabLock<T>(tabId: number, fn: () => Promise<T>): Promise<T> {
+    const prev = this.tabLocks.get(tabId) ?? Promise.resolve();
+    let release!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    this.tabLocks.set(
+      tabId,
+      prev.catch(() => {}).then(() => gate)
+    );
+    try {
+      await prev.catch(() => {});
+      return await fn();
+    } finally {
+      release();
+    }
   }
 
   registerDebuggerEventHandlers(): void {
@@ -270,6 +290,12 @@ class ChromeDebuggerProtocol {
   static MIN_JPEG_QUALITY: number = 0.1;
 
   async attachDebugger(tabId: number): Promise<void> {
+    return this.withTabLock(tabId, async () => {
+      await this.attachDebuggerInner(tabId);
+    });
+  }
+
+  private async attachDebuggerInner(tabId: number): Promise<void> {
     const target: chrome.debugger.Debuggee = { tabId };
     const wasNetworkTracking = ChromeDebuggerProtocol.networkTrackingEnabled.has(tabId);
     const wasConsoleTracking = ChromeDebuggerProtocol.consoleTrackingEnabled.has(tabId);
@@ -299,14 +325,14 @@ class ChromeDebuggerProtocol {
 
     // 预启用 DOM domain，为后续 DOM.resolveNode 等调用做准备
     try {
-      await this.sendCommand(tabId, 'DOM.enable');
+      await this.sendCommandInner(tabId, 'DOM.enable');
     } catch (_err) {
       // ignore
     }
 
     if (wasConsoleTracking) {
       try {
-        await this.sendCommand(tabId, 'Runtime.enable');
+        await this.sendCommandInner(tabId, 'Runtime.enable');
       } catch (_err) {
         // ignore
       }
@@ -314,7 +340,7 @@ class ChromeDebuggerProtocol {
 
     if (wasNetworkTracking) {
       try {
-        await this.sendCommand(tabId, 'Network.enable', { maxPostDataSize: 65536 });
+        await this.sendCommandInner(tabId, 'Network.enable', { maxPostDataSize: 65536 });
       } catch (_err) {
         // ignore
       }
@@ -353,6 +379,14 @@ class ChromeDebuggerProtocol {
     method: string,
     params?: Record<string, unknown>
   ): Promise<TResult> {
+    return this.withTabLock(tabId, () => this.sendCommandInner<TResult>(tabId, method, params));
+  }
+
+  private async sendCommandInner<TResult extends object | undefined = object | undefined>(
+    tabId: number,
+    method: string,
+    params?: Record<string, unknown>
+  ): Promise<TResult> {
     const executeCommand = () =>
       new Promise<object | undefined>((resolve, reject) => {
         chrome.debugger.sendCommand({ tabId }, method, params, (result) => {
@@ -369,7 +403,7 @@ class ChromeDebuggerProtocol {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       if (errorMessage.toLowerCase().includes('debugger is not attached')) {
-        await this.attachDebugger(tabId);
+        await this.attachDebuggerInner(tabId);
         return (await executeCommand()) as TResult;
       }
       throw error;

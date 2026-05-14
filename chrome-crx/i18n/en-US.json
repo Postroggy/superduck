@@ -906,5 +906,9 @@
   "debug_tokens_remaining": "Remaining: {remaining} ({percent}%)",
   "debug_input_tokens": "In: {count}",
   "debug_output_tokens": "Out: {count}",
-  "debug_cache_tokens": "Cache: {count}"
+  "debug_cache_tokens": "Cache: {count}",
+  "search_history": "Search history: \"{query}\"",
+  "browse_history": "Browse history",
+  "search_downloads": "Search downloads: \"{query}\"",
+  "query_downloads": "Query downloads"
 }

@@ -906,5 +906,9 @@
   "debug_tokens_remaining": "剩余: {remaining} ({percent}%)",
   "debug_input_tokens": "输入: {count}",
   "debug_output_tokens": "输出: {count}",
-  "debug_cache_tokens": "缓存: {count}"
+  "debug_cache_tokens": "缓存: {count}",
+  "search_history": "搜索历史记录：\"{query}\"",
+  "browse_history": "浏览历史记录",
+  "search_downloads": "搜索下载：\"{query}\"",
+  "query_downloads": "查询下载"
 }
