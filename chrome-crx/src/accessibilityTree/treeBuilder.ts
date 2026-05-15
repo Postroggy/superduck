@@ -1,5 +1,12 @@
 import { cleanupDeadRefs, getElementRef, getOrCreateElementMap } from './refStore';
-import { getElementName, getElementRole, getViewport, normalizeTextForTree, shouldIncludeElement } from './elementUtils';
+import {
+  getElementName,
+  getElementRole,
+  getViewport,
+  isSensitiveField,
+  normalizeTextForTree,
+  shouldIncludeElement
+} from './elementUtils';
 import type {
   AccessibilityTreeResult,
   TreeFilter,
@@ -35,10 +42,15 @@ function appendSelectOptions(
   }
 }
 
+function escapeAttrValue(value: string): string {
+  return value.replace(/"/g, '\\"').replace(/\s+/g, ' ');
+}
+
 function appendElementLine(lines: string[], element: Element, depth: number): void {
   const role = getElementRole(element);
   const name = getElementName(element);
   const refId = getElementRef(getOrCreateElementMap(), element);
+  const sensitive = isSensitiveField(element);
 
   let line = `${' '.repeat(depth)}${role}`;
 
@@ -48,19 +60,25 @@ function appendElementLine(lines: string[], element: Element, depth: number): vo
 
   line += ` [${refId}]`;
 
+  if (sensitive) {
+    line += ' [sensitive]';
+  }
+
   const href = element.getAttribute('href');
   if (href) {
-    line += ` href="${href}"`;
+    line += ` href="${escapeAttrValue(href)}"`;
   }
 
   const type = element.getAttribute('type');
   if (type) {
-    line += ` type="${type}"`;
+    line += ` type="${escapeAttrValue(type)}"`;
   }
 
-  const placeholder = element.getAttribute('placeholder');
-  if (placeholder) {
-    line += ` placeholder="${placeholder}"`;
+  if (!sensitive) {
+    const placeholder = element.getAttribute('placeholder');
+    if (placeholder) {
+      line += ` placeholder="${escapeAttrValue(placeholder)}"`;
+    }
   }
 
   lines.push(line);
