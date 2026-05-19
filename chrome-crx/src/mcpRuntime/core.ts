@@ -1029,7 +1029,7 @@ async function refreshMessagesClient(): Promise<MessagesClient | undefined> {
   const customApiKey = storedValues.customApiKey as string | undefined;
   const normalizedCustomApiUrl =
     typeof customApiUrl === 'string' ? customApiUrl.trim().replace(/\/+$/, '') : '';
-  const apiBaseUrl = normalizedCustomApiUrl || getConfig().apiBaseUrl;
+  const apiBaseUrl = normalizedCustomApiUrl || '';
   const apiKey =
     (typeof customApiKey === 'string' && customApiKey.trim()) ||
     (typeof storedApiKey === 'string' && storedApiKey.trim()) ||

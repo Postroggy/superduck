@@ -1,5 +1,4 @@
 export { modulePreload, getConfig, StorageKeys, getStorageValue, setStorageValue, removeStorageValues } from './extensionServices/core';
-export { apiClient } from './extensionServices/apiClient';
 export {
   FeatureFlagManager,
   type FeatureCollection,

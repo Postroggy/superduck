@@ -60,7 +60,6 @@ import {
   PromptService,
   type SavedPrompt as StoredSavedPrompt,
   type VersionInfoFeatureValue,
-  getConfig,
   getPermissionActionText,
   getStorageValue,
   setStorageValue,
@@ -971,9 +970,8 @@ function useLightningMode({
       maxImageDimensionRef.current = merged.maxImageDimension ?? 1568;
       screenshotHistoryRef.current = merged.screenshotHistory ?? 1;
 
-      const cfg = getConfig();
-      const baseUrl = merged.apiBaseUrl || cfg.apiBaseUrl;
-      if (apiKey) {
+      const baseUrl = merged.apiBaseUrl || '';
+      if (apiKey && baseUrl) {
         clientRef.current = new MessagesClient({
           baseURL: baseUrl,
           apiKey,
@@ -4319,7 +4317,7 @@ export function SidepanelApp() {
   const [toolSchemas, setToolSchemas] = useState<ToolProviderSchema[]>([]);
   const [authLoading, setAuthLoading] = useState(true);
   const [apiKey, setApiKey] = useState('');
-  const [apiBaseUrl, setApiBaseUrl] = useState(() => getConfig().apiBaseUrl);
+  const [apiBaseUrl, setApiBaseUrl] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
   const [notificationsEnabled, setNotificationsEnabled] =
     useState<NotificationPreference>(undefined);
@@ -4700,7 +4698,7 @@ export function SidepanelApp() {
             ? storedCustomApiUrl
             : String(storedCustomApiUrl || '')
         ) || '';
-      const resolvedApiBaseUrl = query.apiUrl || normalizedStoredApiUrl || getConfig().apiBaseUrl;
+      const resolvedApiBaseUrl = query.apiUrl || normalizedStoredApiUrl || '';
       const resolvedApiKey =
         query.apiKey ||
         (typeof storedCustomApiKey === 'string' ? storedCustomApiKey.trim() : '') ||
@@ -4712,7 +4710,7 @@ export function SidepanelApp() {
     } catch (error) {
       setAuthError(getErrorMessage(error));
       setApiKey('');
-      setApiBaseUrl(getConfig().apiBaseUrl);
+      setApiBaseUrl('');
     } finally {
       setAuthLoading(false);
     }

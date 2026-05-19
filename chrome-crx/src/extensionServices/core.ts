@@ -11,10 +11,7 @@ export function getConfig() {
   const env = 'production' as const;
   return {
     environment: env,
-    apiBaseUrl: 'https://api.anthropic.com',
-    wsApiBaseUrl: 'wss://api.anthropic.com',
-    segmentWriteKey: SEGMENT_KEYS[env].SEGMENT_WRITE_KEY,
-    localBridge: false
+    segmentWriteKey: SEGMENT_KEYS[env].SEGMENT_WRITE_KEY
   };
 }
 

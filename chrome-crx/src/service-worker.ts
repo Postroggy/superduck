@@ -1,4 +1,4 @@
-import { getConfig, setStorageValue, StorageKeys } from "./extensionServices";
+import { setStorageValue, StorageKeys } from "./extensionServices";
 import {
   connectBridge,
   initializeExtensionPermissions,
@@ -35,39 +35,6 @@ const downloadTracker = createDownloadTracker({
 void connectBridge();
 void nativeHostManager.connect();
 initModelMappingListener();
-
-async function setupUserAgentRule() {
-  const extensionVersion = chrome.runtime.getManifest().version;
-  const userAgentValue = `superduck-browser-extension/${extensionVersion} (external) ${navigator.userAgent} `;
-  const config = getConfig();
-
-  await chrome.declarativeNetRequest.updateSessionRules({
-    removeRuleIds: [1],
-    addRules: [
-      {
-        id: 1,
-        priority: 1,
-        action: {
-          type: chrome.declarativeNetRequest.RuleActionType.MODIFY_HEADERS,
-          requestHeaders: [
-            {
-              header: "User-Agent",
-              operation: chrome.declarativeNetRequest.HeaderOperation.SET,
-              value: userAgentValue,
-            },
-          ],
-        },
-        condition: {
-          urlFilter: `${config.apiBaseUrl}/*`,
-          resourceTypes: [
-            chrome.declarativeNetRequest.ResourceType.XMLHTTPREQUEST,
-            chrome.declarativeNetRequest.ResourceType.OTHER,
-          ],
-        },
-      },
-    ],
-  });
-}
 
 async function handleNotificationClick(notificationId: string) {
   await chrome.notifications.clear(notificationId);
@@ -110,7 +77,6 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 
   initializeExtensionPermissions();
   await tabGroupManager.initialize();
-  await setupUserAgentRule();
 
   if (details.reason === chrome.runtime.OnInstalledReason.INSTALL) {
     void sidePanelController.openOptionsForSetup().catch(() => {});
@@ -122,7 +88,6 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 
 chrome.runtime.onStartup.addListener(async () => {
   initializeExtensionPermissions();
-  await setupUserAgentRule();
   await tabGroupManager.initialize();
   void connectBridge();
   void nativeHostManager.connect();
