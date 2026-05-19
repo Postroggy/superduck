@@ -1,24 +1,15 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import _ from 'lodash';
-import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GrowthBook, GrowthBookProvider } from '@growthbook/growthbook-react';
-import { FormattedMessage, useIntl } from 'react-intl';
-import loginSvg from '@/login.svg';
-import loginDarkSvg from '@/login_dark.svg';
 import {
-  StorageKeys,
-  apiClient,
-  type ExtensionUserProfile,
   FeatureProvider,
   getConfig,
   getOrCreateAnonymousId,
-  getStorageValue,
-  loginWithProvider,
   type ModelsConfigFeatureValue,
   useFeatureValue
 } from '@/extensionServices';
 import { IntlMessageLoaderProvider } from '@/index-react-dom-intl';
-import { Button } from '@/components/ui';
 
 const EXPIRED_DATE = 'Thu, 01 Jan 1970 00:00:01 GMT';
 const DARK_MEDIA_QUERY = '(prefers-color-scheme: dark)';
@@ -79,27 +70,6 @@ interface LocalStorageEnvelope<T> {
   value: T;
   tabId: string;
   timestamp: number;
-}
-
-function isExtensionUserProfile(value: unknown): value is ExtensionUserProfile {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'account' in value &&
-    'organization' in value &&
-    typeof value.account === 'object' &&
-    value.account !== null &&
-    typeof value.organization === 'object' &&
-    value.organization !== null &&
-    typeof (value.account as { uuid?: unknown }).uuid === 'string' &&
-    typeof (value.account as { email?: unknown }).email === 'string' &&
-    typeof (value.account as { has_claude_max?: unknown }).has_claude_max === 'boolean' &&
-    typeof (value.account as { has_claude_pro?: unknown }).has_claude_pro === 'boolean' &&
-    typeof (value.organization as { uuid?: unknown }).uuid === 'string' &&
-    typeof (value.organization as { organization_type?: unknown }).organization_type === 'string' &&
-    ((value.organization as { rate_limit_tier?: unknown }).rate_limit_tier === undefined ||
-      typeof (value.organization as { rate_limit_tier?: unknown }).rate_limit_tier === 'string')
-  );
 }
 
 function isLocalStorageEnvelope<T>(value: unknown): value is LocalStorageEnvelope<T> {
@@ -343,135 +313,11 @@ const LoadingSpinner: React.FC = () => (
 );
 
 const Spinner: React.FC = () => {
-  const intl = useIntl();
-  const [isLoading, setIsLoading] = useState(false);
-
   return (
     <div className="flex flex-col items-center">
-      <img
-        src={loginSvg}
-        alt={intl.formatMessage({ defaultMessage: 'Login', id: 'login' })}
-        className="dark:hidden"
-        style={{ width: 96, height: 96, marginBottom: 20 }}
-      />
-      <img
-        src={loginDarkSvg}
-        alt={intl.formatMessage({ defaultMessage: 'Login', id: 'login' })}
-        className="hidden dark:block"
-        style={{ width: 96, height: 96, marginBottom: 20 }}
-      />
-      <h2
-        className="text-text-100 text-center font-heading"
-        style={{ fontSize: 28, lineHeight: '130%' }}
-      >
-        <FormattedMessage defaultMessage="Log in" id="log_in" />
-      </h2>
-      <p className="font-base text-text-300 text-center mt-[11px]">
-        <FormattedMessage
-          defaultMessage="SuperDuck in Chrome is available to"
-          id="superduck_in_chrome_is_available_to"
-        />
-        <br />
-        <FormattedMessage
-          defaultMessage="all paid plan subscribers"
-          id="all_paid_plan_subscribers"
-        />
-      </p>
-      <Button
-        onClick={async () => {
-          setIsLoading(true);
-          try {
-            await loginWithProvider();
-          } finally {
-            setIsLoading(false);
-          }
-        }}
-        loading={isLoading}
-        className="mt-6"
-        size="lg"
-      >
-        <FormattedMessage defaultMessage="Log in" id="log_in" />
-      </Button>
+      <LoadingSpinner />
     </div>
   );
-};
-
-const useProfileQuery = (enabled = true) =>
-  useQuery<ExtensionUserProfile>({
-    queryKey: ['userProfile'],
-    queryFn: async () =>
-      apiClient.fetchJson('/api/oauth/profile', (value) => {
-        if (!isExtensionUserProfile(value)) {
-          throw new Error('Profile response has unexpected shape');
-        }
-        return value;
-      }),
-    enabled,
-    staleTime: 3e5,
-    gcTime: 6e5,
-    retry: (failureCount: number, error: Error) => {
-      if (error.message.includes('401')) return false;
-      if (error.message.includes('403')) return false;
-      return failureCount < 3;
-    }
-  });
-
-interface AuthContextValue {
-  userProfile: ExtensionUserProfile | null;
-  isLoading: boolean;
-  error: Error | null;
-  isAuthenticated: boolean;
-}
-
-const AuthContext = createContext<AuthContextValue | null>(null);
-
-const CurrentAccountProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [hasToken, setHasToken] = useState(false);
-  const [isCheckingToken, setIsCheckingToken] = useState(true);
-
-  useEffect(() => {
-    void (async () => {
-      try {
-        const token = await getStorageValue(StorageKeys.ACCESS_TOKEN);
-        setHasToken(!!token);
-      } catch {
-        setHasToken(false);
-      } finally {
-        setIsCheckingToken(false);
-      }
-    })();
-
-    const listener = (changes: Record<string, chrome.storage.StorageChange>) => {
-      if (StorageKeys.ACCESS_TOKEN in changes) {
-        const nextValue = changes[StorageKeys.ACCESS_TOKEN].newValue;
-        setHasToken(!!nextValue);
-      }
-    };
-
-    chrome.storage.onChanged.addListener(listener);
-    return () => chrome.storage.onChanged.removeListener(listener);
-  }, []);
-
-  const { data: userProfile, isLoading, error } = useProfileQuery(hasToken);
-
-  return (
-    <AuthContext.Provider
-      value={{
-        userProfile: userProfile ?? null,
-        isLoading: isCheckingToken || (hasToken && isLoading),
-        error,
-        isAuthenticated: hasToken && !!userProfile
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
-  );
-};
-
-const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used within a CurrentAccountProvider');
-  return context;
 };
 
 interface AnalyticsClient {
@@ -490,18 +336,6 @@ interface AnalyticsContextValue {
 const AnalyticsContext = createContext<AnalyticsContextValue | null>(null);
 const analyticsInstance: AnalyticsClient | null = null;
 let analyticsPromise: Promise<{ analytics: AnalyticsClient | null }> | null = null;
-
-const FeatureGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const isAuthenticated = (() => {
-    try {
-      return useAuth().isAuthenticated;
-    } catch {
-      return false;
-    }
-  })();
-
-  return isAuthenticated ? <>{children}</> : <LoadingSpinner />;
-};
 
 const AnalyticsProviderInner: React.FC<{ children: React.ReactNode; pageName: string }> = ({
   children,
@@ -525,21 +359,6 @@ const AnalyticsProviderInner: React.FC<{ children: React.ReactNode; pageName: st
   }
 
   const { analytics } = React.use(analyticsPromise);
-  const { userProfile, isAuthenticated, isLoading } = useAuth();
-
-  useEffect(() => {
-    if (isAuthenticated && userProfile && analytics) {
-      analytics.identify?.(userProfile.account.uuid, {
-        email: userProfile.account.email,
-        organizationID: userProfile.organization.uuid,
-        organizationUUID: userProfile.organization.uuid,
-        applicationSlug: 'claude-browser-use',
-        isMax: userProfile.account.has_claude_max,
-        isPro: userProfile.account.has_claude_pro,
-        orgType: userProfile.organization.organization_type
-      });
-    }
-  }, [analytics, isAuthenticated, userProfile]);
 
   useEffect(() => {
     analytics?.page?.('Extension', pageName);
@@ -559,21 +378,12 @@ const AnalyticsProviderInner: React.FC<{ children: React.ReactNode; pageName: st
 
   const contextValue = useMemo(() => ({ analytics, resetAnalytics }), [analytics, resetAnalytics]);
 
-  if (isLoading) return <LoadingSpinner />;
-  if (isAuthenticated) {
-    return (
-      <AnalyticsContext.Provider value={contextValue}>
-        <FeatureProvider>
-          <FeatureGate>{children}</FeatureGate>
-        </FeatureProvider>
-      </AnalyticsContext.Provider>
-    );
-  }
-
   return (
-    <div className="bg-bg-100 flex h-screen items-center justify-center">
-      <Spinner />
-    </div>
+    <AnalyticsContext.Provider value={contextValue}>
+      <FeatureProvider>
+        {children}
+      </FeatureProvider>
+    </AnalyticsContext.Provider>
   );
 };
 
@@ -610,9 +420,7 @@ const AppProvider: React.FC<{ children: React.ReactNode; pageName: string }> = (
       <GrowthBookProvider growthbook={growthbook}>
         <ThemeProvider initialTheme="superduck">
           <QueryClientProvider client={queryClient}>
-            <CurrentAccountProvider>
-              <AnalyticsProvider pageName={pageName}>{children}</AnalyticsProvider>
-            </CurrentAccountProvider>
+            <AnalyticsProvider pageName={pageName}>{children}</AnalyticsProvider>
           </QueryClientProvider>
         </ThemeProvider>
       </GrowthBookProvider>
@@ -627,10 +435,8 @@ function getModelsConfig(): ModelsConfigFeatureValue {
 export {
   AnalyticsContext,
   AppProvider,
-  AuthContext,
   CookiesContext,
   Spinner,
   getModelsConfig,
-  useAnalytics,
-  useAuth
+  useAnalytics
 };

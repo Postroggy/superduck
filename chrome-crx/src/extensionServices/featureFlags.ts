@@ -1,5 +1,4 @@
 import React from 'react';
-import { apiClient } from './apiClient';
 
 export interface FeatureFlagEntry<TValue = unknown> {
   on?: boolean;
@@ -285,12 +284,7 @@ export class FeatureFlagManager<TFeatures extends FeatureCollection = FeatureCol
 }
 
 async function fetchBootstrapFeatures(): Promise<FeatureResponse<KnownFeatureCollection>> {
-  return apiClient.fetchJson('/api/bootstrap/features/claude_in_chrome', (value) => {
-    if (!isFeatureResponse<KnownFeatureCollection>(value)) {
-      throw new Error('Feature response has unexpected shape');
-    }
-    return value;
-  });
+  return { features: {} as KnownFeatureCollection };
 }
 
 interface FeatureContextValue {

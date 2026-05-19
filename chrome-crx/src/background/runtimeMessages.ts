@@ -1,4 +1,3 @@
-import { clearAuthData } from "../extensionServices";
 import {
   clearStorageData,
   isBridgeConnected,
@@ -122,7 +121,6 @@ export function registerRuntimeMessageListener(deps: RuntimeMessageListenerDeps)
 
   async function handleLogout(sendResponse: RuntimeSendResponse) {
     try {
-      await clearAuthData();
       await tabGroupManager.clearAllGroups();
       await clearStorageData();
       sendResponse({ success: true });

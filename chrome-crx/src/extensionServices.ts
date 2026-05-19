@@ -1,14 +1,4 @@
 export { modulePreload, getConfig, StorageKeys, getStorageValue, setStorageValue, removeStorageValues } from './extensionServices/core';
-export {
-  validateAndRefreshToken,
-  getAccessToken,
-  getUserUUID,
-  getOrganizationId,
-  handleOAuthRedirect,
-  clearAuthData,
-  openOnboardingPage,
-  loginWithProvider
-} from './extensionServices/oauth';
 export { apiClient } from './extensionServices/apiClient';
 export {
   FeatureFlagManager,
@@ -28,9 +18,7 @@ export {
   useIsReady
 } from './extensionServices/featureFlags';
 export {
-  getOrCreateAnonymousId,
-  getProfileTraits,
-  type ExtensionUserProfile
+  getOrCreateAnonymousId
 } from './extensionServices/analytics';
 export {
   PermissionActionType,

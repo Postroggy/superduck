@@ -60,7 +60,6 @@ import {
   PromptService,
   type SavedPrompt as StoredSavedPrompt,
   type VersionInfoFeatureValue,
-  getAccessToken,
   getConfig,
   getPermissionActionText,
   getStorageValue,
@@ -182,7 +181,6 @@ import {
   parseRateLimitFromError,
   parseRateLimitHeaders,
   shouldUpdateMessageLimit,
-  type AccountEligibilityInfo,
   type MessageLimitBannerState,
   type MessageLimitState
 } from './messageLimits';
@@ -262,7 +260,7 @@ import {
   BrowserPermissionGate,
   CompactBanner,
   ModelFallbackCard,
-  OAuthGate,
+  SetupGate,
   PermissionPrompt,
   SAFE_USE_TIPS_URL,
   ScrollToBottomButton,
@@ -870,7 +868,6 @@ function UserMessageRow({
 
 interface UseLightningModeProps {
   apiKey: string | null;
-  authToken: string | null;
   modelRef: React.MutableRefObject<string>;
   tabId: number | null;
   sessionId: string | null;
@@ -885,7 +882,6 @@ interface UseLightningModeProps {
 
 function useLightningMode({
   apiKey,
-  authToken,
   modelRef,
   tabId,
   sessionId,
@@ -956,7 +952,7 @@ function useLightningMode({
 
   // Initialize client and load config from storage
   useEffect(() => {
-    if (!enabled || (!apiKey && !authToken)) return;
+    if (!enabled || !apiKey) return;
     (async () => {
       const storedConfig =
         (await getStorageValue<PurlConfigFeatureValue | null>(StorageKeys.PURL_CONFIG)) ||
@@ -983,15 +979,9 @@ function useLightningMode({
           apiKey,
           dangerouslyAllowBrowser: true
         });
-      } else if (authToken) {
-        clientRef.current = new MessagesClient({
-          baseURL: baseUrl,
-          authToken,
-          dangerouslyAllowBrowser: true
-        });
       }
     })();
-  }, [enabled, apiKey, authToken, purlConfigFeature]);
+  }, [enabled, apiKey, purlConfigFeature]);
 
   /** Build the system prompt — bundle's se callback */
   const buildSystemPrompt = useCallback(async () => {
@@ -1067,7 +1057,7 @@ function useLightningMode({
     async (params: LightningCreateApiMessageParams) => {
       if (!clientRef.current) throw new Error('Client not initialized');
       const fast = isFastModel();
-      const betas = ['oauth-2025-04-20'];
+      const betas = [];
       if (fast) betas.push('fast-mode-2026-02-01');
       const model = params.model || getEffectiveModel();
       const dispatched = await dispatchMessagesClient(getBaseModel(model), clientRef.current);
@@ -1287,7 +1277,6 @@ function useLightningMode({
               system: systemPrompt,
               ...(effort !== 'none' && { output_config: { effort } }),
               betas: [
-                'oauth-2025-04-20',
                 ...(effort !== 'none' ? ['effort-2025-11-24'] : []),
                 ...(fast ? ['fast-mode-2026-02-01'] : [])
               ],
@@ -4329,7 +4318,6 @@ export function SidepanelApp() {
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
   const [toolSchemas, setToolSchemas] = useState<ToolProviderSchema[]>([]);
   const [authLoading, setAuthLoading] = useState(true);
-  const [authToken, setAuthToken] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [apiBaseUrl, setApiBaseUrl] = useState(() => getConfig().apiBaseUrl);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -4353,10 +4341,6 @@ export function SidepanelApp() {
     messageId?: string;
   } | null>(null);
   const [tokensSaved, setTokensSaved] = useState<number | null>(null);
-  const [isEligible, setIsEligible] = useState(true);
-  const [isEligibilityLoading, setIsEligibilityLoading] = useState(false);
-  const [accountEligibilityInfo, setAccountEligibilityInfo] =
-    useState<AccountEligibilityInfo | null>(null);
   const [versionState, setVersionState] = useState({
     isBlocked: false,
     hasUpdate: false,
@@ -4567,16 +4551,14 @@ export function SidepanelApp() {
       remoteSessionId: string,
       conversationUuid?: string | null
     ): Promise<SessionSnapshot | undefined> => {
-      if (!authToken && !apiKey) return undefined;
+      if (!apiKey) return undefined;
       try {
         const headers: Record<string, string> = {
           'Content-Type': 'application/json',
           'anthropic-version': '2023-06-01',
           'anthropic-beta': 'ccr-byoc-2025-07-29'
         };
-        if (authToken) {
-          headers.Authorization = `Bearer ${authToken}`;
-        } else if (apiKey) {
+        if (apiKey) {
           headers['x-api-key'] = apiKey;
         }
 
@@ -4648,7 +4630,7 @@ export function SidepanelApp() {
         return undefined;
       }
     },
-    [apiBaseUrl, apiKey, authToken]
+    [apiBaseUrl, apiKey]
   );
 
   const pushMessage = useCallback((role: ChatRole, text: string) => {
@@ -4701,14 +4683,12 @@ export function SidepanelApp() {
   const refreshAuth = useCallback(async () => {
     setAuthLoading(true);
     try {
-      const [tokenResult, keyResult, storedCustomApiUrlResult, storedCustomApiKeyResult] =
+      const [keyResult, storedCustomApiUrlResult, storedCustomApiKeyResult] =
         await Promise.allSettled([
-          getAccessToken(),
           getStorageValue(StorageKeys.API_KEY, ''),
           getStorageValue(CUSTOM_API_URL_KEY, ''),
           getStorageValue(CUSTOM_API_KEY_KEY, '')
         ]);
-      const token = tokenResult.status === 'fulfilled' ? tokenResult.value : '';
       const key = keyResult.status === 'fulfilled' ? keyResult.value : '';
       const storedCustomApiUrl =
         storedCustomApiUrlResult.status === 'fulfilled' ? storedCustomApiUrlResult.value : '';
@@ -4727,12 +4707,10 @@ export function SidepanelApp() {
         (typeof key === 'string' ? key.trim() : '');
 
       setApiBaseUrl(resolvedApiBaseUrl);
-      setAuthToken(typeof token === 'string' ? token : '');
       setApiKey(resolvedApiKey);
       setAuthError(null);
     } catch (error) {
       setAuthError(getErrorMessage(error));
-      setAuthToken('');
       setApiKey('');
       setApiBaseUrl(getConfig().apiBaseUrl);
     } finally {
@@ -4748,9 +4726,6 @@ export function SidepanelApp() {
     ) => {
       if (areaName !== 'local') return;
       if (
-        StorageKeys.ACCESS_TOKEN in changes ||
-        StorageKeys.REFRESH_TOKEN in changes ||
-        StorageKeys.TOKEN_EXPIRY in changes ||
         StorageKeys.API_KEY in changes ||
         CUSTOM_API_URL_KEY in changes ||
         CUSTOM_API_KEY_KEY in changes
@@ -4925,73 +4900,6 @@ export function SidepanelApp() {
   }, [announcementConfig.id]);
 
   useEffect(() => {
-    let active = true;
-    (async () => {
-      // API key users are treated as eligible for sidepanel usage.
-      if (apiKey) {
-        if (active) {
-          setIsEligible(true);
-          setIsEligibilityLoading(false);
-          setAccountEligibilityInfo(null);
-        }
-        return;
-      }
-      if (!authToken) {
-        if (active) {
-          setIsEligible(true);
-          setIsEligibilityLoading(false);
-          setAccountEligibilityInfo(null);
-        }
-        return;
-      }
-
-      setIsEligibilityLoading(true);
-      try {
-        const response = await fetch(`${apiBaseUrl}/api/oauth/profile`, {
-          method: 'GET',
-          headers: {
-            Authorization: `Bearer ${authToken}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        if (!active) return;
-        if (!response.ok) {
-          setIsEligible(true);
-          return;
-        }
-        const data = await response.json();
-        const orgType = data?.organization?.organization_type;
-        const hasPro = data?.account?.has_claude_pro === true;
-        const hasMax = data?.account?.has_claude_max === true;
-        const rateLimitTier =
-          typeof data?.organization?.rate_limit_tier === 'string'
-            ? data.organization.rate_limit_tier
-            : '';
-        setAccountEligibilityInfo({
-          hasPro,
-          hasMax,
-          orgType: typeof orgType === 'string' ? orgType : '',
-          rateLimitTier
-        });
-        const isTeam = orgType === 'claude_team' || orgType === 'claude_enterprise';
-        setIsEligible(Boolean(hasPro || hasMax || isTeam));
-      } catch {
-        if (active) {
-          setIsEligible(true);
-          setAccountEligibilityInfo(null);
-        }
-      } finally {
-        if (active) {
-          setIsEligibilityLoading(false);
-        }
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, [apiBaseUrl, apiKey, authToken]);
-
-  useEffect(() => {
     const minSupportedVersion =
       typeof versionInfo.min_supported_version === 'string'
         ? versionInfo.min_supported_version
@@ -5007,13 +4915,13 @@ export function SidepanelApp() {
   }, [versionInfo]);
 
   const messagesClient = useMemo(() => {
-    if (!authToken && !apiKey) return null;
+    if (!apiKey) return null;
     return new MessagesClient({
       baseURL: apiBaseUrl,
       dangerouslyAllowBrowser: true,
-      ...(authToken ? { authToken } : { apiKey })
+      apiKey
     });
-  }, [apiBaseUrl, apiKey, authToken]);
+  }, [apiBaseUrl, apiKey]);
 
   // Fetch /v1/models once per (baseURL, credential) so we can use the gateway's
   // real context_length instead of the hard-coded 200k constant.
@@ -5112,13 +5020,12 @@ export function SidepanelApp() {
           ...rest,
           messages,
           max_tokens: effectiveMaxTokens,
-          model: dispatched.modelId,
-          ...(authToken ? { betas: ['oauth-2025-04-20'] } : {})
+          model: dispatched.modelId
         },
         undefined
       );
     },
-    [messagesClient, authToken, selectedModel, modelConfig]
+    [messagesClient, selectedModel, modelConfig]
   );
 
   // Keep the ref in sync so the stable wrapper always calls the latest version
@@ -5191,7 +5098,6 @@ export function SidepanelApp() {
   // --- Lightning (Quick/Purl) mode hook — bundle's inner function of HV ---
   const lightningResult = useLightningMode({
     apiKey,
-    authToken,
     modelRef: selectedModelRef,
     tabId: query.tabId ?? null,
     sessionId: activeSessionId,
@@ -5638,7 +5544,6 @@ export function SidepanelApp() {
                 {
                   model: dispatched.modelId,
                   max_tokens: MAX_TOKENS,
-                  ...(authToken ? { betas: ['oauth-2025-04-20'] } : {}),
                   system: systemPrompt,
                   messages: preparedMessages,
                   tools: preparedTools
@@ -6036,7 +5941,6 @@ export function SidepanelApp() {
     [
       messagesClient,
       apiMessages,
-      authToken,
       compactConversation,
       executeToolUse,
       notificationsEnabled,
@@ -6903,8 +6807,8 @@ export function SidepanelApp() {
     const hasAttachments = pendingAttachments.length > 0;
     const value = input.trim();
     if ((!value && !hasAttachments) || effectiveIsAgentRunning) return;
-    // Must have at least one auth method (matching compiled Yt guard: P || R)
-    if (!authToken && !apiKey) return;
+    // Must have an API key
+    if (!apiKey) return;
 
     let finalPrompt = value;
 
@@ -6945,7 +6849,7 @@ export function SidepanelApp() {
       attachments: attachmentsToSend,
       isAnnotated: attachmentsToSend.some((item) => item.isAnnotated)
     });
-  }, [input, pendingAttachments, effectiveSendPrompt, effectiveIsAgentRunning, authToken, apiKey]);
+  }, [input, pendingAttachments, effectiveSendPrompt, effectiveIsAgentRunning, apiKey]);
 
   const insertShortcutChip = useCallback((command: string, label?: string) => {
     void trackEvent('superduck.sidebar.shortcut_used', { command });
@@ -7413,8 +7317,8 @@ export function SidepanelApp() {
     : undefined;
   const announcementText = announcementConfig.text || '';
   const messageLimitBanner = useMemo(
-    () => getMessageLimitBannerState(messageLimit, selectedModel, accountEligibilityInfo),
-    [accountEligibilityInfo, messageLimit, selectedModel]
+    () => getMessageLimitBannerState(messageLimit, selectedModel),
+    [messageLimit, selectedModel]
   );
 
   const dismissAnnouncement = useCallback(async () => {
@@ -7453,9 +7357,6 @@ export function SidepanelApp() {
     if (lastStopReason?.reason === 'refusal' && fallbackConfig?.fallbackModelName) {
       return null;
     }
-    if (!isEligibilityLoading && !isEligible) {
-      return 'eligibility' as const;
-    }
     if (effectiveRuntimeError) return 'error' as const;
     if (lastStopReason?.reason === 'refusal' && !fallbackConfig?.fallbackModelName) {
       return 'refusal' as const;
@@ -7478,8 +7379,6 @@ export function SidepanelApp() {
     announcementDismissed,
     announcementText,
     fallbackConfig?.fallbackModelName,
-    isEligibilityLoading,
-    isEligible,
     lastStopReason?.reason,
     messageLimitBanner,
     messageLimitDismissed,
@@ -7594,7 +7493,7 @@ export function SidepanelApp() {
 
   if (!messagesClient) {
     return (
-      <OAuthGate
+      <SetupGate
         authError={authError}
         onRetry={refreshAuth}
         onOpenSettings={() => {
@@ -7899,26 +7798,6 @@ export function SidepanelApp() {
                     <div className="px-3 md:px-2">
                       <AnimatePresence mode="wait">
                         {(() => {
-                          if (activeBanner === 'eligibility') {
-                            return isEligible ? null : (
-                              <CompactBanner key="eligibility" type="info">
-                                <div className="flex justify-between items-center w-full">
-                                  <span>SuperDuck in Chrome requires a paid plan</span>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      chrome.tabs.create({
-                                        url: 'https://superduck-ai.github.io/superduck/'
-                                      });
-                                    }}
-                                    className="underline cursor-pointer text-text-100 opacity-90 hover:opacity-100"
-                                  >
-                                    Upgrade plan
-                                  </button>
-                                </div>
-                              </CompactBanner>
-                            );
-                          }
                           if (activeBanner === 'error') {
                             const isNetworkError =
                               effectiveRuntimeError?.toLowerCase().includes('connection error') ||

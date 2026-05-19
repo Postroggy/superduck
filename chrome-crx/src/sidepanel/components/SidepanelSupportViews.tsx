@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Bell, ChevronDown, X } from 'lucide-react';
+import { ChevronDown, X } from 'lucide-react';
 import { MemoizedFormattedMessage, useIntlSafe } from '@/index-react-dom-intl';
 import type { ScrollContainerHandle } from '@/sidepanel/ScrollContainer';
 
@@ -59,7 +59,7 @@ function BrowserPermissionGate({ onAccept }: { onAccept: () => Promise<void> }) 
   );
 }
 
-function OAuthGate({
+function SetupGate({
   authError,
   onRetry,
   onOpenSettings
@@ -461,7 +461,7 @@ export {
   BrowserPermissionGate,
   CompactBanner,
   ModelFallbackCard,
-  OAuthGate,
+  SetupGate,
   PermissionPrompt,
   SAFE_USE_TIPS_URL,
   ScrollToBottomButton,

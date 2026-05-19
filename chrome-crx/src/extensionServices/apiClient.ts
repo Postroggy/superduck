@@ -1,6 +1,5 @@
 import { getConfig } from './core';
 import { fetchEventSource, type FetchEventSourceOptions } from './eventSource';
-import { getAccessToken } from './oauth';
 
 export const apiClient = new (class {
   baseURL: string;
@@ -13,12 +12,8 @@ export const apiClient = new (class {
     path: string,
     options: Omit<RequestInit, 'headers'> & { headers?: Record<string, string> } = {}
   ): Promise<Response> {
-    const token = await getAccessToken();
-    if (!token) throw new Error('No valid OAuth token available');
-
     const url = `${this.baseURL}${path}`;
     const headers: Record<string, string> = {
-      Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
       'anthropic-client-platform': 'claude_browser_extension',
       ...(options.headers ?? {})
@@ -62,17 +57,11 @@ export const apiClient = new (class {
   }
 
   async fetchEventSource(path: string, options: FetchEventSourceOptions): Promise<() => void> {
-    const token = await getAccessToken();
-    if (!token) {
-      throw new Error('No valid OAuth token available for SSE stream');
-    }
-
     const url = `${this.baseURL}${path}`;
     const controller = new AbortController();
     await fetchEventSource(url, {
       ...options,
       headers: {
-        Authorization: `Bearer ${token}`,
         'anthropic-client-platform': 'claude_browser_extension',
         ...options.headers
       },
