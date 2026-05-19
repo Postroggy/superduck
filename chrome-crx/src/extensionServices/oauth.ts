@@ -30,15 +30,6 @@ interface TokenFailure {
 
 type TokenResult = TokenSuccess | TokenFailure;
 
-interface OAuthProfile {
-  account?: {
-    uuid?: string;
-  };
-  organization?: {
-    uuid?: string;
-  };
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
@@ -63,21 +54,6 @@ function parseTokenEndpointResponse(value: unknown): TokenEndpointResponse {
     error: getOptionalString(value.error),
     error_description: getOptionalString(value.error_description)
   };
-}
-
-function parseOAuthProfile(value: unknown): OAuthProfile | undefined {
-  if (!isRecord(value)) {
-    return undefined;
-  }
-
-  const account = isRecord(value.account)
-    ? { uuid: getOptionalString(value.account.uuid) }
-    : undefined;
-  const organization = isRecord(value.organization)
-    ? { uuid: getOptionalString(value.organization.uuid) }
-    : undefined;
-
-  return { account, organization };
 }
 
 function base64UrlEncode(bytes: Uint8Array): string {
@@ -199,37 +175,6 @@ export async function getAccessToken(): Promise<string | undefined> {
   return (await getStorageValue<string>(StorageKeys.ACCESS_TOKEN)) || undefined;
 }
 
-async function fetchProfile(): Promise<OAuthProfile | undefined> {
-  const token = await getAccessToken();
-  if (!token) return undefined;
-
-  try {
-    const config = getConfig();
-    const response = await fetch(`${config.apiBaseUrl}/api/oauth/profile`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    });
-    if (!response.ok) return undefined;
-    const responseBody: unknown = await response.json();
-    return parseOAuthProfile(responseBody);
-  } catch {
-    return undefined;
-  }
-}
-
-export async function getUserUUID(): Promise<string | undefined> {
-  const profile = await fetchProfile();
-  return profile?.account?.uuid;
-}
-
-export async function getOrganizationId(): Promise<string | undefined> {
-  const profile = await fetchProfile();
-  return profile?.organization?.uuid;
-}
-
 async function exchangeCodeForToken(
   code: string,
   state: string,
@@ -304,12 +249,7 @@ export async function handleOAuthRedirect(
 
     const codeVerifier = (await getStorageValue<string>(StorageKeys.CODE_VERIFIER)) || '';
     const config = getConfig();
-    const tokenResult = await exchangeCodeForToken(
-      code,
-      state || '',
-      codeVerifier,
-      config.oauth
-    );
+    const tokenResult = await exchangeCodeForToken(code, state || '', codeVerifier, config.oauth);
 
     if (tokenResult.success) {
       await saveTokens(tokenResult, state || undefined);
@@ -328,9 +268,7 @@ export async function handleOAuthRedirect(
     return {
       success: false,
       error:
-        err instanceof Error
-          ? err.message
-          : 'An unexpected error occurred during authentication'
+        err instanceof Error ? err.message : 'An unexpected error occurred during authentication'
     };
   }
 }
