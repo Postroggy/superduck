@@ -1,5 +1,4 @@
 import {
-  clearStorageData,
   isBridgeConnected,
   sendMcpNotificationViaBridge,
   tabGroupManager,
@@ -43,7 +42,6 @@ function getErrorMessage(error: unknown): string {
 const HANDLED_MESSAGE_TYPES = new Set([
   "PLAY_NOTIFICATION_SOUND",
   "open_side_panel",
-  "logout",
   "check_native_host_status",
   "SEND_MCP_NOTIFICATION",
   "OPEN_OPTIONS_WITH_TASK",
@@ -117,16 +115,6 @@ export function registerRuntimeMessageListener(deps: RuntimeMessageListenerDeps)
       conversationUuid: getOptionalString(message.conversationUuid),
     });
     sendResponse({ success: true });
-  }
-
-  async function handleLogout(sendResponse: RuntimeSendResponse) {
-    try {
-      await tabGroupManager.clearAllGroups();
-      await clearStorageData();
-      sendResponse({ success: true });
-    } catch {
-      sendResponse({ success: false });
-    }
   }
 
   async function handleNativeHostStatus(sendResponse: RuntimeSendResponse) {
@@ -235,11 +223,6 @@ export function registerRuntimeMessageListener(deps: RuntimeMessageListenerDeps)
 
       if (message.type === "open_side_panel") {
         await handleOpenSidePanel(message, sender, sendResponse);
-        return;
-      }
-
-      if (message.type === "logout") {
-        await handleLogout(sendResponse);
         return;
       }
 
