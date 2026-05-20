@@ -15,7 +15,7 @@ import {
 } from '../messageTypes';
 import { MessagesClient } from '../mcpServersStore';
 import { withTracing, PermissionManager as PermissionManagerClass } from '../PermissionManager';
-import { dispatchMessagesClient, clearDispatchClientCache } from '../utils/providerClient';
+import { dispatchMessagesClient, clearDispatchClientCache, resolveClientForTier } from '../utils/providerClient';
 import {
   PROVIDER_CONFIG_BROADCAST,
   PROVIDER_STORAGE_KEYS,
@@ -1029,13 +1029,24 @@ async function refreshMessagesClient(): Promise<MessagesClient | undefined> {
     lastApiBaseUrl = apiBaseUrl;
   }
   if (cachedMessagesClient) return cachedMessagesClient;
-  if (!apiKey || !apiBaseUrl) return undefined;
-  cachedMessagesClient = new MessagesClient({
-    baseURL: apiBaseUrl,
-    dangerouslyAllowBrowser: true,
-    apiKey
-  });
-  return cachedMessagesClient;
+  if (apiKey && apiBaseUrl) {
+    cachedMessagesClient = new MessagesClient({
+      baseURL: apiBaseUrl,
+      dangerouslyAllowBrowser: true,
+      apiKey
+    });
+    return cachedMessagesClient;
+  }
+  const resolved = await resolveClientForTier('smart');
+  if (resolved && resolved.provider.kind === 'anthropic') {
+    cachedMessagesClient = new MessagesClient({
+      baseURL: resolved.baseURL,
+      dangerouslyAllowBrowser: true,
+      apiKey: resolved.apiKey
+    });
+    return cachedMessagesClient;
+  }
+  return undefined;
 }
 
 // --- createErrorResponse (Cr) --- EXPORT

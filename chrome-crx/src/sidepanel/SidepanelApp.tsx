@@ -4727,7 +4727,7 @@ export function SidepanelApp() {
       const { resolveClientForTier } = await import('../utils/providerClient');
       const resolved = await resolveClientForTier('smart');
       if (cancelled) return;
-      if (resolved) {
+      if (resolved && resolved.provider.kind === 'anthropic') {
         setProviderClient(new MessagesClient({
           baseURL: resolved.baseURL,
           dangerouslyAllowBrowser: true,
@@ -6612,7 +6612,7 @@ export function SidepanelApp() {
     const value = input.trim();
     if ((!value && !hasAttachments) || effectiveIsAgentRunning) return;
     // Must have an API key
-    if (!apiKey) return;
+    if (!apiKey && !effectiveMessagesClient) return;
 
     let finalPrompt = value;
 
