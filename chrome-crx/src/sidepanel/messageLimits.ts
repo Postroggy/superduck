@@ -7,13 +7,6 @@ export interface MessageLimitState {
   overageDisabledReason?: string;
 }
 
-export interface AccountEligibilityInfo {
-  hasPro: boolean;
-  hasMax: boolean;
-  orgType: string;
-  rateLimitTier: string;
-}
-
 export interface MessageLimitBannerState {
   text: string;
   isBlocking: boolean;
@@ -278,8 +271,7 @@ function pickLimitWindow(messageLimit: MessageLimitState, currentModel: string) 
 
 export function getMessageLimitBannerState(
   messageLimit: MessageLimitState,
-  currentModel: string,
-  accountInfo: AccountEligibilityInfo | null
+  currentModel: string
 ): MessageLimitBannerState | null {
   if (messageLimit.type === 'within_limit') {
     return null;
@@ -312,43 +304,12 @@ export function getMessageLimitBannerState(
     (messageLimit.type === 'approaching_limit' && messageLimit.remaining === 0) ||
     isOverageBlocking;
 
-  const isTeamOrg =
-    accountInfo?.orgType === 'claude_team' || accountInfo?.orgType === 'claude_enterprise';
-  const isMax20x = accountInfo?.rateLimitTier === 'default_claude_max_20x';
-  const canUpgrade = !isTeamOrg && !isMax20x;
-  const upgradeUrl = accountInfo?.hasPro
-    ? 'https://superduck-ai.github.io/superduck/'
-    : 'https://superduck-ai.github.io/superduck/';
-  const upgradeLabel = accountInfo?.hasPro ? 'Subscribe to Max' : 'Upgrade';
-  const settingsUsageUrl = 'https://superduck-ai.github.io/superduck/';
-  const settingsBillingUrl = 'https://superduck-ai.github.io/superduck/';
-
   if (isOverageScenario) {
     if (isOverageBlocking) {
-      if (isTeamOrg) {
-        return {
-          text: 'Limit reached - contact an admin to keep working',
-          isBlocking: true,
-          dismissible: false,
-          tone: 'danger'
-        };
-      }
-      if (overageReason === 'out_of_credits') {
-        return {
-          text: 'Wallet empty',
-          isBlocking: true,
-          dismissible: false,
-          actionLabel: 'Add credits',
-          actionUrl: settingsBillingUrl,
-          tone: 'danger'
-        };
-      }
       return {
-        text: 'Spend limit reached',
+        text: 'Usage limit reached',
         isBlocking: true,
         dismissible: false,
-        actionLabel: 'Manage',
-        actionUrl: settingsUsageUrl,
         tone: 'danger'
       };
     }
@@ -378,27 +339,10 @@ export function getMessageLimitBannerState(
 
     const resetText = formatResetTime(reset, selectedWindowName || null);
     if (selectedWindowLabel) {
-      if (isTeamOrg) {
-        return {
-          text: `${selectedWindowLabel} limit resets ${resetText} - contact an admin to keep working`,
-          isBlocking: true,
-          dismissible: false,
-          tone: 'danger'
-        };
-      }
-
-      const canEnableOverages =
-        isMax20x &&
-        (overageReason === 'overage_not_provisioned' || overageReason === 'org_level_disabled');
       return {
         text: `${selectedWindowLabel} limit reached · resets ${resetText}`,
         isBlocking: true,
         dismissible: false,
-        ...(canEnableOverages
-          ? { actionLabel: 'Keep working', actionUrl: settingsUsageUrl }
-          : canUpgrade
-            ? { actionLabel: upgradeLabel, actionUrl: upgradeUrl }
-            : {}),
         tone: 'danger'
       };
     }
@@ -416,7 +360,6 @@ export function getMessageLimitBannerState(
       text: 'Approaching 5-hour limit',
       isBlocking: false,
       dismissible: true,
-      ...(canUpgrade ? { actionLabel: upgradeLabel, actionUrl: upgradeUrl } : {}),
       tone: 'warning'
     };
   }
@@ -425,7 +368,6 @@ export function getMessageLimitBannerState(
       text: 'Approaching weekly limit',
       isBlocking: false,
       dismissible: true,
-      ...(canUpgrade ? { actionLabel: upgradeLabel, actionUrl: upgradeUrl } : {}),
       tone: 'warning'
     };
   }

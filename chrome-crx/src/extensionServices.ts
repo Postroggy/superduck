@@ -1,36 +1,14 @@
 export { modulePreload, getConfig, StorageKeys, getStorageValue, setStorageValue, removeStorageValues } from './extensionServices/core';
+export type {
+  ModelFallbackConfig,
+  ModelOptionConfig,
+  ModelsConfigFeatureValue,
+  AnnouncementFeatureValue,
+  PurlConfigFeatureValue,
+  VersionInfoFeatureValue
+} from './extensionServices/featureFlagTypes';
 export {
-  validateAndRefreshToken,
-  getAccessToken,
-  getUserUUID,
-  getOrganizationId,
-  handleOAuthRedirect,
-  clearAuthData,
-  openOnboardingPage,
-  loginWithProvider
-} from './extensionServices/oauth';
-export { apiClient } from './extensionServices/apiClient';
-export {
-  FeatureFlagManager,
-  type FeatureCollection,
-  type FeatureFlagEntry,
-  FeatureProvider,
-  type KnownFeatureValueMap,
-  type ModelFallbackConfig,
-  type ModelOptionConfig,
-  type ModelsConfigFeatureValue,
-  type AnnouncementFeatureValue,
-  type PurlConfigFeatureValue,
-  type VersionInfoFeatureValue,
-  useFeatures,
-  useFeatureValue,
-  useFeatureEnabled,
-  useIsReady
-} from './extensionServices/featureFlags';
-export {
-  getOrCreateAnonymousId,
-  getProfileTraits,
-  type ExtensionUserProfile
+  getOrCreateAnonymousId
 } from './extensionServices/analytics';
 export {
   PermissionActionType,

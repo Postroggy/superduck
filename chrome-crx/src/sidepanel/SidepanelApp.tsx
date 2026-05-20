@@ -59,12 +59,9 @@ import {
   PromptService,
   type SavedPrompt as StoredSavedPrompt,
   type VersionInfoFeatureValue,
-  getAccessToken,
-  getConfig,
   getPermissionActionText,
   getStorageValue,
   setStorageValue,
-  useFeatureValue
 } from '../extensionServices';
 import { useStorageState } from '@/hooks/useStorageState';
 import { PermissionManager, withTracing, SpanStatusCode } from '../PermissionManager';
@@ -170,7 +167,7 @@ import {
   parseRateLimitFromError,
   parseRateLimitHeaders,
   shouldUpdateMessageLimit,
-  type AccountEligibilityInfo,
+  type MessageLimitBannerState,
   type MessageLimitState
 } from './messageLimits';
 import {
@@ -249,7 +246,7 @@ import {
   BrowserPermissionGate,
   CompactBanner,
   ModelFallbackCard,
-  OAuthGate,
+  SetupGate,
   PermissionPrompt,
   SAFE_USE_TIPS_URL,
   ScrollToBottomButton,
@@ -860,7 +857,6 @@ function UserMessageRow({
 
 interface UseLightningModeProps {
   apiKey: string | null;
-  authToken: string | null;
   modelRef: React.MutableRefObject<string>;
   tabId: number | null;
   sessionId: string | null;
@@ -875,7 +871,6 @@ interface UseLightningModeProps {
 
 function useLightningMode({
   apiKey,
-  authToken,
   modelRef,
   tabId,
   sessionId,
@@ -917,8 +912,8 @@ function useLightningMode({
   lnMessagesRef.current = lnMessages;
   const tabContextHashRef = useRef<string | null>(null);
 
-  const purlPromptFeature = useFeatureValue('chrome_ext_purl_prompt', '');
-  const purlConfigFeature = useFeatureValue('chrome_ext_purl_config', null);
+  const purlPromptFeature = '';
+  const purlConfigFeature = null;
   const modelsConfigRaw = getModelsConfig();
   const modelsConfigRef = useRef(modelsConfigRaw);
   modelsConfigRef.current = modelsConfigRaw;
@@ -946,7 +941,7 @@ function useLightningMode({
 
   // Initialize client and load config from storage
   useEffect(() => {
-    if (!enabled || (!apiKey && !authToken)) return;
+    if (!enabled || !apiKey) return;
     (async () => {
       const storedConfig =
         (await getStorageValue<PurlConfigFeatureValue | null>(StorageKeys.PURL_CONFIG)) ||
@@ -965,23 +960,16 @@ function useLightningMode({
       maxImageDimensionRef.current = merged.maxImageDimension ?? 1568;
       screenshotHistoryRef.current = merged.screenshotHistory ?? 1;
 
-      const cfg = getConfig();
-      const baseUrl = merged.apiBaseUrl || cfg.apiBaseUrl;
-      if (apiKey) {
+      const baseUrl = merged.apiBaseUrl || '';
+      if (apiKey && baseUrl) {
         clientRef.current = new MessagesClient({
           baseURL: baseUrl,
           apiKey,
           dangerouslyAllowBrowser: true
         });
-      } else if (authToken) {
-        clientRef.current = new MessagesClient({
-          baseURL: baseUrl,
-          authToken,
-          dangerouslyAllowBrowser: true
-        });
       }
     })();
-  }, [enabled, apiKey, authToken, purlConfigFeature]);
+  }, [enabled, apiKey, purlConfigFeature]);
 
   /** Build the system prompt — bundle's se callback */
   const buildSystemPrompt = useCallback(async () => {
@@ -1057,7 +1045,7 @@ function useLightningMode({
     async (params: LightningCreateApiMessageParams) => {
       if (!clientRef.current) throw new Error('Client not initialized');
       const fast = isFastModel();
-      const betas = ['oauth-2025-04-20'];
+      const betas = [];
       if (fast) betas.push('fast-mode-2026-02-01');
       const model = params.model || getEffectiveModel();
       const dispatched = await dispatchMessagesClient(getBaseModel(model), clientRef.current);
@@ -1276,7 +1264,6 @@ function useLightningMode({
               system: systemPrompt,
               ...(effort !== 'none' && { output_config: { effort } }),
               betas: [
-                'oauth-2025-04-20',
                 ...(effort !== 'none' ? ['effort-2025-11-24'] : []),
                 ...(fast ? ['fast-mode-2026-02-01'] : [])
               ],
@@ -2395,174 +2382,6 @@ function PlanApprovalModal({
   return modalContent;
 }
 
-// ─── PlanCard — bundle's jy component ───
-function _PlanCard({
-  plan,
-  isStreaming = false,
-  toolResult
-}: {
-  plan: PlanStructure;
-  isStreaming?: boolean;
-  toolResult?: ApiToolResultBlock;
-}) {
-  const [showModal, setShowModal] = useState(false);
-
-  const status = toolResult
-    ? toolResult.is_error ||
-      (typeof toolResult.content === 'string' && toolResult.content.includes('Plan rejected'))
-      ? 'rejected'
-      : 'approved'
-    : undefined;
-
-  const isComplete = !!toolResult && !isStreaming;
-
-  return (
-    <>
-      <div
-        onClick={() => {
-          if (isComplete) setShowModal(true);
-        }}
-        className={
-          'flex text-left rounded-lg overflow-hidden border-[0.5px] border-border-300 transition duration-300 w-full hover:bg-bg-000/50 px-4 mt-4 mb-3 ' +
-          (isComplete ? 'cursor-pointer hover:border-border-200' : '')
-        }
-      >
-        <div className="group/artifact-block flex flex-1 align-start justify-between w-full">
-          <div className="flex flex-col gap-1 py-4 min-w-0 flex-1">
-            {/* Title */}
-            <div
-              className={
-                'font-base leading-tight line-clamp-1 ' +
-                (isStreaming && plan.approach.length === 0 ? 'text-text-500' : 'text-text-200')
-              }
-            >
-              {isStreaming && plan.approach.length === 0 ? (
-                <span className="animate-pulse">Drafting plan...</span>
-              ) : (
-                'Plan'
-              )}
-            </div>
-            {/* Status */}
-            <div className="font-small line-clamp-1 text-text-400">
-              {status ? (
-                status === 'approved' ? (
-                  'Approved'
-                ) : (
-                  'Rejected'
-                )
-              ) : isStreaming ? (
-                <span className="animate-pulse">Planning</span>
-              ) : (
-                'Browser automation'
-              )}
-            </div>
-          </div>
-          {/* Mini preview card */}
-          <div className="flex items-end w-[100px] relative shrink-0">
-            <div className="absolute right-2 flex flex-1 overflow-hidden w-[84px] h-[71px] rounded-t-lg border-[0.5px] border-border-200 select-none scale-[1] group-hover/artifact-block:scale-[1.035] rotate-[0.1rad] group-hover/artifact-block:rotate-[0.065rad] duration-300 ease-out group-hover/artifact-block:duration-400 group-hover/artifact-block:ease-[cubic-bezier(0,0.9,0.5,1.35)] transition-transform backface-hidden will-change-transform translate-y-[19%] bg-bg-000 text-text-500 whitespace-pre-wrap text-[0.35rem] leading-tight p-2 font-mono wrap-break-word hyphens-auto">
-              {plan.approach.length > 0 ? plan.approach.slice(0, 3).join('\n') : ''}
-            </div>
-          </div>
-        </div>
-      </div>
-      {isComplete && showModal && (
-        <PlanApprovalModal
-          planStructure={plan}
-          onApprove={() => {}}
-          onReject={() => {}}
-          isReadOnly
-          onClose={() => setShowModal(false)}
-        />
-      )}
-    </>
-  );
-}
-
-// ─── PlanDisplay — bundle's Qy component ───
-function _PlanDisplay({
-  plan,
-  isCollapsible = false,
-  defaultCollapsed = false,
-  showHeader = true
-}: {
-  plan: PlanStructure;
-  isCollapsible?: boolean;
-  defaultCollapsed?: boolean;
-  showHeader?: boolean;
-}) {
-  const [collapsed, setCollapsed] = useState(defaultCollapsed);
-
-  const domains = ensureArray(plan.domains, 'domains');
-  const approach = ensureArray(plan.approach, 'approach');
-
-  const content = (
-    <div className="space-y-3">
-      {domains.length > 0 && (
-        <div>
-          <h4
-            className="font-small text-text-400 mb-2"
-            style={{ fontFamily: 'var(--font-ui-serif)', fontSize: '0.75rem', fontWeight: 430 }}
-          >
-            Visit these sites
-          </h4>
-          <div className="border-[0.5px] border-border-300 rounded-xl px-3 py-2 space-y-1.5">
-            {domains.map((d, i) => (
-              <div key={i} className="font-base text-text-100">
-                {getDomainDisplayName(d)}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      {approach.length > 0 && (
-        <div>
-          <h4
-            className="font-small text-text-400 mb-2"
-            style={{ fontFamily: 'var(--font-ui-serif)', fontSize: '0.75rem', fontWeight: 430 }}
-          >
-            Follow this approach
-          </h4>
-          <div className="border-[0.5px] border-border-300 rounded-xl px-3 py-2 space-y-2">
-            {approach.map((step, i) => (
-              <div key={i} className="flex gap-2 font-base text-text-100">
-                <span className="text-text-100" aria-hidden="true">
-                  •
-                </span>
-                <span className="flex-1">{step}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-
-  if (isCollapsible) {
-    return (
-      <div className="space-y-3">
-        {showHeader && (
-          <button
-            onClick={() => setCollapsed(!collapsed)}
-            className="flex items-center gap-2 w-full text-left group"
-          >
-            <ListChecks size={16} className="text-text-300" />
-            <ChevronDown
-              size={14}
-              className={'text-text-400 transition-transform' + (collapsed ? ' -rotate-90' : '')}
-            />
-            <span className="font-base-bold text-text-200 group-hover:text-text-100">
-              Follow the plan
-            </span>
-          </button>
-        )}
-        {!collapsed && content}
-      </div>
-    );
-  }
-
-  return <div className="space-y-3">{content}</div>;
-}
-
 // ─── UpdatePlanCell — bundle's ov component (full version with portal and modal) ───
 const UpdatePlanCell = React.memo(function UpdatePlanCell({
   input,
@@ -3024,43 +2843,6 @@ function ToolUseItem({
 /** Checks if a block should be grouped in a timeline (tool_use or tool_result) */
 function isTimelineBlock(block: ApiMessageBlock): block is ApiToolUseBlock | ApiToolResultBlock {
   return isToolUseContentBlock(block) || isToolResultContentBlock(block);
-}
-
-/** Groups consecutive tool blocks, matching bundle's grouping algorithm in cv */
-function _groupBlocks(blocks: ApiMessageBlock[]): GroupedContentBlock[] {
-  const result: GroupedContentBlock[] = [];
-  const visited = new Set<number>();
-
-  blocks.forEach((block, i) => {
-    if (visited.has(i)) return;
-
-    if (isTimelineBlock(block)) {
-      const group = {
-        items: [{ block, index: i, renderable: block.type !== 'tool_result' }],
-        startIndex: i,
-        isLastBlockOfMessage: false
-      };
-
-      for (let j = i + 1; j < blocks.length; j++) {
-        const next = blocks[j];
-        if (!isTimelineBlock(next)) break;
-        group.items.push({ block: next, index: j, renderable: next.type !== 'tool_result' });
-        visited.add(j);
-        if (j === blocks.length - 1) group.isLastBlockOfMessage = true;
-      }
-
-      const renderableItems = group.items.filter((item) => item.renderable);
-      if (renderableItems.length === 0) {
-        result.push({ type: 'single', content: block, index: i });
-      } else {
-        result.push({ type: 'group', content: group, index: i });
-      }
-    } else {
-      result.push({ type: 'single', content: block, index: i });
-    }
-  });
-
-  return result;
 }
 
 /** ContentBlocksRenderer — bundle's cv component.
@@ -4206,12 +3988,11 @@ export function SidepanelApp() {
 
   const query = useQueryState();
 
-  // CRITICAL FIX: Stabilize feature values to prevent infinite re-renders
-  // useFeatureValue returns a new object {} on every call, causing infinite loops
-  const versionInfoRaw = useFeatureValue('chrome_ext_version_info', null);
-  const modelConfigRaw = useFeatureValue('chrome_ext_models', null);
-  const announcementConfigRaw = useFeatureValue('chrome_ext_announcement', null);
-  const purlModeFeatureEnabled = useFeatureValue('chrome_ext_flash_enabled', false);
+  // Feature flags removed — all values are defaults (empty)
+  const versionInfoRaw = null;
+  const modelConfigRaw = null;
+  const announcementConfigRaw = null;
+  const purlModeFeatureEnabled = false;
 
   const versionInfo = useMemo<VersionInfoFeatureValue>(
     () => versionInfoRaw || {},
@@ -4317,9 +4098,8 @@ export function SidepanelApp() {
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
   const [toolSchemas, setToolSchemas] = useState<ToolProviderSchema[]>([]);
   const [authLoading, setAuthLoading] = useState(true);
-  const [authToken, setAuthToken] = useState('');
   const [apiKey, setApiKey] = useState('');
-  const [apiBaseUrl, setApiBaseUrl] = useState(() => getConfig().apiBaseUrl);
+  const [apiBaseUrl, setApiBaseUrl] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
   const [notificationsEnabled, setNotificationsEnabled] =
     useState<NotificationPreference>(undefined);
@@ -4340,11 +4120,7 @@ export function SidepanelApp() {
     reason: string;
     messageId?: string;
   } | null>(null);
-  const [_tokensSaved, setTokensSaved] = useState<number | null>(null);
-  const [isEligible, setIsEligible] = useState(true);
-  const [isEligibilityLoading, setIsEligibilityLoading] = useState(false);
-  const [accountEligibilityInfo, setAccountEligibilityInfo] =
-    useState<AccountEligibilityInfo | null>(null);
+  const [tokensSaved, setTokensSaved] = useState<number | null>(null);
   const [versionState, setVersionState] = useState({
     isBlocked: false,
     hasUpdate: false,
@@ -4555,16 +4331,14 @@ export function SidepanelApp() {
       remoteSessionId: string,
       conversationUuid?: string | null
     ): Promise<SessionSnapshot | undefined> => {
-      if (!authToken && !apiKey) return undefined;
+      if (!apiKey) return undefined;
       try {
         const headers: Record<string, string> = {
           'Content-Type': 'application/json',
           'anthropic-version': '2023-06-01',
           'anthropic-beta': 'ccr-byoc-2025-07-29'
         };
-        if (authToken) {
-          headers.Authorization = `Bearer ${authToken}`;
-        } else if (apiKey) {
+        if (apiKey) {
           headers['x-api-key'] = apiKey;
         }
 
@@ -4636,7 +4410,7 @@ export function SidepanelApp() {
         return undefined;
       }
     },
-    [apiBaseUrl, apiKey, authToken]
+    [apiBaseUrl, apiKey]
   );
 
   const pushMessage = useCallback((role: ChatRole, text: string) => {
@@ -4689,14 +4463,12 @@ export function SidepanelApp() {
   const refreshAuth = useCallback(async () => {
     setAuthLoading(true);
     try {
-      const [tokenResult, keyResult, storedCustomApiUrlResult, storedCustomApiKeyResult] =
+      const [keyResult, storedCustomApiUrlResult, storedCustomApiKeyResult] =
         await Promise.allSettled([
-          getAccessToken(),
           getStorageValue(StorageKeys.API_KEY, ''),
           getStorageValue(CUSTOM_API_URL_KEY, ''),
           getStorageValue(CUSTOM_API_KEY_KEY, '')
         ]);
-      const token = tokenResult.status === 'fulfilled' ? tokenResult.value : '';
       const key = keyResult.status === 'fulfilled' ? keyResult.value : '';
       const storedCustomApiUrl =
         storedCustomApiUrlResult.status === 'fulfilled' ? storedCustomApiUrlResult.value : '';
@@ -4708,21 +4480,19 @@ export function SidepanelApp() {
             ? storedCustomApiUrl
             : String(storedCustomApiUrl || '')
         ) || '';
-      const resolvedApiBaseUrl = query.apiUrl || normalizedStoredApiUrl || getConfig().apiBaseUrl;
+      const resolvedApiBaseUrl = query.apiUrl || normalizedStoredApiUrl || '';
       const resolvedApiKey =
         query.apiKey ||
         (typeof storedCustomApiKey === 'string' ? storedCustomApiKey.trim() : '') ||
         (typeof key === 'string' ? key.trim() : '');
 
       setApiBaseUrl(resolvedApiBaseUrl);
-      setAuthToken(typeof token === 'string' ? token : '');
       setApiKey(resolvedApiKey);
       setAuthError(null);
     } catch (error) {
       setAuthError(getErrorMessage(error));
-      setAuthToken('');
       setApiKey('');
-      setApiBaseUrl(getConfig().apiBaseUrl);
+      setApiBaseUrl('');
     } finally {
       setAuthLoading(false);
     }
@@ -4736,9 +4506,6 @@ export function SidepanelApp() {
     ) => {
       if (areaName !== 'local') return;
       if (
-        StorageKeys.ACCESS_TOKEN in changes ||
-        StorageKeys.REFRESH_TOKEN in changes ||
-        StorageKeys.TOKEN_EXPIRY in changes ||
         StorageKeys.API_KEY in changes ||
         CUSTOM_API_URL_KEY in changes ||
         CUSTOM_API_KEY_KEY in changes
@@ -4913,73 +4680,6 @@ export function SidepanelApp() {
   }, [announcementConfig.id]);
 
   useEffect(() => {
-    let active = true;
-    (async () => {
-      // API key users are treated as eligible for sidepanel usage.
-      if (apiKey) {
-        if (active) {
-          setIsEligible(true);
-          setIsEligibilityLoading(false);
-          setAccountEligibilityInfo(null);
-        }
-        return;
-      }
-      if (!authToken) {
-        if (active) {
-          setIsEligible(true);
-          setIsEligibilityLoading(false);
-          setAccountEligibilityInfo(null);
-        }
-        return;
-      }
-
-      setIsEligibilityLoading(true);
-      try {
-        const response = await fetch(`${apiBaseUrl}/api/oauth/profile`, {
-          method: 'GET',
-          headers: {
-            Authorization: `Bearer ${authToken}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        if (!active) return;
-        if (!response.ok) {
-          setIsEligible(true);
-          return;
-        }
-        const data = await response.json();
-        const orgType = data?.organization?.organization_type;
-        const hasPro = data?.account?.has_claude_pro === true;
-        const hasMax = data?.account?.has_claude_max === true;
-        const rateLimitTier =
-          typeof data?.organization?.rate_limit_tier === 'string'
-            ? data.organization.rate_limit_tier
-            : '';
-        setAccountEligibilityInfo({
-          hasPro,
-          hasMax,
-          orgType: typeof orgType === 'string' ? orgType : '',
-          rateLimitTier
-        });
-        const isTeam = orgType === 'claude_team' || orgType === 'claude_enterprise';
-        setIsEligible(Boolean(hasPro || hasMax || isTeam));
-      } catch {
-        if (active) {
-          setIsEligible(true);
-          setAccountEligibilityInfo(null);
-        }
-      } finally {
-        if (active) {
-          setIsEligibilityLoading(false);
-        }
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, [apiBaseUrl, apiKey, authToken]);
-
-  useEffect(() => {
     const minSupportedVersion =
       typeof versionInfo.min_supported_version === 'string'
         ? versionInfo.min_supported_version
@@ -4994,14 +4694,44 @@ export function SidepanelApp() {
     }));
   }, [versionInfo]);
 
+  const [providerClient, setProviderClient] = useState<InstanceType<typeof MessagesClient> | null>(null);
+  const [hasProviderConfig, setHasProviderConfig] = useState(false);
+
   const messagesClient = useMemo(() => {
-    if (!authToken && !apiKey) return null;
+    if (!apiKey || !apiBaseUrl) return null;
     return new MessagesClient({
       baseURL: apiBaseUrl,
       dangerouslyAllowBrowser: true,
-      ...(authToken ? { authToken } : { apiKey })
+      apiKey
     });
-  }, [apiBaseUrl, apiKey, authToken]);
+  }, [apiBaseUrl, apiKey]);
+
+  useEffect(() => {
+    if (messagesClient) {
+      setProviderClient(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { resolveClientForTier } = await import('../utils/providerClient');
+      const resolved = await resolveClientForTier('smart');
+      if (cancelled) return;
+      if (resolved) {
+        setHasProviderConfig(true);
+        setProviderClient(new MessagesClient({
+          baseURL: resolved.baseURL,
+          dangerouslyAllowBrowser: true,
+          apiKey: resolved.apiKey
+        }));
+      } else {
+        setHasProviderConfig(false);
+        setProviderClient(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [messagesClient, apiKey, apiBaseUrl]);
+
+  const effectiveMessagesClient = messagesClient || providerClient;
 
   // Fetch /v1/models once per (baseURL, credential) so we can use the gateway's
   // real context_length instead of the hard-coded 200k constant.
@@ -5011,11 +4741,11 @@ export function SidepanelApp() {
   } | null>(null);
   const serverContextLengthRef = useRef<number>(CONTEXT_WINDOW);
   useEffect(() => {
-    if (!messagesClient) return;
+    if (!effectiveMessagesClient) return;
     const ctrl = new AbortController();
     (async () => {
       try {
-        const modelsApi = 'models' in messagesClient ? messagesClient.models : null;
+        const modelsApi = 'models' in effectiveMessagesClient ? effectiveMessagesClient.models : null;
         if (!isRecord(modelsApi) || typeof modelsApi.list !== 'function') return;
         const page = await modelsApi.list({}, { signal: ctrl.signal });
         if (!isRecord(page) || !Array.isArray(page.data)) return;
@@ -5033,7 +4763,7 @@ export function SidepanelApp() {
       }
     })();
     return () => ctrl.abort();
-  }, [messagesClient]);
+  }, [effectiveMessagesClient]);
 
   const systemPrompt = useMemo(() => {
     const isMac = navigator.platform.toUpperCase().includes('MAC');
@@ -5064,7 +4794,7 @@ export function SidepanelApp() {
 
   const createApiMessage = useCallback(
     async (params: CreateApiMessageParams, _parentSpan?: unknown, _spanName?: string) => {
-      if (!messagesClient) throw new Error('Client not initialized');
+      if (!effectiveMessagesClient) throw new Error('Client not initialized');
 
       // Destructure fields that need special handling (matching compiled Ze)
       const {
@@ -5087,8 +4817,8 @@ export function SidepanelApp() {
         resolvedModel = modelConfig.small_fast_model || 'claude-haiku-4-5-20251001';
       }
 
-      // Dispatch to per-tier provider (falls back to messagesClient).
-      const dispatched = await dispatchMessagesClient(resolvedModel, messagesClient);
+      // Dispatch to per-tier provider (falls back to effectiveMessagesClient).
+      const dispatched = await dispatchMessagesClient(resolvedModel, effectiveMessagesClient);
 
       // Resolve [[shortcut:id:name]] markers in messages (matching compiled mi)
       const messages = rawMessages
@@ -5100,13 +4830,12 @@ export function SidepanelApp() {
           ...rest,
           messages,
           max_tokens: effectiveMaxTokens,
-          model: dispatched.modelId,
-          ...(authToken ? { betas: ['oauth-2025-04-20'] } : {})
+          model: dispatched.modelId
         },
         undefined
       );
     },
-    [messagesClient, authToken, selectedModel, modelConfig]
+    [effectiveMessagesClient, selectedModel, modelConfig]
   );
 
   // Keep the ref in sync so the stable wrapper always calls the latest version
@@ -5176,7 +4905,6 @@ export function SidepanelApp() {
   // --- Lightning (Quick/Purl) mode hook — bundle's inner function of HV ---
   const lightningResult = useLightningMode({
     apiKey,
-    authToken,
     modelRef: selectedModelRef,
     tabId: query.tabId ?? null,
     sessionId: activeSessionId,
@@ -5215,7 +4943,7 @@ export function SidepanelApp() {
           tabId: query.tabId,
           permissionMode: permissionModeRef.current,
           toolUseId: toolUse.id,
-          messagesClient,
+          messagesClient: effectiveMessagesClient,
           onPermissionRequired: async (permissionData: unknown, _permTabId: number) => {
             if (!isPermissionPromptData(permissionData)) return false;
             return onPermissionRequired(permissionData);
@@ -5245,7 +4973,7 @@ export function SidepanelApp() {
         };
       }
     },
-    [permissionMode, query.tabId, onPermissionRequired, messagesClient]
+    [permissionMode, query.tabId, onPermissionRequired, effectiveMessagesClient]
   );
 
   const compactConversation = useCallback(
@@ -5403,8 +5131,8 @@ export function SidepanelApp() {
       const trimmed = text.trim();
       const attachments = options?.attachments ?? [];
       if (!trimmed && attachments.length === 0) return;
-      if (!messagesClient) {
-        setRuntimeError('Not authenticated. Please sign in first.');
+      if (!effectiveMessagesClient) {
+        setRuntimeError('API not configured. Please set up your provider in Settings.');
         return;
       }
 
@@ -5599,17 +5327,16 @@ export function SidepanelApp() {
                 );
               }
 
-              // Dispatch to per-tier provider (falls back to messagesClient).
+              // Dispatch to per-tier provider (falls back to effectiveMessagesClient).
               const dispatched = await dispatchMessagesClient(
                 selectedModel || DEFAULT_MODEL,
-                messagesClient
+                effectiveMessagesClient
               );
 
               const stream = dispatched.runtime.stream(
                 {
                   model: dispatched.modelId,
                   max_tokens: MAX_TOKENS,
-                  ...(authToken ? { betas: ['oauth-2025-04-20'] } : {}),
                   system: systemPrompt,
                   messages: preparedMessages,
                   tools: preparedTools
@@ -6009,9 +5736,8 @@ export function SidepanelApp() {
       }
     },
     [
-      messagesClient,
+      effectiveMessagesClient,
       apiMessages,
-      authToken,
       compactConversation,
       executeToolUse,
       notificationsEnabled,
@@ -6052,9 +5778,6 @@ export function SidepanelApp() {
       source: isPurlMode && lightningResult?.error ? 'chat' : 'runtime'
     });
   }, [effectiveRuntimeError, isPurlMode, lightningResult?.error]);
-  const effectiveSetMessages =
-    isPurlMode && lightningResult ? lightningResult.setMessages : setMessages;
-  const effectiveHasInteractiveTools = isPurlMode && lightningResult ? false : hasInteractiveTools;
 
   // Route sendPrompt: in lightning mode, delegate to lightningResult.sendMessage
   const effectiveSendPrompt = useCallback(
@@ -6083,18 +5806,6 @@ export function SidepanelApp() {
       tabGroupManager.setTabIndicatorState(query.tabId, 'none').catch(() => {});
     }
   }, [isPurlMode, lightningResult, query.tabId]);
-
-  const effectiveClearMessages = useCallback(async () => {
-    if (isPurlMode && lightningResult) {
-      await lightningResult.clearMessages();
-    }
-    // Always clear normal mode state too
-    setMessages([]);
-    setApiMessages([]);
-    setMessageHistory([]);
-    setRuntimeError(null);
-    setCurrentStatus('');
-  }, [isPurlMode, lightningResult]);
 
   const effectiveClearError = useCallback(() => {
     if (isPurlMode && lightningResult) {
@@ -6877,8 +6588,8 @@ export function SidepanelApp() {
     const hasAttachments = pendingAttachments.length > 0;
     const value = input.trim();
     if ((!value && !hasAttachments) || effectiveIsAgentRunning) return;
-    // Must have at least one auth method (matching compiled Yt guard: P || R)
-    if (!authToken && !apiKey) return;
+    // Must have an API key
+    if (!apiKey && !effectiveMessagesClient) return;
 
     let finalPrompt = value;
 
@@ -6920,7 +6631,7 @@ export function SidepanelApp() {
       attachments: attachmentsToSend,
       isAnnotated: attachmentsToSend.some((item) => item.isAnnotated)
     });
-  }, [input, pendingAttachments, effectiveSendPrompt, effectiveIsAgentRunning, authToken, apiKey]);
+  }, [input, pendingAttachments, effectiveSendPrompt, effectiveIsAgentRunning, apiKey]);
 
   const insertShortcutChip = useCallback((command: string, label?: string) => {
     void trackEvent('superduck.sidebar.shortcut_used', { command });
@@ -7405,8 +7116,8 @@ export function SidepanelApp() {
   const fallbackConfig = selectedModel ? modelConfig.modelFallbacks?.[selectedModel] : undefined;
   const announcementText = announcementConfig.text || '';
   const messageLimitBanner = useMemo(
-    () => getMessageLimitBannerState(messageLimit, selectedModel, accountEligibilityInfo),
-    [accountEligibilityInfo, messageLimit, selectedModel]
+    () => getMessageLimitBannerState(messageLimit, selectedModel),
+    [messageLimit, selectedModel]
   );
 
   const dismissAnnouncement = useCallback(async () => {
@@ -7445,9 +7156,6 @@ export function SidepanelApp() {
     if (lastStopReason?.reason === 'refusal' && fallbackConfig?.fallbackModelName) {
       return null;
     }
-    if (!isEligibilityLoading && !isEligible) {
-      return 'eligibility' as const;
-    }
     if (effectiveRuntimeError) return 'error' as const;
     if (lastStopReason?.reason === 'refusal' && !fallbackConfig?.fallbackModelName) {
       return 'refusal' as const;
@@ -7470,8 +7178,6 @@ export function SidepanelApp() {
     announcementDismissed,
     announcementText,
     fallbackConfig?.fallbackModelName,
-    isEligibilityLoading,
-    isEligible,
     lastStopReason?.reason,
     messageLimitBanner,
     messageLimitDismissed,
@@ -7584,9 +7290,9 @@ export function SidepanelApp() {
     );
   }
 
-  if (!messagesClient) {
+  if (!effectiveMessagesClient && !hasProviderConfig) {
     return (
-      <OAuthGate
+      <SetupGate
         authError={authError}
         onRetry={refreshAuth}
         onOpenSettings={() => {
@@ -7891,26 +7597,6 @@ export function SidepanelApp() {
                     <div className="px-3 md:px-2">
                       <AnimatePresence mode="wait">
                         {(() => {
-                          if (activeBanner === 'eligibility') {
-                            return isEligible ? null : (
-                              <CompactBanner key="eligibility" type="info">
-                                <div className="flex justify-between items-center w-full">
-                                  <span>SuperDuck in Chrome requires a paid plan</span>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      chrome.tabs.create({
-                                        url: 'https://superduck-ai.github.io/superduck/'
-                                      });
-                                    }}
-                                    className="underline cursor-pointer text-text-100 opacity-90 hover:opacity-100"
-                                  >
-                                    Upgrade plan
-                                  </button>
-                                </div>
-                              </CompactBanner>
-                            );
-                          }
                           if (activeBanner === 'error') {
                             const isNetworkError =
                               effectiveRuntimeError?.toLowerCase().includes('connection error') ||

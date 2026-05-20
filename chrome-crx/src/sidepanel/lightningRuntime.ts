@@ -1,5 +1,5 @@
 import type React from 'react';
-import type { ModelsConfigFeatureValue, ModelOptionConfig } from '../extensionServices/featureFlags';
+import type { ModelsConfigFeatureValue, ModelOptionConfig } from '../extensionServices';
 import type { ApiConversationMessage } from '../messageTypes';
 import { isRecord } from '../messageTypes';
 import { formatTabsOutput, tabGroupManager } from '../mcpRuntime';

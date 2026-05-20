@@ -4,7 +4,6 @@ import {
   StorageKeys,
   getStorageValue,
   setStorageValue,
-  useFeatureValue,
 } from "../extensionServices";
 import { useTabEvent } from "./hooks";
 import { HandwritingAnimation } from "./HandwritingAnimation";
@@ -186,7 +185,7 @@ export function EmptyState({ tabId, onPromptClick }: EmptyStateProps) {
   const intl = useIntl();
   const [currentUrl, setCurrentUrl] = useState("");
   const [isPinned, setIsPinned] = useState<boolean | null>(null);
-  const crochetChips = useFeatureValue("crochet_chips", {});
+  const crochetChips: Record<string, unknown> = {};
   const tipDisplay = useTipDisplay("pin_extension", tabId);
 
   useEffect(() => {

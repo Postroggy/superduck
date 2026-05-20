@@ -3,17 +3,7 @@ declare const process:
       version?: string;
     }
   | undefined;
-import {
-  StorageKeys,
-  removeStorageValues,
-  getAccessToken,
-  getProfileTraits,
-  getConfig,
-  FeatureFlagManager,
-  type FeatureFlagEntry,
-  getOrCreateAnonymousId
-} from '../extensionServices';
-import type { FeatureCollection, FeatureResponse } from '../extensionServices/featureFlags';
+import { getOrCreateAnonymousId } from '../extensionServices';
 
 // Segment Analytics / Telemetry (lines ~5243-6300)
 // This section contains the Segment analytics client used for telemetry.
@@ -128,21 +118,6 @@ interface AnalyticsPlugin {
   type?: string;
   unload?: (ctx: Context, instance: unknown) => Promise<unknown> | unknown;
   version?: string;
-}
-
-function isFeatureFlagEntry(value: unknown): value is FeatureFlagEntry {
-  return (
-    isPlainObject(value) &&
-    (value.on === undefined || typeof value.on === 'boolean')
-  );
-}
-
-function isFeatureCollection(value: unknown): value is FeatureCollection {
-  return isPlainObject(value) && Object.values(value).every(isFeatureFlagEntry);
-}
-
-function isFeatureResponse(value: unknown): value is FeatureResponse<FeatureCollection> {
-  return isPlainObject(value) && isFeatureCollection(value.features);
 }
 
 interface AvailableExtensions {
@@ -412,10 +387,13 @@ class EventFactory {
 
   private normalize(event: AnalyticsEvent): AnalyticsEvent {
     const eventIntegrations = isPlainObject(event.integrations) ? event.integrations : {};
-    const integrations = Object.keys(eventIntegrations).reduce<Record<string, boolean>>((acc, key) => {
-      acc[key] = Boolean(event.integrations?.[key]);
-      return acc;
-    }, {});
+    const integrations = Object.keys(eventIntegrations).reduce<Record<string, boolean>>(
+      (acc, key) => {
+        acc[key] = Boolean(event.integrations?.[key]);
+        return acc;
+      },
+      {}
+    );
 
     // Filter out undefined options
     const eventOptions = isPlainObject(event.options) ? event.options : {};
@@ -653,10 +631,10 @@ class Logger {
       const table = this._logs.reduce<Record<string, Omit<LogEntry, 'time'> & { json: string }>>(
         (acc, entry) => {
           const row = {
-          ...entry,
-          json: JSON.stringify(entry.extras, null, ' '),
-          extras: entry.extras
-        };
+            ...entry,
+            json: JSON.stringify(entry.extras, null, ' '),
+            extras: entry.extras
+          };
           const { time: _time, ...rowWithoutTime } = row;
           let key = entry.time?.toISOString() ?? '';
           if (acc[key]) key = `${key}-${Math.random()}`;
@@ -1384,10 +1362,7 @@ function detectRuntime(): string {
   if ('object' === typeof window) return 'browser';
   if ('undefined' !== typeof runtimeGlobal.WebSocketPair) return 'cloudflare-worker';
   if ('string' === typeof runtimeGlobal.EdgeRuntime) return 'vercel-edge';
-  if (
-    'undefined' !== typeof runtimeGlobal.WorkerGlobalScope &&
-    'function' === typeof importScripts
-  )
+  if ('undefined' !== typeof runtimeGlobal.WorkerGlobalScope && 'function' === typeof importScripts)
     return 'web-worker';
   return 'unknown';
 }
@@ -1945,42 +1920,7 @@ const initializeAnalytics = async (): Promise<void> => {
 
 // --- identifyUser (Bt) ---
 const identifyUser = async (): Promise<void> => {
-  const analytics = getAnalyticsClient();
-  if (analytics) {
-    try {
-      const profile = await (async () => {
-        try {
-          const token = await getAccessToken();
-          if (!token) return null;
-          const profileUrl = `${getConfig().apiBaseUrl}/api/oauth/profile`;
-          const response = await fetch(profileUrl, {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            }
-          });
-          return response.ok ? await response.json() : null;
-        } catch {
-          return null;
-        }
-      })();
-      const anonymousId = await getOrCreateAnonymousId();
-      const extensionVersion = chrome.runtime.getManifest().version;
-      if (profile) {
-        const userId = profile.account.uuid;
-        analyticsUserId = userId;
-        analytics.identify({
-          userId,
-          anonymousId,
-          traits: { ...getProfileTraits(profile), extensionVersion }
-        });
-      } else {
-        analyticsUserId = null;
-      }
-    } catch (_err) {
-      // silently fail
-    }
-  }
+  analyticsUserId = null;
 };
 
 // --- trackEvent ($t) --- EXPORT
@@ -2013,55 +1953,16 @@ export const trackEvent = async (
   }
 };
 
-// --- Feature Flags ---
-let featureFlagManager: InstanceType<typeof FeatureFlagManager> | null = null;
-
-async function fetchFeatures(): Promise<FeatureResponse<FeatureCollection>> {
-  const config = getConfig();
-  const token = await getAccessToken();
-  if (!token) throw new Error('No valid OAuth token available for feature fetch');
-  const response = await fetch(`${config.apiBaseUrl}/api/bootstrap/features/claude_in_chrome`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    }
-  });
-  if (401 === response.status) {
-    await removeStorageValues([StorageKeys.ACCESS_TOKEN, StorageKeys.TOKEN_EXPIRY]);
-    throw new Error('OAuth token rejected by server (401)');
-  }
-  if (!response.ok) throw new Error(`Failed to fetch features: ${response.status}`);
-  const responseBody: unknown = await response.json();
-  if (!isFeatureResponse(responseBody)) {
-    throw new Error('Feature response has unexpected shape');
-  }
-  return responseBody;
-}
-
-function getFeatureFlagManager(): InstanceType<typeof FeatureFlagManager> {
-  if (!featureFlagManager) {
-    featureFlagManager = new FeatureFlagManager({ fetchFeatures });
-  }
-  return featureFlagManager;
-}
+// --- Feature Flags (removed — always returned empty) ---
 
 // --- getFeatureValue (qt) --- EXPORT
-export async function getFeatureValue(featureName: string): Promise<Record<string, unknown>> {
-  const manager = getFeatureFlagManager();
-  await manager.initialize();
-  const result =
-    (await manager.getFeatureValueAsync<Record<string, unknown>>(featureName, {})) ?? {};
-  const isNonEmpty =
-    result &&
-    typeof result === 'object' &&
-    Object.keys(result).some((key) => result[key] !== undefined && result[key] !== null);
-  return isNonEmpty ? result : {};
+export async function getFeatureValue(_featureName: string): Promise<Record<string, unknown>> {
+  return {};
 }
 
 // --- refreshFeatures (Ft) --- EXPORT
 export async function refreshFeatures(): Promise<void> {
-  const manager = getFeatureFlagManager();
-  await manager.refresh();
+  // no-op: feature flags removed
 }
 
-export { getFeatureFlagManager, initializeAnalytics, identifyUser };
+export { initializeAnalytics, identifyUser };

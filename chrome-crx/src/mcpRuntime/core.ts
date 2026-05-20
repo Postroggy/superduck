@@ -4,11 +4,7 @@ import { DEFAULT_MODEL, FAST_MODEL } from '../constants/models';
 import {
   StorageKeys,
   getStorageValue,
-  getAccessToken,
-  getConfig,
   getOrCreateAnonymousId,
-  getOrganizationId,
-  validateAndRefreshToken,
   PermissionDuration as PermissionDurationEnum
 } from '../extensionServices';
 import {
@@ -19,7 +15,7 @@ import {
 } from '../messageTypes';
 import { MessagesClient } from '../mcpServersStore';
 import { withTracing, PermissionManager as PermissionManagerClass } from '../PermissionManager';
-import { dispatchMessagesClient, clearDispatchClientCache } from '../utils/providerClient';
+import { dispatchMessagesClient, clearDispatchClientCache, resolveClientForTier } from '../utils/providerClient';
 import {
   PROVIDER_CONFIG_BROADCAST,
   PROVIDER_STORAGE_KEYS,
@@ -62,7 +58,6 @@ import {
   filterDomainsByCategory
 } from './browserAutomation';
 import {
-  getFeatureFlagManager,
   getFeatureValue,
   refreshFeatures,
   trackEvent,
@@ -190,7 +185,6 @@ let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let retryCount: number = 0;
 let keepaliveInterval: ReturnType<typeof setInterval> | null = null;
 let cachedDeviceId: string | null = null;
-let lastTokenRefreshTime: number = 0;
 let currentDeviceId: string | null = null;
 
 async function getBridgeDisplayName(): Promise<string | undefined> {
@@ -199,7 +193,6 @@ async function getBridgeDisplayName(): Promise<string | undefined> {
     | undefined;
 }
 
-const KEEPALIVE_ALARM_NAME = 'bridge-keepalive';
 const pendingToolCalls = new Map<string, { resolve: (value: boolean) => void }>();
 
 function getPlatform(): string {
@@ -240,17 +233,8 @@ function stopKeepalive(): void {
 }
 
 async function getBridgeUrl(): Promise<string | undefined> {
-  const config = getConfig();
-  const isEnabled = await (async function (featureName: string) {
-    const manager = getFeatureFlagManager();
-    await manager.initialize();
-    return manager.isFeatureEnabledAsync(featureName);
-  })('chrome_ext_bridge_enabled');
-  if (isEnabled) {
-    return ('development' as string) === config.environment
-      ? 'wss://bridge-staging.claudeusercontent.com'
-      : 'wss://bridge.claudeusercontent.com';
-  }
+  // Feature flag 'chrome_ext_bridge_enabled' always returned false; bridge is disabled.
+  return undefined;
 }
 
 // Forward declarations for functions used before definition
@@ -288,24 +272,11 @@ export async function connectBridge(): Promise<boolean> {
     bridgeConnecting = false;
     return false;
   }
-  const localBridge = getConfig().localBridge;
-  const oauthToken = await getAccessToken();
-  if (!oauthToken) {
-    bridgeConnecting = false;
-    scheduleReconnect();
-    return false;
-  }
-  const orgId = await getOrganizationId();
-  if (!orgId) {
-    bridgeConnecting = false;
-    scheduleReconnect();
-    return false;
-  }
   try {
     const deviceId = await getDeviceId();
     currentDeviceId = deviceId;
     const displayName = await getBridgeDisplayName();
-    const wsUrl = `${bridgeUrl}/chrome/${orgId}`;
+    const wsUrl = `${bridgeUrl}/chrome`;
     if (bridgeWebSocket) {
       bridgeWebSocket.onclose = null;
       bridgeWebSocket.close();
@@ -322,9 +293,6 @@ export async function connectBridge(): Promise<boolean> {
         os_platform: getPlatform(),
         ...(displayName && { display_name: displayName })
       };
-      if (!localBridge) {
-        connectMsg.oauth_token = oauthToken;
-      }
       ws.send(JSON.stringify(connectMsg));
     };
 
@@ -546,20 +514,6 @@ export function sendMcpNotificationViaBridge(
   return true;
 }
 
-// --- Alarm and message listeners for bridge keepalive ---
-chrome.alarms.create(KEEPALIVE_ALARM_NAME, { periodInMinutes: 0.5 });
-chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === KEEPALIVE_ALARM_NAME) {
-    connectBridge();
-    if (Date.now() - lastTokenRefreshTime >= 1800000) {
-      lastTokenRefreshTime = Date.now();
-      validateAndRefreshToken().then(({ isRefreshed }: { isRefreshed: boolean }) => {
-        // no-op
-      });
-    }
-  }
-});
-
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== 'local') return;
   if (PROVIDER_STORAGE_KEYS.PROVIDERS in changes || PROVIDER_STORAGE_KEYS.MAPPING in changes) {
@@ -735,8 +689,7 @@ class ToolExecutor {
         return await dispatched.runtime.create({
           ...rest,
           max_tokens: requestedMaxTokens,
-          model: dispatched.modelId,
-          betas: ['oauth-2025-04-20']
+          model: dispatched.modelId
         });
       };
     }
@@ -993,7 +946,6 @@ async function recordToolAction(
 // =============================================================================
 
 let cachedMessagesClient: MessagesClient | undefined;
-let lastOauthToken: string | undefined;
 let lastApiKey: string | undefined;
 let lastApiBaseUrl: string | undefined;
 let toolExecutorInstance: ToolExecutor | undefined;
@@ -1051,34 +1003,41 @@ async function getOrCreateToolExecutor(tabId?: number, tabGroupId?: number): Pro
 }
 
 async function refreshMessagesClient(): Promise<MessagesClient | undefined> {
-  const [oauthToken, storedValues] = await Promise.all([
-    getAccessToken(),
-    chrome.storage.local.get(['apiKey', 'customApiUrl', 'customApiKey'])
-  ]);
-  const storedApiKey = storedValues.apiKey as string | undefined;
+  const storedValues = await chrome.storage.local.get([StorageKeys.API_KEY, 'customApiUrl', 'customApiKey']);
+  const storedApiKey = storedValues[StorageKeys.API_KEY] as string | undefined;
   const customApiUrl = storedValues.customApiUrl as string | undefined;
   const customApiKey = storedValues.customApiKey as string | undefined;
   const normalizedCustomApiUrl =
     typeof customApiUrl === 'string' ? customApiUrl.trim().replace(/\/+$/, '') : '';
-  const apiBaseUrl = normalizedCustomApiUrl || getConfig().apiBaseUrl;
+  const apiBaseUrl = normalizedCustomApiUrl;
   const apiKey =
     (typeof customApiKey === 'string' && customApiKey.trim()) ||
     (typeof storedApiKey === 'string' && storedApiKey.trim()) ||
     undefined;
-  if (lastOauthToken !== oauthToken || lastApiKey !== apiKey || lastApiBaseUrl !== apiBaseUrl) {
+  if (lastApiKey !== apiKey || lastApiBaseUrl !== apiBaseUrl) {
     cachedMessagesClient = undefined;
-    lastOauthToken = oauthToken;
     lastApiKey = apiKey;
     lastApiBaseUrl = apiBaseUrl;
   }
   if (cachedMessagesClient) return cachedMessagesClient;
-  if (!oauthToken && !apiKey) return undefined;
-  cachedMessagesClient = new MessagesClient({
-    baseURL: apiBaseUrl,
-    dangerouslyAllowBrowser: true,
-    ...(oauthToken ? { authToken: oauthToken } : { apiKey })
-  });
-  return cachedMessagesClient;
+  if (apiKey && apiBaseUrl) {
+    cachedMessagesClient = new MessagesClient({
+      baseURL: apiBaseUrl,
+      dangerouslyAllowBrowser: true,
+      apiKey
+    });
+    return cachedMessagesClient;
+  }
+  const resolved = await resolveClientForTier('smart');
+  if (resolved) {
+    cachedMessagesClient = new MessagesClient({
+      baseURL: resolved.baseURL,
+      dangerouslyAllowBrowser: true,
+      apiKey: resolved.apiKey
+    });
+    return cachedMessagesClient;
+  }
+  return undefined;
 }
 
 // --- createErrorResponse (Cr) --- EXPORT
@@ -1252,7 +1211,6 @@ async function executeToolInner(options: ExecuteToolOptions): Promise<ExecuteToo
         err.message.includes('invalid x-api-key'))
     ) {
       cachedMessagesClient = undefined;
-      lastOauthToken = undefined;
       lastApiKey = undefined;
       errorType = 'authentication_failed';
       toolResult = createErrorResponse(
