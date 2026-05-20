@@ -2393,174 +2393,6 @@ function PlanApprovalModal({
   return modalContent;
 }
 
-// ─── PlanCard — bundle's jy component ───
-function PlanCard({
-  plan,
-  isStreaming = false,
-  toolResult
-}: {
-  plan: PlanStructure;
-  isStreaming?: boolean;
-  toolResult?: ApiToolResultBlock;
-}) {
-  const [showModal, setShowModal] = useState(false);
-
-  const status = toolResult
-    ? toolResult.is_error ||
-      (typeof toolResult.content === 'string' && toolResult.content.includes('Plan rejected'))
-      ? 'rejected'
-      : 'approved'
-    : undefined;
-
-  const isComplete = !!toolResult && !isStreaming;
-
-  return (
-    <>
-      <div
-        onClick={() => {
-          if (isComplete) setShowModal(true);
-        }}
-        className={
-          'flex text-left rounded-lg overflow-hidden border-[0.5px] border-border-300 transition duration-300 w-full hover:bg-bg-000/50 px-4 mt-4 mb-3 ' +
-          (isComplete ? 'cursor-pointer hover:border-border-200' : '')
-        }
-      >
-        <div className="group/artifact-block flex flex-1 align-start justify-between w-full">
-          <div className="flex flex-col gap-1 py-4 min-w-0 flex-1">
-            {/* Title */}
-            <div
-              className={
-                'font-base leading-tight line-clamp-1 ' +
-                (isStreaming && plan.approach.length === 0 ? 'text-text-500' : 'text-text-200')
-              }
-            >
-              {isStreaming && plan.approach.length === 0 ? (
-                <span className="animate-pulse">Drafting plan...</span>
-              ) : (
-                'Plan'
-              )}
-            </div>
-            {/* Status */}
-            <div className="font-small line-clamp-1 text-text-400">
-              {status ? (
-                status === 'approved' ? (
-                  'Approved'
-                ) : (
-                  'Rejected'
-                )
-              ) : isStreaming ? (
-                <span className="animate-pulse">Planning</span>
-              ) : (
-                'Browser automation'
-              )}
-            </div>
-          </div>
-          {/* Mini preview card */}
-          <div className="flex items-end w-[100px] relative shrink-0">
-            <div className="absolute right-2 flex flex-1 overflow-hidden w-[84px] h-[71px] rounded-t-lg border-[0.5px] border-border-200 select-none scale-[1] group-hover/artifact-block:scale-[1.035] rotate-[0.1rad] group-hover/artifact-block:rotate-[0.065rad] duration-300 ease-out group-hover/artifact-block:duration-400 group-hover/artifact-block:ease-[cubic-bezier(0,0.9,0.5,1.35)] transition-transform backface-hidden will-change-transform translate-y-[19%] bg-bg-000 text-text-500 whitespace-pre-wrap text-[0.35rem] leading-tight p-2 font-mono wrap-break-word hyphens-auto">
-              {plan.approach.length > 0 ? plan.approach.slice(0, 3).join('\n') : ''}
-            </div>
-          </div>
-        </div>
-      </div>
-      {isComplete && showModal && (
-        <PlanApprovalModal
-          planStructure={plan}
-          onApprove={() => {}}
-          onReject={() => {}}
-          isReadOnly
-          onClose={() => setShowModal(false)}
-        />
-      )}
-    </>
-  );
-}
-
-// ─── PlanDisplay — bundle's Qy component ───
-function PlanDisplay({
-  plan,
-  isCollapsible = false,
-  defaultCollapsed = false,
-  showHeader = true
-}: {
-  plan: PlanStructure;
-  isCollapsible?: boolean;
-  defaultCollapsed?: boolean;
-  showHeader?: boolean;
-}) {
-  const [collapsed, setCollapsed] = useState(defaultCollapsed);
-
-  const domains = ensureArray(plan.domains, 'domains');
-  const approach = ensureArray(plan.approach, 'approach');
-
-  const content = (
-    <div className="space-y-3">
-      {domains.length > 0 && (
-        <div>
-          <h4
-            className="font-small text-text-400 mb-2"
-            style={{ fontFamily: 'var(--font-ui-serif)', fontSize: '0.75rem', fontWeight: 430 }}
-          >
-            Visit these sites
-          </h4>
-          <div className="border-[0.5px] border-border-300 rounded-xl px-3 py-2 space-y-1.5">
-            {domains.map((d, i) => (
-              <div key={i} className="font-base text-text-100">
-                {getDomainDisplayName(d)}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      {approach.length > 0 && (
-        <div>
-          <h4
-            className="font-small text-text-400 mb-2"
-            style={{ fontFamily: 'var(--font-ui-serif)', fontSize: '0.75rem', fontWeight: 430 }}
-          >
-            Follow this approach
-          </h4>
-          <div className="border-[0.5px] border-border-300 rounded-xl px-3 py-2 space-y-2">
-            {approach.map((step, i) => (
-              <div key={i} className="flex gap-2 font-base text-text-100">
-                <span className="text-text-100" aria-hidden="true">
-                  •
-                </span>
-                <span className="flex-1">{step}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-
-  if (isCollapsible) {
-    return (
-      <div className="space-y-3">
-        {showHeader && (
-          <button
-            onClick={() => setCollapsed(!collapsed)}
-            className="flex items-center gap-2 w-full text-left group"
-          >
-            <ListChecks size={16} className="text-text-300" />
-            <ChevronDown
-              size={14}
-              className={'text-text-400 transition-transform' + (collapsed ? ' -rotate-90' : '')}
-            />
-            <span className="font-base-bold text-text-200 group-hover:text-text-100">
-              Follow the plan
-            </span>
-          </button>
-        )}
-        {!collapsed && content}
-      </div>
-    );
-  }
-
-  return <div className="space-y-3">{content}</div>;
-}
-
 // ─── UpdatePlanCell — bundle's ov component (full version with portal and modal) ───
 const UpdatePlanCell = React.memo(function UpdatePlanCell({
   input,
@@ -3030,42 +2862,6 @@ function isTimelineBlock(block: ApiMessageBlock): block is ApiToolUseBlock | Api
   return isToolUseContentBlock(block) || isToolResultContentBlock(block);
 }
 
-/** Groups consecutive tool blocks, matching bundle's grouping algorithm in cv */
-function groupBlocks(blocks: ApiMessageBlock[]): GroupedContentBlock[] {
-  const result: GroupedContentBlock[] = [];
-  const visited = new Set<number>();
-
-  blocks.forEach((block, i) => {
-    if (visited.has(i)) return;
-
-    if (isTimelineBlock(block)) {
-      const group = {
-        items: [{ block, index: i, renderable: block.type !== 'tool_result' }],
-        startIndex: i,
-        isLastBlockOfMessage: false
-      };
-
-      for (let j = i + 1; j < blocks.length; j++) {
-        const next = blocks[j];
-        if (!isTimelineBlock(next)) break;
-        group.items.push({ block: next, index: j, renderable: next.type !== 'tool_result' });
-        visited.add(j);
-        if (j === blocks.length - 1) group.isLastBlockOfMessage = true;
-      }
-
-      const renderableItems = group.items.filter((item) => item.renderable);
-      if (renderableItems.length === 0) {
-        result.push({ type: 'single', content: block, index: i });
-      } else {
-        result.push({ type: 'group', content: group, index: i });
-      }
-    } else {
-      result.push({ type: 'single', content: block, index: i });
-    }
-  });
-
-  return result;
-}
 
 /** ContentBlocksRenderer — bundle's cv component.
  * Splits blocks at turn_answer_start, renders before-answer in TimelineGroup, after-answer directly. */
@@ -5977,9 +5773,6 @@ export function SidepanelApp() {
       source: isPurlMode && lightningResult?.error ? 'chat' : 'runtime'
     });
   }, [effectiveRuntimeError, isPurlMode, lightningResult?.error]);
-  const effectiveSetMessages =
-    isPurlMode && lightningResult ? lightningResult.setMessages : setMessages;
-  const effectiveHasInteractiveTools = isPurlMode && lightningResult ? false : hasInteractiveTools;
 
   // Route sendPrompt: in lightning mode, delegate to lightningResult.sendMessage
   const effectiveSendPrompt = useCallback(
@@ -6008,18 +5801,6 @@ export function SidepanelApp() {
       tabGroupManager.setTabIndicatorState(query.tabId, 'none').catch(() => {});
     }
   }, [isPurlMode, lightningResult, query.tabId]);
-
-  const effectiveClearMessages = useCallback(async () => {
-    if (isPurlMode && lightningResult) {
-      await lightningResult.clearMessages();
-    }
-    // Always clear normal mode state too
-    setMessages([]);
-    setApiMessages([]);
-    setMessageHistory([]);
-    setRuntimeError(null);
-    setCurrentStatus('');
-  }, [isPurlMode, lightningResult]);
 
   const effectiveClearError = useCallback(() => {
     if (isPurlMode && lightningResult) {
