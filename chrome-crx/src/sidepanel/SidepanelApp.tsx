@@ -63,7 +63,6 @@ import {
   getPermissionActionText,
   getStorageValue,
   setStorageValue,
-  useFeatureValue
 } from '../extensionServices';
 import { useStorageState } from '@/hooks/useStorageState';
 import { PermissionManager, withTracing, SpanStatusCode } from '../PermissionManager';
@@ -922,8 +921,8 @@ function useLightningMode({
   lnMessagesRef.current = lnMessages;
   const tabContextHashRef = useRef<string | null>(null);
 
-  const purlPromptFeature = useFeatureValue('chrome_ext_purl_prompt', '');
-  const purlConfigFeature = useFeatureValue('chrome_ext_purl_config', null);
+  const purlPromptFeature = '';
+  const purlConfigFeature = null;
   const modelsConfigRaw = getModelsConfig();
   const modelsConfigRef = useRef(modelsConfigRaw);
   modelsConfigRef.current = modelsConfigRaw;
@@ -4214,12 +4213,11 @@ export function SidepanelApp() {
 
   const query = useQueryState();
 
-  // CRITICAL FIX: Stabilize feature values to prevent infinite re-renders
-  // useFeatureValue returns a new object {} on every call, causing infinite loops
-  const versionInfoRaw = useFeatureValue('chrome_ext_version_info', null);
-  const modelConfigRaw = useFeatureValue('chrome_ext_models', null);
-  const announcementConfigRaw = useFeatureValue('chrome_ext_announcement', null);
-  const purlModeFeatureEnabled = useFeatureValue('chrome_ext_flash_enabled', false);
+  // Feature flags removed — all values are defaults (empty)
+  const versionInfoRaw = null;
+  const modelConfigRaw = null;
+  const announcementConfigRaw = null;
+  const purlModeFeatureEnabled = false;
 
   const versionInfo = useMemo<VersionInfoFeatureValue>(() => versionInfoRaw || {}, [versionInfoRaw]);
   const modelConfig = useMemo<ModelsConfigFeatureValue>(() => modelConfigRaw || {}, [modelConfigRaw]);

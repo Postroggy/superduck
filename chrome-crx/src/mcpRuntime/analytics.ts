@@ -3,8 +3,7 @@ declare const process:
       version?: string;
     }
   | undefined;
-import { FeatureFlagManager, getOrCreateAnonymousId } from '../extensionServices';
-import type { FeatureCollection, FeatureResponse } from '../extensionServices/featureFlags';
+import { getOrCreateAnonymousId } from '../extensionServices';
 
 // Segment Analytics / Telemetry (lines ~5243-6300)
 // This section contains the Segment analytics client used for telemetry.
@@ -1954,37 +1953,16 @@ export const trackEvent = async (
   }
 };
 
-// --- Feature Flags ---
-let featureFlagManager: InstanceType<typeof FeatureFlagManager> | null = null;
-
-async function fetchFeatures(): Promise<FeatureResponse<FeatureCollection>> {
-  return { features: {} as FeatureCollection };
-}
-
-function getFeatureFlagManager(): InstanceType<typeof FeatureFlagManager> {
-  if (!featureFlagManager) {
-    featureFlagManager = new FeatureFlagManager({ fetchFeatures });
-  }
-  return featureFlagManager;
-}
+// --- Feature Flags (removed — always returned empty) ---
 
 // --- getFeatureValue (qt) --- EXPORT
-export async function getFeatureValue(featureName: string): Promise<Record<string, unknown>> {
-  const manager = getFeatureFlagManager();
-  await manager.initialize();
-  const result =
-    (await manager.getFeatureValueAsync<Record<string, unknown>>(featureName, {})) ?? {};
-  const isNonEmpty =
-    result &&
-    typeof result === 'object' &&
-    Object.keys(result).some((key) => result[key] !== undefined && result[key] !== null);
-  return isNonEmpty ? result : {};
+export async function getFeatureValue(_featureName: string): Promise<Record<string, unknown>> {
+  return {};
 }
 
 // --- refreshFeatures (Ft) --- EXPORT
 export async function refreshFeatures(): Promise<void> {
-  const manager = getFeatureFlagManager();
-  await manager.refresh();
+  // no-op: feature flags removed
 }
 
-export { getFeatureFlagManager, initializeAnalytics, identifyUser };
+export { initializeAnalytics, identifyUser };

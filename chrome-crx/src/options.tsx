@@ -4,7 +4,6 @@ import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import * as TooltipPrimitive from '@radix-ui/react-tooltip';
 import { AnalyticsContext } from './components/providers/AppProviders';
-import { FeatureProvider } from './extensionServices';
 import { IntlMessageLoaderProvider } from './index-react-dom-intl';
 import { OptionsPage } from './options/OptionsPage';
 
@@ -15,11 +14,9 @@ const DevAppWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
   return (
     <IntlMessageLoaderProvider>
-      <FeatureProvider>
-        <AnalyticsContext.Provider value={{ analytics: null, resetAnalytics: async () => {} }}>
-          <TooltipPrimitive.Provider>{children}</TooltipPrimitive.Provider>
-        </AnalyticsContext.Provider>
-      </FeatureProvider>
+      <AnalyticsContext.Provider value={{ analytics: null, resetAnalytics: async () => {} }}>
+        <TooltipPrimitive.Provider>{children}</TooltipPrimitive.Provider>
+      </AnalyticsContext.Provider>
     </IntlMessageLoaderProvider>
   );
 };

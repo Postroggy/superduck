@@ -4,7 +4,6 @@ import { DEFAULT_MODEL, FAST_MODEL } from '../constants/models';
 import {
   StorageKeys,
   getStorageValue,
-  getConfig,
   getOrCreateAnonymousId,
   PermissionDuration as PermissionDurationEnum
 } from '../extensionServices';
@@ -59,7 +58,6 @@ import {
   filterDomainsByCategory
 } from './browserAutomation';
 import {
-  getFeatureFlagManager,
   getFeatureValue,
   refreshFeatures,
   trackEvent,
@@ -236,17 +234,8 @@ function stopKeepalive(): void {
 }
 
 async function getBridgeUrl(): Promise<string | undefined> {
-  const config = getConfig();
-  const isEnabled = await (async function (featureName: string) {
-    const manager = getFeatureFlagManager();
-    await manager.initialize();
-    return manager.isFeatureEnabledAsync(featureName);
-  })('chrome_ext_bridge_enabled');
-  if (isEnabled) {
-    return ('development' as string) === config.environment
-      ? 'wss://bridge-staging.claudeusercontent.com'
-      : 'wss://bridge.claudeusercontent.com';
-  }
+  // Feature flag 'chrome_ext_bridge_enabled' always returned false; bridge is disabled.
+  return undefined;
 }
 
 // Forward declarations for functions used before definition

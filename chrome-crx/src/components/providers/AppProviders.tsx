@@ -3,11 +3,9 @@ import _ from 'lodash';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GrowthBook, GrowthBookProvider } from '@growthbook/growthbook-react';
 import {
-  FeatureProvider,
   getConfig,
   getOrCreateAnonymousId,
   type ModelsConfigFeatureValue,
-  useFeatureValue
 } from '@/extensionServices';
 import { IntlMessageLoaderProvider } from '@/index-react-dom-intl';
 
@@ -380,9 +378,7 @@ const AnalyticsProviderInner: React.FC<{ children: React.ReactNode; pageName: st
 
   return (
     <AnalyticsContext.Provider value={contextValue}>
-      <FeatureProvider>
-        {children}
-      </FeatureProvider>
+      {children}
     </AnalyticsContext.Provider>
   );
 };
@@ -429,7 +425,7 @@ const AppProvider: React.FC<{ children: React.ReactNode; pageName: string }> = (
 };
 
 function getModelsConfig(): ModelsConfigFeatureValue {
-  return useFeatureValue('chrome_ext_models', {});
+  return {};
 }
 
 export {

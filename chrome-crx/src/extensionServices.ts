@@ -1,21 +1,12 @@
 export { modulePreload, getConfig, StorageKeys, getStorageValue, setStorageValue, removeStorageValues } from './extensionServices/core';
-export {
-  FeatureFlagManager,
-  type FeatureCollection,
-  type FeatureFlagEntry,
-  FeatureProvider,
-  type KnownFeatureValueMap,
-  type ModelFallbackConfig,
-  type ModelOptionConfig,
-  type ModelsConfigFeatureValue,
-  type AnnouncementFeatureValue,
-  type PurlConfigFeatureValue,
-  type VersionInfoFeatureValue,
-  useFeatures,
-  useFeatureValue,
-  useFeatureEnabled,
-  useIsReady
-} from './extensionServices/featureFlags';
+export type {
+  ModelFallbackConfig,
+  ModelOptionConfig,
+  ModelsConfigFeatureValue,
+  AnnouncementFeatureValue,
+  PurlConfigFeatureValue,
+  VersionInfoFeatureValue
+} from './extensionServices/featureFlagTypes';
 export {
   getOrCreateAnonymousId
 } from './extensionServices/analytics';
