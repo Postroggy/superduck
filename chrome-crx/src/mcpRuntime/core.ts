@@ -1012,13 +1012,13 @@ async function getOrCreateToolExecutor(tabId?: number, tabGroupId?: number): Pro
 }
 
 async function refreshMessagesClient(): Promise<MessagesClient | undefined> {
-  const storedValues = await chrome.storage.local.get(['apiKey', 'customApiUrl', 'customApiKey']);
-  const storedApiKey = storedValues.apiKey as string | undefined;
+  const storedValues = await chrome.storage.local.get([StorageKeys.API_KEY, 'customApiUrl', 'customApiKey']);
+  const storedApiKey = storedValues[StorageKeys.API_KEY] as string | undefined;
   const customApiUrl = storedValues.customApiUrl as string | undefined;
   const customApiKey = storedValues.customApiKey as string | undefined;
   const normalizedCustomApiUrl =
     typeof customApiUrl === 'string' ? customApiUrl.trim().replace(/\/+$/, '') : '';
-  const apiBaseUrl = normalizedCustomApiUrl || '';
+  const apiBaseUrl = normalizedCustomApiUrl;
   const apiKey =
     (typeof customApiKey === 'string' && customApiKey.trim()) ||
     (typeof storedApiKey === 'string' && storedApiKey.trim()) ||
@@ -1029,7 +1029,7 @@ async function refreshMessagesClient(): Promise<MessagesClient | undefined> {
     lastApiBaseUrl = apiBaseUrl;
   }
   if (cachedMessagesClient) return cachedMessagesClient;
-  if (!apiKey) return undefined;
+  if (!apiKey || !apiBaseUrl) return undefined;
   cachedMessagesClient = new MessagesClient({
     baseURL: apiBaseUrl,
     dangerouslyAllowBrowser: true,

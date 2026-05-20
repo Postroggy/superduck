@@ -4706,14 +4706,41 @@ export function SidepanelApp() {
     }));
   }, [versionInfo]);
 
+  const [providerClient, setProviderClient] = useState<InstanceType<typeof MessagesClient> | null>(null);
+
   const messagesClient = useMemo(() => {
-    if (!apiKey) return null;
+    if (!apiKey || !apiBaseUrl) return null;
     return new MessagesClient({
       baseURL: apiBaseUrl,
       dangerouslyAllowBrowser: true,
       apiKey
     });
   }, [apiBaseUrl, apiKey]);
+
+  useEffect(() => {
+    if (messagesClient) {
+      setProviderClient(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { resolveClientForTier } = await import('../utils/providerClient');
+      const resolved = await resolveClientForTier('smart');
+      if (cancelled) return;
+      if (resolved) {
+        setProviderClient(new MessagesClient({
+          baseURL: resolved.baseURL,
+          dangerouslyAllowBrowser: true,
+          apiKey: resolved.apiKey
+        }));
+      } else {
+        setProviderClient(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [messagesClient, apiKey, apiBaseUrl]);
+
+  const effectiveMessagesClient = messagesClient || providerClient;
 
   // Fetch /v1/models once per (baseURL, credential) so we can use the gateway's
   // real context_length instead of the hard-coded 200k constant.
@@ -4723,11 +4750,11 @@ export function SidepanelApp() {
   } | null>(null);
   const serverContextLengthRef = useRef<number>(CONTEXT_WINDOW);
   useEffect(() => {
-    if (!messagesClient) return;
+    if (!effectiveMessagesClient) return;
     const ctrl = new AbortController();
     (async () => {
       try {
-        const modelsApi = 'models' in messagesClient ? messagesClient.models : null;
+        const modelsApi = 'models' in effectiveMessagesClient ? effectiveMessagesClient.models : null;
         if (!isRecord(modelsApi) || typeof modelsApi.list !== 'function') return;
         const page = await modelsApi.list({}, { signal: ctrl.signal });
         if (!isRecord(page) || !Array.isArray(page.data)) return;
@@ -4745,7 +4772,7 @@ export function SidepanelApp() {
       }
     })();
     return () => ctrl.abort();
-  }, [messagesClient]);
+  }, [effectiveMessagesClient]);
 
   const systemPrompt = useMemo(() => {
     const isMac = navigator.platform.toUpperCase().includes('MAC');
@@ -4776,7 +4803,7 @@ export function SidepanelApp() {
 
   const createApiMessage = useCallback(
     async (params: CreateApiMessageParams, _parentSpan?: unknown, _spanName?: string) => {
-      if (!messagesClient) throw new Error('Client not initialized');
+      if (!effectiveMessagesClient) throw new Error('Client not initialized');
 
       // Destructure fields that need special handling (matching compiled Ze)
       const {
@@ -4799,8 +4826,8 @@ export function SidepanelApp() {
         resolvedModel = modelConfig.small_fast_model || 'claude-haiku-4-5-20251001';
       }
 
-      // Dispatch to per-tier provider (falls back to messagesClient).
-      const dispatched = await dispatchMessagesClient(resolvedModel, messagesClient);
+      // Dispatch to per-tier provider (falls back to effectiveMessagesClient).
+      const dispatched = await dispatchMessagesClient(resolvedModel, effectiveMessagesClient);
 
       // Resolve [[shortcut:id:name]] markers in messages (matching compiled mi)
       const messages = rawMessages
@@ -4817,7 +4844,7 @@ export function SidepanelApp() {
         undefined
       );
     },
-    [messagesClient, selectedModel, modelConfig]
+    [effectiveMessagesClient, selectedModel, modelConfig]
   );
 
   // Keep the ref in sync so the stable wrapper always calls the latest version
@@ -4928,7 +4955,7 @@ export function SidepanelApp() {
           tabId: query.tabId,
           permissionMode: permissionModeRef.current,
           toolUseId: toolUse.id,
-          messagesClient,
+          messagesClient: effectiveMessagesClient,
           onPermissionRequired: async (permissionData: unknown, _permTabId: number) => {
             if (!isPermissionPromptData(permissionData)) return false;
             return onPermissionRequired(permissionData);
@@ -4958,7 +4985,7 @@ export function SidepanelApp() {
         };
       }
     },
-    [permissionMode, query.tabId, onPermissionRequired, messagesClient]
+    [permissionMode, query.tabId, onPermissionRequired, effectiveMessagesClient]
   );
 
   const compactConversation = useCallback(
@@ -5129,7 +5156,7 @@ export function SidepanelApp() {
       const trimmed = text.trim();
       const attachments = options?.attachments ?? [];
       if (!trimmed && attachments.length === 0) return;
-      if (!messagesClient) {
+      if (!effectiveMessagesClient) {
         setRuntimeError('Not authenticated. Please sign in first.');
         return;
       }
@@ -5326,10 +5353,10 @@ export function SidepanelApp() {
                 );
               }
 
-              // Dispatch to per-tier provider (falls back to messagesClient).
+              // Dispatch to per-tier provider (falls back to effectiveMessagesClient).
               const dispatched = await dispatchMessagesClient(
                 selectedModel || DEFAULT_MODEL,
-                messagesClient
+                effectiveMessagesClient
               );
 
               const stream = dispatched.runtime.stream(
@@ -5731,7 +5758,7 @@ export function SidepanelApp() {
       }
     },
     [
-      messagesClient,
+      effectiveMessagesClient,
       apiMessages,
       compactConversation,
       executeToolUse,
@@ -7268,7 +7295,7 @@ export function SidepanelApp() {
     );
   }
 
-  if (!messagesClient) {
+  if (!effectiveMessagesClient) {
     return (
       <SetupGate
         authError={authError}
