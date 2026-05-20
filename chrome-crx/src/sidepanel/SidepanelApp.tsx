@@ -4707,6 +4707,7 @@ export function SidepanelApp() {
   }, [versionInfo]);
 
   const [providerClient, setProviderClient] = useState<InstanceType<typeof MessagesClient> | null>(null);
+  const [hasProviderConfig, setHasProviderConfig] = useState(false);
 
   const messagesClient = useMemo(() => {
     if (!apiKey || !apiBaseUrl) return null;
@@ -4727,13 +4728,19 @@ export function SidepanelApp() {
       const { resolveClientForTier } = await import('../utils/providerClient');
       const resolved = await resolveClientForTier('smart');
       if (cancelled) return;
-      if (resolved && resolved.provider.kind === 'anthropic') {
-        setProviderClient(new MessagesClient({
-          baseURL: resolved.baseURL,
-          dangerouslyAllowBrowser: true,
-          apiKey: resolved.apiKey
-        }));
+      if (resolved) {
+        setHasProviderConfig(true);
+        if (resolved.provider.kind === 'anthropic') {
+          setProviderClient(new MessagesClient({
+            baseURL: resolved.baseURL,
+            dangerouslyAllowBrowser: true,
+            apiKey: resolved.apiKey
+          }));
+        } else {
+          setProviderClient(null);
+        }
       } else {
+        setHasProviderConfig(false);
         setProviderClient(null);
       }
     })();
@@ -5157,7 +5164,7 @@ export function SidepanelApp() {
       const attachments = options?.attachments ?? [];
       if (!trimmed && attachments.length === 0) return;
       if (!effectiveMessagesClient) {
-        setRuntimeError('Not authenticated. Please sign in first.');
+        setRuntimeError('API not configured. Please set up your provider in Settings.');
         return;
       }
 
@@ -7295,7 +7302,7 @@ export function SidepanelApp() {
     );
   }
 
-  if (!effectiveMessagesClient) {
+  if (!effectiveMessagesClient && !hasProviderConfig) {
     return (
       <SetupGate
         authError={authError}

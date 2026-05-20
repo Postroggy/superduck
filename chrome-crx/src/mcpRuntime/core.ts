@@ -193,7 +193,6 @@ async function getBridgeDisplayName(): Promise<string | undefined> {
     | undefined;
 }
 
-const KEEPALIVE_ALARM_NAME = 'bridge-keepalive';
 const pendingToolCalls = new Map<string, { resolve: (value: boolean) => void }>();
 
 function getPlatform(): string {
@@ -514,14 +513,6 @@ export function sendMcpNotificationViaBridge(
   sendBridgeMessage({ type: 'notification', method, params: params || {} });
   return true;
 }
-
-// --- Alarm and message listeners for bridge keepalive ---
-chrome.alarms.create(KEEPALIVE_ALARM_NAME, { periodInMinutes: 0.5 });
-chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === KEEPALIVE_ALARM_NAME) {
-    connectBridge();
-  }
-});
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== 'local') return;
@@ -1038,7 +1029,7 @@ async function refreshMessagesClient(): Promise<MessagesClient | undefined> {
     return cachedMessagesClient;
   }
   const resolved = await resolveClientForTier('smart');
-  if (resolved && resolved.provider.kind === 'anthropic') {
+  if (resolved) {
     cachedMessagesClient = new MessagesClient({
       baseURL: resolved.baseURL,
       dangerouslyAllowBrowser: true,
