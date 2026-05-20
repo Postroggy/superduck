@@ -4730,15 +4730,11 @@ export function SidepanelApp() {
       if (cancelled) return;
       if (resolved) {
         setHasProviderConfig(true);
-        if (resolved.provider.kind === 'anthropic') {
-          setProviderClient(new MessagesClient({
-            baseURL: resolved.baseURL,
-            dangerouslyAllowBrowser: true,
-            apiKey: resolved.apiKey
-          }));
-        } else {
-          setProviderClient(null);
-        }
+        setProviderClient(new MessagesClient({
+          baseURL: resolved.baseURL,
+          dangerouslyAllowBrowser: true,
+          apiKey: resolved.apiKey
+        }));
       } else {
         setHasProviderConfig(false);
         setProviderClient(null);
