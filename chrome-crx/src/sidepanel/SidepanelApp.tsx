@@ -2,7 +2,6 @@ import React, {
   useCallback,
   useContext,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -90,13 +89,11 @@ import {
   navigateTool,
   javascriptTool,
   cdpDebugger,
-  trackEvent,
+  trackEvent
 } from '../mcpRuntime';
 import { MessagesClient } from '../mcpServersStore';
 import {
   generateConversationTitle as generateConversationTitleFunction,
-  generateQuote,
-  generateDailySummary,
   generateShortcutName,
   resolveSpecialCommand,
   parseModelTag,
@@ -104,12 +101,8 @@ import {
   type ModelRequest
 } from './sessionPool';
 import { ConversationCompactor } from './conversationCompaction';
-import { AnalyticsContext, getModelsConfig, useAnalytics } from '../components/providers/AppProviders';
-import {
-  loadModelMapping,
-  MODEL_MAPPING_KEYS,
-  getMappedModelName
-} from '../utils/modelMapping';
+import { AnalyticsContext, getModelsConfig } from '../components/providers/AppProviders';
+import { loadModelMapping, MODEL_MAPPING_KEYS, getMappedModelName } from '../utils/modelMapping';
 import { dispatchMessagesClient } from '../utils/providerClient';
 import {
   PROVIDER_CONFIG_BROADCAST,
@@ -118,11 +111,7 @@ import {
 } from '../utils/providerStore';
 import { EmptyState } from './EmptyState';
 import { useQueryState, useTabEvent } from './hooks';
-import {
-  ConversationSummary,
-  ImagePreviewModal,
-  ScreenshotLightbox
-} from './MessageViews';
+import { ConversationSummary, ImagePreviewModal, ScreenshotLightbox } from './MessageViews';
 import { ScrollContainer, type ScrollContainerHandle } from './ScrollContainer';
 import {
   getStatusSummaryLanguageInstruction,
@@ -153,7 +142,6 @@ import {
   clearTimings,
   EMPTY_MESSAGE_HISTORY,
   executeWithPermission,
-  getTimingSummary,
   getUpdatedTabContext,
   LIGHTNING_DEFAULT_CONFIG,
   NOOP_RETRY,
@@ -485,7 +473,10 @@ function getTextFromBlockContent(
 ): string {
   if (typeof content === 'string') return content;
   if (!Array.isArray(content)) return '';
-  return content.filter(isTextContentBlock).map((block) => block.text).join(separator);
+  return content
+    .filter(isTextContentBlock)
+    .map((block) => block.text)
+    .join(separator);
 }
 
 function getBase64ImageBlocks(content: readonly unknown[] | null | undefined): Base64ImageBlock[] {
@@ -1231,7 +1222,6 @@ function useLightningMode({
             };
 
             let outputTokens = 0;
-            let commandCount = 0;
 
             // Filter synthetic messages and manage screenshot history
             let apiMessages = filterSyntheticMessages(allMessages);
@@ -1401,14 +1391,12 @@ function useLightningMode({
 
             // ST (select_tab) must be first command
             const stIndex = commands.findIndex((c) => c.type === 'select_tab');
-            let stError:
-              | {
-                  action: 'error';
-                  input: ParsedCommand['args'] | Record<string, never>;
-                  output: string;
-                  durationMs: number;
-                }
-              | null = null;
+            let stError: {
+              action: 'error';
+              input: ParsedCommand['args'] | Record<string, never>;
+              output: string;
+              durationMs: number;
+            } | null = null;
             if (stIndex > 0) {
               commands.splice(stIndex);
               stError = {
@@ -1425,7 +1413,10 @@ function useLightningMode({
                   .map((tab) => tab.id)
                   .filter((tabId): tabId is number => typeof tabId === 'number')
               );
-              if (selectTabCommand?.type === 'select_tab' && tabIds.has(selectTabCommand.args.tabId)) {
+              if (
+                selectTabCommand?.type === 'select_tab' &&
+                tabIds.has(selectTabCommand.args.tabId)
+              ) {
                 activeTabId = selectTabCommand.args.tabId;
               } else if (selectTabCommand?.type === 'select_tab') {
                 stError = {
@@ -1448,7 +1439,7 @@ function useLightningMode({
               /* ignore */
             }
 
-            commandCount = commands.length;
+            const commandCount = commands.length;
 
             // Execute commands
             const cmdExecStart = performance.now();
@@ -1553,17 +1544,15 @@ function useLightningMode({
                       break;
                     }
 
-                    let isApproved = false;
-                    if (permissionMode !== 'follow_a_plan' || !onPermissionRequired) {
-                      isApproved = true;
-                    } else {
-                      isApproved = await onPermissionRequired({
-                        type: 'permission_required',
-                        tool: PermissionActionType.PLAN_APPROVAL,
-                        url: '',
-                        actionData: { plan: { domains: approved, approach: planData.approach } }
-                      });
-                    }
+                    const isApproved =
+                      permissionMode !== 'follow_a_plan' || !onPermissionRequired
+                        ? true
+                        : await onPermissionRequired({
+                            type: 'permission_required',
+                            tool: PermissionActionType.PLAN_APPROVAL,
+                            url: '',
+                            actionData: { plan: { domains: approved, approach: planData.approach } }
+                          });
 
                     if (isApproved) {
                       planApprovedRef.current = true;
@@ -2533,13 +2522,7 @@ const BrowserToolCell = React.memo(function BrowserToolCell({
   const isExpandingDisabled = true;
 
   const info = useMemo(
-    () =>
-      getToolDisplayInfo(
-        toolName,
-        input,
-        toolResult,
-        asFormatMessageLike(intlBrowserTool)
-      ),
+    () => getToolDisplayInfo(toolName, input, toolResult, asFormatMessageLike(intlBrowserTool)),
     [toolName, input, toolResult, intlBrowserTool]
   );
   const displayText = toolDisplayName || info.text;
@@ -2861,7 +2844,6 @@ function ToolUseItem({
 function isTimelineBlock(block: ApiMessageBlock): block is ApiToolUseBlock | ApiToolResultBlock {
   return isToolUseContentBlock(block) || isToolResultContentBlock(block);
 }
-
 
 /** ContentBlocksRenderer — bundle's cv component.
  * Splits blocks at turn_answer_start, renders before-answer in TimelineGroup, after-answer directly. */
@@ -3697,10 +3679,7 @@ function InlinePermissionPrompt({
   disableAlwaysAllow
 }: {
   prompt: PermissionPromptData;
-  onAllow: (
-    duration: PermissionDuration,
-    scope: PermissionGrantScope
-  ) => void;
+  onAllow: (duration: PermissionDuration, scope: PermissionGrantScope) => void;
   onDeny: () => void;
   disableAlwaysAllow?: boolean;
 }) {
@@ -4015,8 +3994,14 @@ export function SidepanelApp() {
   const announcementConfigRaw = null;
   const purlModeFeatureEnabled = false;
 
-  const versionInfo = useMemo<VersionInfoFeatureValue>(() => versionInfoRaw || {}, [versionInfoRaw]);
-  const modelConfig = useMemo<ModelsConfigFeatureValue>(() => modelConfigRaw || {}, [modelConfigRaw]);
+  const versionInfo = useMemo<VersionInfoFeatureValue>(
+    () => versionInfoRaw || {},
+    [versionInfoRaw]
+  );
+  const modelConfig = useMemo<ModelsConfigFeatureValue>(
+    () => modelConfigRaw || {},
+    [modelConfigRaw]
+  );
   const announcementConfig = useMemo<AnnouncementConfig>(
     () => announcementConfigRaw || {},
     [announcementConfigRaw]
@@ -4028,8 +4013,10 @@ export function SidepanelApp() {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [apiMessages, setApiMessages] = useState<ApiConversationMessage[]>([]);
-  const [messageHistory, setMessageHistory] = useState<ApiConversationMessage[]>([]);
-  const [permissionMode, setPermissionMode] = useState<PermissionMode>('skip_all_permission_checks');
+  const [_messageHistory, setMessageHistory] = useState<ApiConversationMessage[]>([]);
+  const [permissionMode, setPermissionMode] = useState<PermissionMode>(
+    'skip_all_permission_checks'
+  );
   const [selectedModel, setSelectedModel] = useState<string>('');
   const selectedModelRef = useRef(selectedModel);
   const [modelMapping, setModelMapping] = useState<{
@@ -4100,6 +4087,7 @@ export function SidepanelApp() {
   const [isConvertingToTask, setIsConvertingToTask] = useState(false);
   const [attachmentCount, setAttachmentCount] = useState(0);
   const [pendingAttachments, setPendingAttachments] = useState<PromptAttachmentPayload[]>([]);
+  const [previewAttachmentImage, setPreviewAttachmentImage] = useState<string | null>(null);
   const prefersReducedMotion = usePrefersReducedMotion();
   const [pairingPrompt, setPairingPrompt] = useState<PairingPromptState | null>(null);
   const [pairingName, setPairingName] = useState('');
@@ -4127,7 +4115,7 @@ export function SidepanelApp() {
   const [messageLimitDismissed, setMessageLimitDismissed] = useState(false);
   const [skipWarningDismissed, setSkipWarningDismissed] = useState(false);
   const [announcementDismissed, setAnnouncementDismissed] = useState(false);
-  const [refusalFeedbackSent, setRefusalFeedbackSent] = useState(false);
+  const [_refusalFeedbackSent, setRefusalFeedbackSent] = useState(false);
   const [lastStopReason, setLastStopReason] = useState<{
     reason: string;
     messageId?: string;
@@ -4192,7 +4180,7 @@ export function SidepanelApp() {
     isAnnotated: boolean;
   } | null>(null);
   const iterationCountRef = useRef(0);
-  const lastTabContextJsonRef = useRef<string | null>(null);
+  const _lastTabContextJsonRef = useRef<string | null>(null);
   // Stable refs for values used in the message listener to avoid re-registering on every change
   const sendPromptRef = useRef<
     | ((
@@ -4204,7 +4192,7 @@ export function SidepanelApp() {
   const isAgentRunningRef = useRef(isAgentRunning);
   const hasBrowserControlPermissionAcceptedRef = useRef(hasBrowserControlPermissionAccepted);
   const pushMessageRef = useRef<((role: ChatRole, text: string) => void) | null>(null);
-  const injectedDomainSkillsRef = useRef<Set<string>>(new Set());
+  const _injectedDomainSkillsRef = useRef<Set<string>>(new Set());
   const autoScrollRef = useRef<ScrollContainerHandle | null>(null);
   // Streaming text store — decouples streaming text updates from React state to avoid
   // re-rendering the entire component tree (~7000 lines) at 60fps during streaming.
@@ -4247,7 +4235,7 @@ export function SidepanelApp() {
     }),
     [scrollRefs.lastAssistantMessage, scrollRefs.lastHumanMessage]
   );
-  const [showTopGradient, setShowTopGradient] = useState(false);
+  const [_showTopGradient, setShowTopGradient] = useState(false);
 
   const historyStorageKey = useMemo(() => getHistoryStorageKey(activeSessionId), [activeSessionId]);
   const [isModelMenuOpen, setIsModelMenuOpen] = useState(false);
@@ -4297,7 +4285,7 @@ export function SidepanelApp() {
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
   const {
     recordingState,
-    error: recordingError,
+    error: _recordingError,
     isSpeechRecording,
     currentInterimTranscript,
     isSpeechSupported,
@@ -4864,10 +4852,7 @@ export function SidepanelApp() {
 
   // --- Permission allow/deny handlers (matching bundle's Qt/Xt) ---
   const handlePermissionAllow = useCallback(
-    async (
-      duration: PermissionDuration,
-      scope: PermissionGrantScope
-    ) => {
+    async (duration: PermissionDuration, scope: PermissionGrantScope) => {
       if (!permissionPrompt || !permissionResolveRef.current) return;
       const pm = getPermissionManager();
       await pm.grantPermission(
@@ -5018,10 +5003,7 @@ export function SidepanelApp() {
           content: visibleCommandText,
           isLocalOnlyMessage: true
         };
-        setApiMessages((prev) => [
-          ...prev,
-          visibleCommandMessage
-        ]);
+        setApiMessages((prev) => [...prev, visibleCommandMessage]);
       }
 
       setIsCompacting(true);
@@ -5031,11 +5013,7 @@ export function SidepanelApp() {
           intl.locale,
           serverContextLengthRef.current
         );
-        const result = await compactor.compactConversation(
-          messagesToCompact,
-          MAX_TOKENS,
-          !manual
-        );
+        const result = await compactor.compactConversation(messagesToCompact, MAX_TOKENS, !manual);
         setMessageHistory(messagesToCompact);
         const visibleCommandMessage = visibleCommandText
           ? ({
@@ -5063,13 +5041,7 @@ export function SidepanelApp() {
         setIsCompacting(false);
       }
     },
-    [
-      apiMessages,
-      appendVisibleLocalMessages,
-      createApiMessage,
-      isCompacting,
-      pushMessage
-    ]
+    [apiMessages, appendVisibleLocalMessages, createApiMessage, isCompacting, pushMessage]
   );
 
   const sendCompletionNotification = useCallback(async () => {
@@ -5343,16 +5315,15 @@ export function SidepanelApp() {
               // Strip old screenshots — keep only the 2 most recent to prevent 413 payload bloat
               const preparedMessagesPruned = manageScreenshotHistory(preparedMessagesRaw, 2);
               // Resolve [[shortcut:id:name]] markers to actual prompt content before sending
-              const preparedMessages = await resolveShortcutMarkersInMessages(preparedMessagesPruned);
+              const preparedMessages =
+                await resolveShortcutMarkersInMessages(preparedMessagesPruned);
 
               // Add cache_control to the last tool schema
               let preparedTools = toolSchemas.length ? [...toolSchemas] : undefined;
               if (preparedTools && preparedTools.length > 0) {
                 const lastToolIndex = preparedTools.length - 1;
                 preparedTools = preparedTools.map((t, idx) =>
-                  idx === lastToolIndex
-                    ? { ...t, cache_control: { type: 'ephemeral' } }
-                    : t
+                  idx === lastToolIndex ? { ...t, cache_control: { type: 'ephemeral' } } : t
                 );
               }
 
@@ -5465,10 +5436,10 @@ export function SidepanelApp() {
               const parsedMessageLimit = parseMessageLimit(response.message_limit);
               setMessageLimit(
                 parsedMessageLimit ??
-                calculateMessageLimitFromUsage(
-                  response.usage || {},
-                  serverContextLengthRef.current
-                )
+                  calculateMessageLimitFromUsage(
+                    response.usage || {},
+                    serverContextLengthRef.current
+                  )
               );
               setMessageLimitDismissed(false);
 
@@ -5651,7 +5622,10 @@ export function SidepanelApp() {
                   lastAssistantMsg.usage,
                   serverContextLengthRef.current
                 );
-                if (limitState.type === 'exceeded_limit' || limitState.type === 'approaching_limit') {
+                if (
+                  limitState.type === 'exceeded_limit' ||
+                  limitState.type === 'approaching_limit'
+                ) {
                   try {
                     const compactor = new ConversationCompactor(
                       async (params: CreateApiMessageParams) => createApiMessage(params),
@@ -5748,6 +5722,7 @@ export function SidepanelApp() {
         setCurrentStatus('');
         setAttachmentCount(0);
         setPendingAttachments([]);
+        setPreviewAttachmentImage(null);
         generationStartedAtRef.current = null;
         completionNotificationSentRef.current = false;
         // Hide agent indicators and add completion prefix to tab group
@@ -6174,7 +6149,6 @@ export function SidepanelApp() {
     return () => {
       active = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSessionId, loadSnapshotForSession, restoreSnapshotFromRemoteSession]);
 
   useEffect(() => {
@@ -6469,6 +6443,7 @@ export function SidepanelApp() {
             });
             setPendingPrompt(null);
             setPendingAttachments([]);
+            setPreviewAttachmentImage(null);
             setAttachmentCount(0);
           } else {
             setPendingPrompt({
@@ -6602,7 +6577,6 @@ export function SidepanelApp() {
     chrome.runtime.onMessage.addListener(listener);
     return () => chrome.runtime.onMessage.removeListener(listener);
     // sendPrompt, isAgentRunning, hasBrowserControlPermissionAccepted accessed via refs
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     loadSnapshotForSession,
     query.skipPermissions,
@@ -6649,6 +6623,7 @@ export function SidepanelApp() {
     });
     setInput('');
     setPendingAttachments([]);
+    setPreviewAttachmentImage(null);
     setAttachmentCount(0);
     setIsPermissionMenuOpen(false);
     setIsActionsMenuOpen(false);
@@ -6690,6 +6665,7 @@ export function SidepanelApp() {
     setPendingAttachments((prev) => {
       const next = prev.filter((item) => item.id !== id);
       setAttachmentCount(next.length);
+      if (next.length === 0) setPreviewAttachmentImage(null);
       return next;
     });
   }, []);
@@ -6721,6 +6697,26 @@ export function SidepanelApp() {
     if (!inputRef.current) return;
     inputRef.current.focus();
   }, []);
+
+  const handlePaste = useCallback(
+    (event: React.ClipboardEvent) => {
+      const items = event.clipboardData?.items;
+      if (!items) return;
+      const imageFiles: File[] = [];
+      for (const item of Array.from(items)) {
+        if (item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (file) imageFiles.push(file);
+        }
+      }
+      if (imageFiles.length === 0) return;
+      event.preventDefault();
+      const dataTransfer = new DataTransfer();
+      imageFiles.forEach((f) => dataTransfer.items.add(f));
+      void handleFileSelection(dataTransfer.files);
+    },
+    [handleFileSelection]
+  );
 
   const captureCurrentTabScreenshot = useCallback(async () => {
     try {
@@ -6880,7 +6876,7 @@ export function SidepanelApp() {
       // If model has no branded label (Sonnet), show just the mapped name
       let finalLabel: string;
       if (mappedModelName) {
-        finalLabel = (label && label.trim()) ? `${baseLabel} (${mappedModelName})` : mappedModelName;
+        finalLabel = label && label.trim() ? `${baseLabel} (${mappedModelName})` : mappedModelName;
       } else {
         finalLabel = baseLabel;
       }
@@ -7003,16 +6999,14 @@ export function SidepanelApp() {
 
   const handleConvertToScheduledTask = useCallback(() => {
     if (effectiveIsAgentRunning || isConvertingToTask) return;
-    const lastUserPrompt = [...effectiveApiMessages]
-      .reverse()
-      .find((message) => {
-        if (message.role !== 'user') return false;
-        const text =
-          typeof message.content === 'string'
-            ? message.content
-            : getTextFromBlockContent(message.content, '');
-        return text.trim().length > 0;
-      });
+    const lastUserPrompt = [...effectiveApiMessages].reverse().find((message) => {
+      if (message.role !== 'user') return false;
+      const text =
+        typeof message.content === 'string'
+          ? message.content
+          : getTextFromBlockContent(message.content, '');
+      return text.trim().length > 0;
+    });
     const resolvedLastUserPrompt = lastUserPrompt
       ? typeof lastUserPrompt.content === 'string'
         ? lastUserPrompt.content
@@ -7119,9 +7113,7 @@ export function SidepanelApp() {
         item.category === 'category_org_blocked')
   );
 
-  const fallbackConfig = selectedModel
-    ? modelConfig.modelFallbacks?.[selectedModel]
-    : undefined;
+  const fallbackConfig = selectedModel ? modelConfig.modelFallbacks?.[selectedModel] : undefined;
   const announcementText = announcementConfig.text || '';
   const messageLimitBanner = useMemo(
     () => getMessageLimitBannerState(messageLimit, selectedModel),
@@ -7802,480 +7794,563 @@ export function SidepanelApp() {
                               data-chat-input-container="true"
                               className={chatInputSurfaceClass}
                               onClick={() => inputRef.current?.focus()}
+                              onPaste={handlePaste}
                             >
                               {pendingAttachments.length > 0 ? (
                                 <div className="px-4 pt-3 pb-1 flex flex-wrap gap-2">
                                   {pendingAttachments.map((attachment) => (
                                     <div
                                       key={attachment.id}
-                                      className="inline-flex items-center gap-1.5 max-w-full rounded-lg border border-border-300 bg-bg-100 px-2 py-1 text-xs text-text-200"
+                                      className="relative group w-16 h-16 rounded-lg overflow-hidden border border-border-300 bg-bg-100 cursor-pointer"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        setPreviewAttachmentImage(
+                                          `data:${attachment.mediaType};base64,${attachment.base64}`
+                                        );
+                                      }}
                                     >
-                                      <Paperclip size={12} className="shrink-0 text-text-300" />
-                                      <span className="truncate max-w-[180px]">
-                                        {attachment.fileName}
-                                      </span>
+                                      <img
+                                        src={`data:${attachment.mediaType};base64,${attachment.base64}`}
+                                        alt={attachment.fileName}
+                                        className="w-full h-full object-cover"
+                                      />
                                       <button
                                         type="button"
                                         onClick={(event) => {
                                           event.stopPropagation();
                                           removeAttachment(attachment.id);
                                         }}
-                                        className="shrink-0 rounded hover:bg-bg-200 p-0.5 text-text-300"
+                                        className="absolute top-0.5 right-0.5 p-0.5 rounded-full bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity"
                                         aria-label="Remove attachment"
                                       >
-                                        <X size={12} />
+                                        <X size={10} />
                                       </button>
                                     </div>
                                   ))}
                                 </div>
                               ) : null}
 
-                              <div className={`px-4 ${showCommandMenu ? 'pt-3 pb-1' : 'pt-4 pb-2'}`}>
+                              <div
+                                className={`px-4 ${showCommandMenu ? 'pt-3 pb-1' : 'pt-4 pb-2'}`}
+                              >
                                 <div className="relative">
-                                {/* Shortcuts menu */}
-                                {showCommandMenu && (
-                                  <div ref={commandMenuRef}>
-                                    <ShortcutsMenu
-                                      searchTerm={commandSearchTerm}
-                                      onSelect={async (command, label) => {
-                                        commandMenuDismissedRef.current = true;
-                                        commandMenuDismissedInputRef.current =
-                                          inputValueRef.current;
+                                  {/* Shortcuts menu */}
+                                  {showCommandMenu && (
+                                    <div ref={commandMenuRef}>
+                                      <ShortcutsMenu
+                                        searchTerm={commandSearchTerm}
+                                        onSelect={async (command, label) => {
+                                          commandMenuDismissedRef.current = true;
+                                          commandMenuDismissedInputRef.current =
+                                            inputValueRef.current;
 
-                                        // Close menu first to prevent reopening
-                                        setShowCommandMenu(false);
-                                        setCommandSearchTerm('');
+                                          // Close menu first to prevent reopening
+                                          setShowCommandMenu(false);
+                                          setCommandSearchTerm('');
 
-                                        // Check if it's a system command (like 'compact')
-                                        if (command === 'compact') {
-                                          setInput('');
-                                          inputRef.current?.clear();
-                                          await sendPrompt('/compact');
-                                          return;
-                                        }
-
-                                        let savedPrompt: StoredSavedPrompt | undefined;
-                                        try {
-                                          savedPrompt =
-                                            await PromptService.getPromptByCommand(command);
-                                        } catch (error) {
-                                          console.error('Failed to load shortcut:', error);
-                                        }
-
-                                        if (!savedPrompt) {
-                                          insertShortcutChip(command, label);
-                                          return;
-                                        }
-
-                                        const promptType = savedPrompt.type || 'shortcut';
-
-                                        switch (promptType) {
-                                          case 'command':
-                                            // Execute immediately using the selected prompt text.
+                                          // Check if it's a system command (like 'compact')
+                                          if (command === 'compact') {
+                                            setInput('');
                                             inputRef.current?.clear();
-                                            setInput('');
-                                            await effectiveSendPrompt(savedPrompt.prompt);
-                                            break;
+                                            await sendPrompt('/compact');
+                                            return;
+                                          }
 
-                                          case 'module':
-                                            if (savedPrompt.url) {
-                                              await navigateActiveTabToUrl(savedPrompt.url);
-                                            }
-                                            setInput('');
-                                            break;
+                                          let savedPrompt: StoredSavedPrompt | undefined;
+                                          try {
+                                            savedPrompt =
+                                              await PromptService.getPromptByCommand(command);
+                                          } catch (error) {
+                                            console.error('Failed to load shortcut:', error);
+                                          }
 
-                                          case 'shortcut':
-                                          default:
+                                          if (!savedPrompt) {
                                             insertShortcutChip(command, label);
-                                            break;
-                                        }
-                                      }}
-                                      onRecordWorkflow={() => {
-                                        setShowCommandMenu(false);
-                                        setCommandSearchTerm('');
-                                        setInput('');
-                                        setShowWorkflowModeSelectionModal(true);
-                                      }}
-                                      onScheduleTask={() => {
-                                        setShowCommandMenu(false);
-                                        setCommandSearchTerm('');
-                                        setInput('');
-                                        // TODO: Open schedule task modal
-                                        console.log('Schedule task clicked');
-                                      }}
-                                      onEditShortcut={(shortcut) => {
-                                        setShowCommandMenu(false);
-                                        setCommandSearchTerm('');
-                                        inputRef.current?.clear();
-                                        setPromptToEdit({
-                                          id: shortcut.id,
-                                          prompt: shortcut.prompt,
-                                          command: shortcut.command
-                                        });
-                                      }}
-                                      onClose={() => {
-                                        commandMenuDismissedRef.current = true;
-                                        commandMenuDismissedInputRef.current = input;
-                                        setShowCommandMenu(false);
-                                        setCommandSearchTerm('');
-                                      }}
-                                    />
-                                  </div>
-                                )}
+                                            return;
+                                          }
 
-                                {/* Rotating tips - only when input is empty and no command menu */}
-                                {!input && !showCommandMenu && (
-                                  <RotatingTips tips={rotatingTips} />
-                                )}
+                                          const promptType = savedPrompt.type || 'shortcut';
 
-                                <RichTextInput
-                                  ref={inputRef}
-                                  value={input}
-                                  onChange={setInput}
-                                  onSubmit={submit}
-                                  placeholder=""
-                                  disabled={false}
-                                />
-                              </div>
-                            </div>
+                                          switch (promptType) {
+                                            case 'command':
+                                              // Execute immediately using the selected prompt text.
+                                              inputRef.current?.clear();
+                                              setInput('');
+                                              await effectiveSendPrompt(savedPrompt.prompt);
+                                              break;
 
-                            <input
-                              ref={fileInputRef}
-                              type="file"
-                              multiple
-                              accept="image/*"
-                              className="hidden"
-                              onChange={(event) => {
-                                void handleFileSelection(event.target.files);
-                                event.target.value = '';
-                              }}
-                            />
-
-                            <div
-                              className={`relative flex items-center justify-between px-3 ${
-                                showCommandMenu ? 'pb-2' : 'pb-3'
-                              }`}
-                            >
-                              <div className="flex items-center gap-2">
-                                <div ref={permissionMenuRef} className="relative">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      console.log(
-                                        '[DEBUG] Permission menu button clicked, current state:',
-                                        isPermissionMenuOpen
-                                      );
-                                      setIsActionsMenuOpen(false);
-                                      setIsPermissionMenuOpen((value) => {
-                                        console.log(
-                                          '[DEBUG] Toggling permission menu from',
-                                          value,
-                                          'to',
-                                          !value
-                                        );
-                                        return !value;
-                                      });
-                                    }}
-                                    className="inline-flex items-center gap-1.5 h-7 rounded-lg border border-border-300 bg-bg-000 px-2 text-[11px] text-text-200 hover:bg-bg-200 transition-colors"
-                                    aria-haspopup="menu"
-                                    aria-expanded={isPermissionMenuOpen}
-                                    aria-label="Permission mode"
-                                    title="Permission mode"
-                                  >
-                                    {permissionMode === 'follow_a_plan' ? (
-                                      <Hand size={12} className="text-text-300" />
-                                    ) : (
-                                      <ChevronsRight size={12} className="text-text-300" />
-                                    )}
-                                    <span>{selectedPermissionModeLabel}</span>
-                                    <ChevronDown size={12} className="text-text-300" />
-                                  </button>
-                                  {isPermissionMenuOpen ? (
-                                    <div className="absolute left-0 bottom-full mb-2 z-50 w-80 bg-bg-000 border-0.5 border-border-200 backdrop-blur-xl rounded-xl text-text-300 shadow-[0px_2px_8px_0px_hsl(var(--always-black)/8%)] p-1.5">
-                                      {permissionModeMenuOptions.map((option) => {
-                                        const isSelected = permissionMode === option.value;
-                                        const Icon = option.Icon;
-
-                                        return (
-                                          <button
-                                            key={option.value}
-                                            type="button"
-                                            onClick={() => {
-                                              setPermissionMode(option.value);
-                                              setIsPermissionMenuOpen(false);
-                                            }}
-                                            className={`w-full px-3 py-2 rounded-lg text-left flex items-start gap-3 transition-colors ${isSelected ? 'bg-bg-200' : 'hover:bg-bg-200'}`}
-                                          >
-                                            <div className="shrink-0 mt-0.5">
-                                              <Icon size={16} className="text-text-200" />
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                              <div className="text-sm font-medium text-text-100">
-                                                {intl.formatMessage({
-                                                  id: option.labelId,
-                                                  defaultMessage: option.labelDefault
-                                                })}
-                                              </div>
-                                              <div className="mt-1 text-xs text-text-400">
-                                                {intl.formatMessage({
-                                                  id: option.descriptionId,
-                                                  defaultMessage: option.descriptionDefault
-                                                })}
-                                              </div>
-                                            </div>
-                                            <div className="shrink-0 self-center">
-                                              {isSelected ? (
-                                                <Check
-                                                  size={16}
-                                                  className="text-accent-secondary-200"
-                                                />
-                                              ) : null}
-                                            </div>
-                                          </button>
-                                        );
-                                      })}
-                                      {shouldDisableSkipPermissions ? (
-                                        <p className="px-3 pt-2 text-[11px] text-text-300">
-                                          {intl.formatMessage({
-                                            id: 'LStwu4n1yT_blocked',
-                                            defaultMessage:
-                                              'Act without asking is unavailable on blocked pages.'
-                                          })}
-                                        </p>
-                                      ) : null}
-                                    </div>
-                                  ) : null}
-                                </div>
-                                {attachmentCount > 0 ? (
-                                  <span className="text-[11px] text-text-300">
-                                    {attachmentCount} image(s)
-                                  </span>
-                                ) : null}
-                                {/* Debug mode: context usage indicator */}
-                                {debugMode && contextDebugInfo && (
-                                  <span
-                                    className="relative inline-flex items-center gap-1 h-7 rounded-lg border border-border-300 bg-bg-000 px-1.5 text-[11px] text-text-200 hover:bg-bg-200 transition-colors cursor-default"
-                                    role="status"
-                                    aria-label={`Context: ${contextDebugInfo.percentUsed}%`}
-                                    onMouseEnter={() => {
-                                      const el = debugTooltipRef.current;
-                                      if (el) { el.style.opacity = '1'; el.style.visibility = 'visible'; el.style.transform = 'translateX(-50%) scale(1)'; }
-                                    }}
-                                    onMouseLeave={() => {
-                                      const el = debugTooltipRef.current;
-                                      if (el) { el.style.opacity = '0'; el.style.visibility = 'hidden'; el.style.transform = 'translateX(-50%) scale(0.95)'; }
-                                    }}
-                                  >
-                                    <svg viewBox="0 0 16 16" width="14" height="14" className="-rotate-90 shrink-0">
-                                      <circle cx="8" cy="8" r="6" fill="none" stroke="hsl(var(--border-300))" strokeWidth="2" />
-                                      <circle
-                                        cx="8" cy="8" r="6" fill="none" strokeWidth="2" strokeLinecap="round"
-                                        strokeDasharray={`${contextDebugInfo.percentUsed * 37.7 / 100} 37.7`}
-                                        stroke={
-                                          contextDebugInfo.percentUsed >= 90
-                                            ? 'hsl(var(--danger-100))'
-                                            : contextDebugInfo.percentUsed >= 70
-                                              ? 'hsl(var(--warning-100))'
-                                              : 'hsl(var(--accent-secondary-100))'
-                                        }
-                                        className="transition-all duration-300"
-                                      />
-                                    </svg>
-                                    <span>{contextDebugInfo.percentUsed}%</span>
-                                    {/* Hover popup — ref-controlled to avoid re-renders */}
-                                    <span
-                                      ref={debugTooltipRef}
-                                      className="absolute bottom-full left-1/2 mb-2 rounded-xl pointer-events-none transition-all duration-150 z-[9999] bg-bg-000 border border-border-300 shadow-xl px-3.5 py-2.5 text-text-100"
-                                      role="tooltip"
-                                      style={{ opacity: 0, visibility: 'hidden', transform: 'translateX(-50%) scale(0.95)' }}
-                                    >
-                                      <div className="whitespace-nowrap text-left leading-relaxed text-[11px]">
-                                        <div className="flex items-center gap-2 pb-1.5 mb-1.5 border-b border-border-300/10">
-                                          <svg viewBox="0 0 16 16" width="28" height="28" className="-rotate-90 shrink-0">
-                                            <circle cx="8" cy="8" r="6.5" fill="none" stroke="hsl(var(--border-300) / 15%)" strokeWidth="1.5" />
-                                            <circle
-                                              cx="8" cy="8" r="6.5" fill="none" strokeWidth="1.5" strokeLinecap="round"
-                                              strokeDasharray={`${contextDebugInfo.percentUsed * 40.84 / 100} 40.84`}
-                                              stroke={
-                                                contextDebugInfo.percentUsed >= 90
-                                                  ? 'hsl(var(--danger-100))'
-                                                  : contextDebugInfo.percentUsed >= 70
-                                                    ? 'hsl(var(--warning-100))'
-                                                    : 'hsl(var(--accent-secondary-100))'
+                                            case 'module':
+                                              if (savedPrompt.url) {
+                                                await navigateActiveTabToUrl(savedPrompt.url);
                                               }
-                                            />
-                                          </svg>
-                                          <div>
-                                            <div className="text-xs font-semibold">
-                                              <span className="text-text-100">{contextDebugInfo.percentUsed}%</span>
-                                              <span className="font-normal text-text-400 ml-1">
-                                                {intl.formatMessage(
-                                                  { id: 'debug_tokens_used', defaultMessage: 'Used: {used}' },
-                                                  { used: contextDebugInfo.totalUsed.toLocaleString() }
-                                                )}
-                                              </span>
-                                            </div>
-                                            {contextDebugInfo.hasUsage && (
-                                              <div className="text-[10px] text-text-500 mt-px">
-                                                {intl.formatMessage(
-                                                  { id: 'debug_tokens_remaining', defaultMessage: 'Remaining: {remaining} ({percent}%)' },
-                                                  { remaining: contextDebugInfo.remaining.toLocaleString(), percent: 100 - contextDebugInfo.percentUsed }
-                                                )}
-                                              </div>
-                                            )}
-                                          </div>
-                                        </div>
-                                        <div className="flex items-center gap-3 text-text-500 pl-9">
-                                          <span>
-                                            {intl.formatMessage(
-                                              { id: 'debug_input_tokens', defaultMessage: 'In: {count}' },
-                                              { count: contextDebugInfo.inputTokens.toLocaleString() }
-                                            )}
-                                          </span>
-                                          <span className="text-border-300/20">|</span>
-                                          <span>
-                                            {intl.formatMessage(
-                                              { id: 'debug_output_tokens', defaultMessage: 'Out: {count}' },
-                                              { count: contextDebugInfo.outputTokens.toLocaleString() }
-                                            )}
-                                          </span>
-                                        </div>
-                                      </div>
-                                    </span>
-                                  </span>
-                                )}
+                                              setInput('');
+                                              break;
+
+                                            case 'shortcut':
+                                            default:
+                                              insertShortcutChip(command, label);
+                                              break;
+                                          }
+                                        }}
+                                        onRecordWorkflow={() => {
+                                          setShowCommandMenu(false);
+                                          setCommandSearchTerm('');
+                                          setInput('');
+                                          setShowWorkflowModeSelectionModal(true);
+                                        }}
+                                        onScheduleTask={() => {
+                                          setShowCommandMenu(false);
+                                          setCommandSearchTerm('');
+                                          setInput('');
+                                          // TODO: Open schedule task modal
+                                          console.log('Schedule task clicked');
+                                        }}
+                                        onEditShortcut={(shortcut) => {
+                                          setShowCommandMenu(false);
+                                          setCommandSearchTerm('');
+                                          inputRef.current?.clear();
+                                          setPromptToEdit({
+                                            id: shortcut.id,
+                                            prompt: shortcut.prompt,
+                                            command: shortcut.command
+                                          });
+                                        }}
+                                        onClose={() => {
+                                          commandMenuDismissedRef.current = true;
+                                          commandMenuDismissedInputRef.current = input;
+                                          setShowCommandMenu(false);
+                                          setCommandSearchTerm('');
+                                        }}
+                                      />
+                                    </div>
+                                  )}
+
+                                  {/* Rotating tips - only when input is empty and no command menu */}
+                                  {!input && !showCommandMenu && (
+                                    <RotatingTips tips={rotatingTips} />
+                                  )}
+
+                                  <RichTextInput
+                                    ref={inputRef}
+                                    value={input}
+                                    onChange={setInput}
+                                    onSubmit={submit}
+                                    placeholder=""
+                                    disabled={false}
+                                  />
+                                </div>
                               </div>
 
-                              <div className="flex items-center gap-2">
-                                {/* Teach SuperDuck button */}
-                                <Tooltip
-                                  tooltipContent={intl.formatMessage({
-                                    defaultMessage: 'Teach SuperDuck',
-                                    id: 'teach_superduck'
-                                  })}
-                                  side="top"
-                                >
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setShowWorkflowModeSelectionModal(true);
-                                    }}
-                                    className="inline-flex items-center justify-center relative shrink-0 select-none font-medium h-7 w-7 rounded-lg active:scale-95 transition-all duration-200 text-text-300 hover:text-text-200 hover:bg-bg-200"
-                                    aria-label={intl.formatMessage({
-                                      defaultMessage: 'Teach SuperDuck',
-                                      id: 'teach_superduck'
-                                    })}
-                                  >
-                                    <CursorClickIcon size={12} />
-                                  </button>
-                                </Tooltip>
+                              <input
+                                ref={fileInputRef}
+                                type="file"
+                                multiple
+                                accept="image/*"
+                                className="hidden"
+                                onChange={(event) => {
+                                  void handleFileSelection(event.target.files);
+                                  event.target.value = '';
+                                }}
+                              />
 
-                                <Tooltip
-                                  tooltipContent={intl.formatMessage({
-                                    defaultMessage: 'Actions',
-                                    id: 'actions'
-                                  })}
-                                  side="top"
-                                >
-                                  <div ref={actionsMenuRef} className="relative">
+                              <div
+                                className={`relative flex items-center justify-between px-3 ${
+                                  showCommandMenu ? 'pb-2' : 'pb-3'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <div ref={permissionMenuRef} className="relative">
                                     <button
                                       type="button"
-                                      onClick={(event) => {
-                                        event.stopPropagation();
-                                        setIsPermissionMenuOpen(false);
-                                        setIsActionsMenuOpen((value) => !value);
+                                      onClick={() => {
+                                        console.log(
+                                          '[DEBUG] Permission menu button clicked, current state:',
+                                          isPermissionMenuOpen
+                                        );
+                                        setIsActionsMenuOpen(false);
+                                        setIsPermissionMenuOpen((value) => {
+                                          console.log(
+                                            '[DEBUG] Toggling permission menu from',
+                                            value,
+                                            'to',
+                                            !value
+                                          );
+                                          return !value;
+                                        });
                                       }}
-                                      className="inline-flex items-center justify-center relative shrink-0 select-none font-medium h-7 w-7 rounded-lg active:scale-95 transition-all duration-200 text-text-300 hover:text-text-200 hover:bg-bg-200"
-                                      aria-label={intl.formatMessage({
-                                        defaultMessage: 'Actions',
-                                        id: 'actions'
-                                      })}
+                                      className="inline-flex items-center gap-1.5 h-7 rounded-lg border border-border-300 bg-bg-000 px-2 text-[11px] text-text-200 hover:bg-bg-200 transition-colors"
+                                      aria-haspopup="menu"
+                                      aria-expanded={isPermissionMenuOpen}
+                                      aria-label="Permission mode"
+                                      title="Permission mode"
                                     >
-                                      <Plus size={12} />
+                                      {permissionMode === 'follow_a_plan' ? (
+                                        <Hand size={12} className="text-text-300" />
+                                      ) : (
+                                        <ChevronsRight size={12} className="text-text-300" />
+                                      )}
+                                      <span>{selectedPermissionModeLabel}</span>
+                                      <ChevronDown size={12} className="text-text-300" />
                                     </button>
-                                    {isActionsMenuOpen ? (
-                                      <div className="absolute right-0 bottom-full mb-2 z-50 w-max min-w-[176px] bg-bg-000 border-0.5 border-border-200 backdrop-blur-xl rounded-xl text-text-300 shadow-[0px_2px_8px_0px_hsl(var(--always-black)/8%)] p-1.5">
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setIsActionsMenuOpen(false);
-                                            fileInputRef.current?.click();
-                                          }}
-                                          className="w-full min-h-8 px-2 py-1.5 rounded-lg text-left text-sm flex items-center gap-2 hover:bg-bg-200 hover:text-text-100 transition-colors whitespace-nowrap"
-                                        >
-                                          <Paperclip size={14} />
-                                          <span>
-                                            <MemoizedFormattedMessage
-                                              defaultMessage="Upload image"
-                                              id="upload_image"
-                                            />
-                                          </span>
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => void captureCurrentTabScreenshot()}
-                                          className="w-full min-h-8 px-2 py-1.5 rounded-lg text-left text-sm flex items-center gap-2 hover:bg-bg-200 hover:text-text-100 transition-colors whitespace-nowrap"
-                                        >
-                                          <Camera size={14} />
-                                          <span>
-                                            <MemoizedFormattedMessage
-                                              defaultMessage="Take a screenshot"
-                                              id="take_a_screenshot"
-                                            />
-                                          </span>
-                                        </button>
+                                    {isPermissionMenuOpen ? (
+                                      <div className="absolute left-0 bottom-full mb-2 z-50 w-80 bg-bg-000 border-0.5 border-border-200 backdrop-blur-xl rounded-xl text-text-300 shadow-[0px_2px_8px_0px_hsl(var(--always-black)/8%)] p-1.5">
+                                        {permissionModeMenuOptions.map((option) => {
+                                          const isSelected = permissionMode === option.value;
+                                          const Icon = option.Icon;
+
+                                          return (
+                                            <button
+                                              key={option.value}
+                                              type="button"
+                                              onClick={() => {
+                                                setPermissionMode(option.value);
+                                                setIsPermissionMenuOpen(false);
+                                              }}
+                                              className={`w-full px-3 py-2 rounded-lg text-left flex items-start gap-3 transition-colors ${isSelected ? 'bg-bg-200' : 'hover:bg-bg-200'}`}
+                                            >
+                                              <div className="shrink-0 mt-0.5">
+                                                <Icon size={16} className="text-text-200" />
+                                              </div>
+                                              <div className="flex-1 min-w-0">
+                                                <div className="text-sm font-medium text-text-100">
+                                                  {intl.formatMessage({
+                                                    id: option.labelId,
+                                                    defaultMessage: option.labelDefault
+                                                  })}
+                                                </div>
+                                                <div className="mt-1 text-xs text-text-400">
+                                                  {intl.formatMessage({
+                                                    id: option.descriptionId,
+                                                    defaultMessage: option.descriptionDefault
+                                                  })}
+                                                </div>
+                                              </div>
+                                              <div className="shrink-0 self-center">
+                                                {isSelected ? (
+                                                  <Check
+                                                    size={16}
+                                                    className="text-accent-secondary-200"
+                                                  />
+                                                ) : null}
+                                              </div>
+                                            </button>
+                                          );
+                                        })}
+                                        {shouldDisableSkipPermissions ? (
+                                          <p className="px-3 pt-2 text-[11px] text-text-300">
+                                            {intl.formatMessage({
+                                              id: 'LStwu4n1yT_blocked',
+                                              defaultMessage:
+                                                'Act without asking is unavailable on blocked pages.'
+                                            })}
+                                          </p>
+                                        ) : null}
                                       </div>
                                     ) : null}
                                   </div>
-                                </Tooltip>
+                                  {attachmentCount > 0 ? (
+                                    <span className="text-[11px] text-text-300">
+                                      {attachmentCount} image(s)
+                                    </span>
+                                  ) : null}
+                                  {/* Debug mode: context usage indicator */}
+                                  {debugMode && contextDebugInfo && (
+                                    <span
+                                      className="relative inline-flex items-center gap-1 h-7 rounded-lg border border-border-300 bg-bg-000 px-1.5 text-[11px] text-text-200 hover:bg-bg-200 transition-colors cursor-default"
+                                      role="status"
+                                      aria-label={`Context: ${contextDebugInfo.percentUsed}%`}
+                                      onMouseEnter={() => {
+                                        const el = debugTooltipRef.current;
+                                        if (el) {
+                                          el.style.opacity = '1';
+                                          el.style.visibility = 'visible';
+                                          el.style.transform = 'translateX(-50%) scale(1)';
+                                        }
+                                      }}
+                                      onMouseLeave={() => {
+                                        const el = debugTooltipRef.current;
+                                        if (el) {
+                                          el.style.opacity = '0';
+                                          el.style.visibility = 'hidden';
+                                          el.style.transform = 'translateX(-50%) scale(0.95)';
+                                        }
+                                      }}
+                                    >
+                                      <svg
+                                        viewBox="0 0 16 16"
+                                        width="14"
+                                        height="14"
+                                        className="-rotate-90 shrink-0"
+                                      >
+                                        <circle
+                                          cx="8"
+                                          cy="8"
+                                          r="6"
+                                          fill="none"
+                                          stroke="hsl(var(--border-300))"
+                                          strokeWidth="2"
+                                        />
+                                        <circle
+                                          cx="8"
+                                          cy="8"
+                                          r="6"
+                                          fill="none"
+                                          strokeWidth="2"
+                                          strokeLinecap="round"
+                                          strokeDasharray={`${(contextDebugInfo.percentUsed * 37.7) / 100} 37.7`}
+                                          stroke={
+                                            contextDebugInfo.percentUsed >= 90
+                                              ? 'hsl(var(--danger-100))'
+                                              : contextDebugInfo.percentUsed >= 70
+                                                ? 'hsl(var(--warning-100))'
+                                                : 'hsl(var(--accent-secondary-100))'
+                                          }
+                                          className="transition-all duration-300"
+                                        />
+                                      </svg>
+                                      <span>{contextDebugInfo.percentUsed}%</span>
+                                      {/* Hover popup — ref-controlled to avoid re-renders */}
+                                      <span
+                                        ref={debugTooltipRef}
+                                        className="absolute bottom-full left-1/2 mb-2 rounded-xl pointer-events-none transition-all duration-150 z-[9999] bg-bg-000 border border-border-300 shadow-xl px-3.5 py-2.5 text-text-100"
+                                        role="tooltip"
+                                        style={{
+                                          opacity: 0,
+                                          visibility: 'hidden',
+                                          transform: 'translateX(-50%) scale(0.95)'
+                                        }}
+                                      >
+                                        <div className="whitespace-nowrap text-left leading-relaxed text-[11px]">
+                                          <div className="flex items-center gap-2 pb-1.5 mb-1.5 border-b border-border-300/10">
+                                            <svg
+                                              viewBox="0 0 16 16"
+                                              width="28"
+                                              height="28"
+                                              className="-rotate-90 shrink-0"
+                                            >
+                                              <circle
+                                                cx="8"
+                                                cy="8"
+                                                r="6.5"
+                                                fill="none"
+                                                stroke="hsl(var(--border-300) / 15%)"
+                                                strokeWidth="1.5"
+                                              />
+                                              <circle
+                                                cx="8"
+                                                cy="8"
+                                                r="6.5"
+                                                fill="none"
+                                                strokeWidth="1.5"
+                                                strokeLinecap="round"
+                                                strokeDasharray={`${(contextDebugInfo.percentUsed * 40.84) / 100} 40.84`}
+                                                stroke={
+                                                  contextDebugInfo.percentUsed >= 90
+                                                    ? 'hsl(var(--danger-100))'
+                                                    : contextDebugInfo.percentUsed >= 70
+                                                      ? 'hsl(var(--warning-100))'
+                                                      : 'hsl(var(--accent-secondary-100))'
+                                                }
+                                              />
+                                            </svg>
+                                            <div>
+                                              <div className="text-xs font-semibold">
+                                                <span className="text-text-100">
+                                                  {contextDebugInfo.percentUsed}%
+                                                </span>
+                                                <span className="font-normal text-text-400 ml-1">
+                                                  {intl.formatMessage(
+                                                    {
+                                                      id: 'debug_tokens_used',
+                                                      defaultMessage: 'Used: {used}'
+                                                    },
+                                                    {
+                                                      used: contextDebugInfo.totalUsed.toLocaleString()
+                                                    }
+                                                  )}
+                                                </span>
+                                              </div>
+                                              {contextDebugInfo.hasUsage && (
+                                                <div className="text-[10px] text-text-500 mt-px">
+                                                  {intl.formatMessage(
+                                                    {
+                                                      id: 'debug_tokens_remaining',
+                                                      defaultMessage:
+                                                        'Remaining: {remaining} ({percent}%)'
+                                                    },
+                                                    {
+                                                      remaining:
+                                                        contextDebugInfo.remaining.toLocaleString(),
+                                                      percent: 100 - contextDebugInfo.percentUsed
+                                                    }
+                                                  )}
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+                                          <div className="flex items-center gap-3 text-text-500 pl-9">
+                                            <span>
+                                              {intl.formatMessage(
+                                                {
+                                                  id: 'debug_input_tokens',
+                                                  defaultMessage: 'In: {count}'
+                                                },
+                                                {
+                                                  count:
+                                                    contextDebugInfo.inputTokens.toLocaleString()
+                                                }
+                                              )}
+                                            </span>
+                                            <span className="text-border-300/20">|</span>
+                                            <span>
+                                              {intl.formatMessage(
+                                                {
+                                                  id: 'debug_output_tokens',
+                                                  defaultMessage: 'Out: {count}'
+                                                },
+                                                {
+                                                  count:
+                                                    contextDebugInfo.outputTokens.toLocaleString()
+                                                }
+                                              )}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      </span>
+                                    </span>
+                                  )}
+                                </div>
 
-                                {effectiveIsAgentRunning ? (
-                                  <button
-                                    type="button"
-                                    data-test-id="stop-button"
-                                    onClick={() => effectiveCancel()}
-                                    className="inline-flex items-center justify-center relative shrink-0 select-none font-medium h-7 w-7 rounded-lg active:scale-95 text-text-300 hover:text-text-200 hover:bg-bg-200 transition-colors"
-                                    aria-label={intl.formatMessage({
-                                      defaultMessage: 'Stop message',
-                                      id: 'stop_message'
+                                <div className="flex items-center gap-2">
+                                  {/* Teach SuperDuck button */}
+                                  <Tooltip
+                                    tooltipContent={intl.formatMessage({
+                                      defaultMessage: 'Teach SuperDuck',
+                                      id: 'teach_superduck'
                                     })}
-                                    title={intl.formatMessage({
-                                      defaultMessage: 'Stop message',
-                                      id: 'stop_message'
-                                    })}
+                                    side="top"
                                   >
-                                    <CircleStop size={14} />
-                                  </button>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    data-test-id="send-button"
-                                    onClick={submit}
-                                    disabled={
-                                      (!input.trim() && pendingAttachments.length === 0) ||
-                                      effectiveIsAgentRunning
-                                    }
-                                    className={
-                                      'inline-flex items-center justify-center relative shrink-0 select-none disabled:pointer-events-none disabled:opacity-50 disabled:shadow-none disabled:drop-shadow-none font-medium transition-colors h-7 w-7 rounded-lg active:scale-95 ' +
-                                      (permissionMode === 'skip_all_permission_checks'
-                                        ? 'bg-[#BF8534] hover:bg-[#A06F2C] text-white'
-                                        : 'bg-accent-main-000 hover:bg-accent-main-200 text-oncolor-100')
-                                    }
-                                    aria-label={intl.formatMessage({
-                                      defaultMessage: 'Send message',
-                                      id: 'send_message'
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setShowWorkflowModeSelectionModal(true);
+                                      }}
+                                      className="inline-flex items-center justify-center relative shrink-0 select-none font-medium h-7 w-7 rounded-lg active:scale-95 transition-all duration-200 text-text-300 hover:text-text-200 hover:bg-bg-200"
+                                      aria-label={intl.formatMessage({
+                                        defaultMessage: 'Teach SuperDuck',
+                                        id: 'teach_superduck'
+                                      })}
+                                    >
+                                      <CursorClickIcon size={12} />
+                                    </button>
+                                  </Tooltip>
+
+                                  <Tooltip
+                                    tooltipContent={intl.formatMessage({
+                                      defaultMessage: 'Actions',
+                                      id: 'actions'
                                     })}
-                                    title={intl.formatMessage({
-                                      defaultMessage: 'Send message',
-                                      id: 'send_message'
-                                    })}
+                                    side="top"
                                   >
-                                    <ArrowUp size={14} />
-                                  </button>
-                                )}
+                                    <div ref={actionsMenuRef} className="relative">
+                                      <button
+                                        type="button"
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          setIsPermissionMenuOpen(false);
+                                          setIsActionsMenuOpen((value) => !value);
+                                        }}
+                                        className="inline-flex items-center justify-center relative shrink-0 select-none font-medium h-7 w-7 rounded-lg active:scale-95 transition-all duration-200 text-text-300 hover:text-text-200 hover:bg-bg-200"
+                                        aria-label={intl.formatMessage({
+                                          defaultMessage: 'Actions',
+                                          id: 'actions'
+                                        })}
+                                      >
+                                        <Plus size={12} />
+                                      </button>
+                                      {isActionsMenuOpen ? (
+                                        <div className="absolute right-0 bottom-full mb-2 z-50 w-max min-w-[176px] bg-bg-000 border-0.5 border-border-200 backdrop-blur-xl rounded-xl text-text-300 shadow-[0px_2px_8px_0px_hsl(var(--always-black)/8%)] p-1.5">
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setIsActionsMenuOpen(false);
+                                              fileInputRef.current?.click();
+                                            }}
+                                            className="w-full min-h-8 px-2 py-1.5 rounded-lg text-left text-sm flex items-center gap-2 hover:bg-bg-200 hover:text-text-100 transition-colors whitespace-nowrap"
+                                          >
+                                            <Paperclip size={14} />
+                                            <span>
+                                              <MemoizedFormattedMessage
+                                                defaultMessage="Upload image"
+                                                id="upload_image"
+                                              />
+                                            </span>
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => void captureCurrentTabScreenshot()}
+                                            className="w-full min-h-8 px-2 py-1.5 rounded-lg text-left text-sm flex items-center gap-2 hover:bg-bg-200 hover:text-text-100 transition-colors whitespace-nowrap"
+                                          >
+                                            <Camera size={14} />
+                                            <span>
+                                              <MemoizedFormattedMessage
+                                                defaultMessage="Take a screenshot"
+                                                id="take_a_screenshot"
+                                              />
+                                            </span>
+                                          </button>
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  </Tooltip>
+
+                                  {effectiveIsAgentRunning ? (
+                                    <button
+                                      type="button"
+                                      data-test-id="stop-button"
+                                      onClick={() => effectiveCancel()}
+                                      className="inline-flex items-center justify-center relative shrink-0 select-none font-medium h-7 w-7 rounded-lg active:scale-95 text-text-300 hover:text-text-200 hover:bg-bg-200 transition-colors"
+                                      aria-label={intl.formatMessage({
+                                        defaultMessage: 'Stop message',
+                                        id: 'stop_message'
+                                      })}
+                                      title={intl.formatMessage({
+                                        defaultMessage: 'Stop message',
+                                        id: 'stop_message'
+                                      })}
+                                    >
+                                      <CircleStop size={14} />
+                                    </button>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      data-test-id="send-button"
+                                      onClick={submit}
+                                      disabled={
+                                        (!input.trim() && pendingAttachments.length === 0) ||
+                                        effectiveIsAgentRunning
+                                      }
+                                      className={
+                                        'inline-flex items-center justify-center relative shrink-0 select-none disabled:pointer-events-none disabled:opacity-50 disabled:shadow-none disabled:drop-shadow-none font-medium transition-colors h-7 w-7 rounded-lg active:scale-95 ' +
+                                        (permissionMode === 'skip_all_permission_checks'
+                                          ? 'bg-[#BF8534] hover:bg-[#A06F2C] text-white'
+                                          : 'bg-accent-main-000 hover:bg-accent-main-200 text-oncolor-100')
+                                      }
+                                      aria-label={intl.formatMessage({
+                                        defaultMessage: 'Send message',
+                                        id: 'send_message'
+                                      })}
+                                      title={intl.formatMessage({
+                                        defaultMessage: 'Send message',
+                                        id: 'send_message'
+                                      })}
+                                    >
+                                      <ArrowUp size={14} />
+                                    </button>
+                                  )}
+                                </div>
                               </div>
                             </div>
-                          </div>
                           </BorderBeam>
                           <div className="flex justify-center py-1.5 text-text-500 bg-bg-100">
                             <a
@@ -8390,10 +8465,9 @@ export function SidepanelApp() {
                   id="wants_to_connect"
                   defaultMessage="{clientLabel} wants to connect"
                   values={{
-                    clientLabel:
-                      pairingPrompt.clientType.toLowerCase().includes('code')
-                        ? 'Code Client'
-                        : 'Desktop Client'
+                    clientLabel: pairingPrompt.clientType.toLowerCase().includes('code')
+                      ? 'Code Client'
+                      : 'Desktop Client'
                   }}
                 />
               </h3>
@@ -8496,6 +8570,11 @@ export function SidepanelApp() {
             onClose={() => setScreenshotPreviewUrl(null)}
           />
         )}
+
+        <ImagePreviewModal
+          imageUrl={previewAttachmentImage}
+          onClose={() => setPreviewAttachmentImage(null)}
+        />
       </div>
     </div>
   );
