@@ -14,8 +14,15 @@ BUILD_DIR := build
 # Never check the key into git. Keep it in your shell rc, a gitignored
 # `.env.local`, or a CI secret (e.g. GitHub Actions secret POSTHOG_KEY).
 POSTHOG_KEY ?=
+
+# VERSION is injected into the binary via -ldflags. For release builds it comes
+# from the git tag (e.g. make release-binaries VERSION=0.2.5). For local builds
+# it reads the default value compiled into main.go.
+VERSION ?=
+
 ANALYTICS_LDFLAGS := $(if $(POSTHOG_KEY),-X chrome-native-host/internal/analytics.PostHogWriteKey=$(POSTHOG_KEY),)
-GO_LDFLAGS := $(ANALYTICS_LDFLAGS)
+VERSION_LDFLAGS := $(if $(VERSION),-X main.version=$(VERSION) -X chrome-native-host/internal/analytics.LibVersion=$(VERSION),)
+GO_LDFLAGS := $(strip $(ANALYTICS_LDFLAGS) $(VERSION_LDFLAGS))
 GO_BUILD_FLAGS := $(if $(strip $(GO_LDFLAGS)),-ldflags "$(GO_LDFLAGS)",)
 
 all: native-host mcp-server superduck
@@ -40,7 +47,6 @@ superduck:
 # and `superduck init` reads chrome-native-host from the same bin dir.
 release-binaries:
 	@echo "Cross-building superduck + chrome-native-host for all platforms..."
-	@if [ -z "$(POSTHOG_KEY)" ]; then echo "WARN: POSTHOG_KEY not set — release binaries will ship without product analytics."; fi
 	GOOS=darwin  GOARCH=arm64 go build $(GO_BUILD_FLAGS) -o ../npm/packages/superduck-darwin-arm64/bin/superduck ./cmd/superduck
 	GOOS=darwin  GOARCH=arm64 go build                  -o ../npm/packages/superduck-darwin-arm64/bin/chrome-native-host ./cmd/native-host
 	GOOS=darwin  GOARCH=amd64 go build $(GO_BUILD_FLAGS) -o ../npm/packages/superduck-darwin-x64/bin/superduck ./cmd/superduck
