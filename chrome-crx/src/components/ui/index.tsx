@@ -66,7 +66,6 @@ function composeRefs<T>(...refs: ComposableRef<T>[]) {
 }
 
 function useComposedRefs<T>(...refs: ComposableRef<T>[]) {
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   return useCallback(composeRefs(...refs), refs);
 }
 
@@ -327,7 +326,8 @@ const buttonVariants = cva(
 type ButtonVariantProps = VariantProps<typeof buttonVariants>;
 
 interface ButtonProps
-  extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'color' | 'onClick'>,
+  extends
+    Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'color' | 'onClick'>,
     ButtonVariantProps {
   loading?: boolean;
   href?: string;
@@ -503,15 +503,15 @@ type InputVariantProps = VariantProps<typeof inputVariants>;
 
 type TextInputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size'> &
   Omit<InputVariantProps, 'error'> & {
-  label?: React.ReactNode;
-  secondaryLabel?: React.ReactNode;
-  labelClassName?: string;
-  onValueChange?: (value: string) => void;
-  automaticallyFocusAndSelect?: boolean;
-  prepend?: React.ReactNode;
-  append?: React.ReactNode;
-  error?: boolean | string;
-};
+    label?: React.ReactNode;
+    secondaryLabel?: React.ReactNode;
+    labelClassName?: string;
+    onValueChange?: (value: string) => void;
+    automaticallyFocusAndSelect?: boolean;
+    prepend?: React.ReactNode;
+    append?: React.ReactNode;
+    error?: boolean | string;
+  };
 
 const TextInput = forwardRef<HTMLInputElement, TextInputProps>(
   (
@@ -643,8 +643,10 @@ function ErrorMessage({ children, className }: { children: React.ReactNode; clas
   );
 }
 
-interface TextAreaProps
-  extends Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, 'placeholder'> {
+interface TextAreaProps extends Omit<
+  React.TextareaHTMLAttributes<HTMLTextAreaElement>,
+  'placeholder'
+> {
   minRows?: number;
   label?: React.ReactNode;
   insetLabel?: boolean;
@@ -721,7 +723,9 @@ const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(
 
     return (
       <div className={cn(fullHeight && 'h-full flex flex-col')}>
-        {label && !insetLabel && <Label label={label} id={generatedId} className={labelClassName} />}
+        {label && !insetLabel && (
+          <Label label={label} id={generatedId} className={labelClassName} />
+        )}
         <div className={cn('relative', fullHeight && 'flex-1')}>
           {isArrayPlaceholder && (
             <PlaceholderRotator
@@ -1160,7 +1164,9 @@ function DatePicker({
               formatShortWeekday={(locale, date) => {
                 const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
                 const weekdaysEn = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
-                return isChineseLocale(locale) ? weekdays[date.getDay()] : weekdaysEn[date.getDay()];
+                return isChineseLocale(locale)
+                  ? weekdays[date.getDay()]
+                  : weekdaysEn[date.getDay()];
               }}
             />
           </div>
@@ -1189,9 +1195,7 @@ function parseTimeInput(input: string): string | null {
     .replace(/\s+/g, ' ')
     .trim();
 
-  const match = normalized.match(
-    /^(?:(am|pm|AM|PM)\s*)?(\d{1,2}):(\d{2})(?:\s*(am|pm|AM|PM))?$/
-  );
+  const match = normalized.match(/^(?:(am|pm|AM|PM)\s*)?(\d{1,2}):(\d{2})(?:\s*(am|pm|AM|PM))?$/);
   if (!match) return null;
 
   const prefixPeriod = match[1];
@@ -1461,6 +1465,7 @@ function Modal({
   placement?: 'center' | 'top' | 'center-locked';
 }) {
   const modalRef = useRef<HTMLDivElement>(null);
+  const overlayMouseDownTarget = useRef<EventTarget | null>(null);
   const [lockedTop, setLockedTop] = useState<number | null>(null);
 
   useLayoutEffect(() => {
@@ -1476,7 +1481,7 @@ function Modal({
   return (
     <div
       className={cn(
-        'fixed z-50 inset-0 grid justify-items-center bg-always-black overflow-y-auto md:p-10 p-4',
+        'fixed z-50 inset-0 grid justify-items-center overflow-y-auto md:p-10 p-4',
         placement === 'top' || (placement === 'center-locked' && lockedTop !== null)
           ? 'items-start'
           : 'items-center',
@@ -1488,8 +1493,16 @@ function Modal({
           ? { paddingTop: `${lockedTop}px` }
           : undefined
       }
+      onMouseDown={(event) => {
+        overlayMouseDownTarget.current = event.target;
+      }}
       onClick={(event) => {
-        if (event.target === event.currentTarget) onClose();
+        if (
+          event.target === event.currentTarget &&
+          overlayMouseDownTarget.current === event.currentTarget
+        ) {
+          onClose();
+        }
       }}
     >
       <div
@@ -1508,7 +1521,9 @@ function Modal({
       >
         <div className="min-h-full flex flex-col">
           {!!(title || hasCloseButton) && (
-            <div className={cn('flex items-center gap-4', title ? 'justify-between' : 'justify-end')}>
+            <div
+              className={cn('flex items-center gap-4', title ? 'justify-between' : 'justify-end')}
+            >
               {title && (
                 <h2 className="font-xl-bold text-text-100 flex w-full min-w-0 items-center leading-6 break-words">
                   {icon && <span className="mr-2">{icon}</span>}
