@@ -7553,6 +7553,8 @@ export function SidepanelApp() {
                     <button
                       type="button"
                       onClick={() => setIsLanguageSubmenuOpen((value) => !value)}
+                      aria-expanded={isLanguageSubmenuOpen}
+                      aria-controls="language-submenu"
                       className="w-full min-h-8 px-2 py-1.5 rounded-lg text-left text-sm flex items-center gap-2 hover:bg-bg-200 hover:text-text-100 transition-colors"
                     >
                       <Languages size={16} className="shrink-0" />
@@ -7566,7 +7568,7 @@ export function SidepanelApp() {
                       )}
                     </button>
                     {isLanguageSubmenuOpen ? (
-                      <div className="pl-4">
+                      <div id="language-submenu" className="pl-4">
                         {SUPPORTED_LOCALES.map((entry) => (
                           <button
                             key={entry}
