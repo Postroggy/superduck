@@ -7549,7 +7549,7 @@ export function SidepanelApp() {
                       <MemoizedFormattedMessage defaultMessage="Settings" id="settings" />
                     </span>
                   </button>
-                  <div className="relative">
+                  <div>
                     <button
                       type="button"
                       onClick={() => setIsLanguageSubmenuOpen((value) => !value)}
@@ -7559,10 +7559,14 @@ export function SidepanelApp() {
                       <span className="flex-1">
                         <MemoizedFormattedMessage defaultMessage="Language" id="language" />
                       </span>
-                      <ChevronRight size={16} className="text-text-300 shrink-0" />
+                      {isLanguageSubmenuOpen ? (
+                        <ChevronDown size={16} className="text-text-300 shrink-0" />
+                      ) : (
+                        <ChevronRight size={16} className="text-text-300 shrink-0" />
+                      )}
                     </button>
                     {isLanguageSubmenuOpen ? (
-                      <div className="absolute right-full top-0 mr-2 z-50 min-w-44 bg-bg-000 border-0.5 border-border-200 backdrop-blur-xl rounded-xl text-text-300 shadow-[0px_2px_8px_0px_hsl(var(--always-black)/8%)] p-1.5">
+                      <div className="pl-4">
                         {SUPPORTED_LOCALES.map((entry) => (
                           <button
                             key={entry}
