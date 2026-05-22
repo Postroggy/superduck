@@ -12,11 +12,14 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 )
 
 const (
 	socketPath = "/tmp/chrome-native-host.sock"
 )
+
+const identitySyncWait = 2 * time.Second
 
 // --- Server with dual channels ---
 
@@ -30,12 +33,15 @@ type Server struct {
 	// Chrome stdio is single-threaded: one goroutine reads stdin,
 	// responses are routed back via chromeCh.
 	// chromeMu serializes request-response pairs to Chrome.
-	chromeMu sync.Mutex
-	chromeCh chan []byte
+	chromeMu         sync.Mutex
+	chromeCh         chan []byte
+	identitySyncOnce sync.Once
 }
 
 func NewServer() (*Server, error) {
-	os.Remove(socketPath)
+	if err := prepareSocketPath(socketPath); err != nil {
+		return nil, err
+	}
 
 	listener, err := net.Listen("unix", socketPath)
 	if err != nil {
@@ -50,6 +56,26 @@ func NewServer() (*Server, error) {
 		chromeCh:       make(chan []byte, 1),
 		closed:         make(chan struct{}),
 	}, nil
+}
+
+func prepareSocketPath(path string) error {
+	if _, err := os.Lstat(path); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("failed to stat UDS socket: %w", err)
+	}
+
+	conn, err := net.DialTimeout("unix", path, 200*time.Millisecond)
+	if err == nil {
+		_ = conn.Close()
+		return fmt.Errorf("chrome-native-host already listening at %s", path)
+	}
+
+	if err := os.Remove(path); err != nil {
+		return fmt.Errorf("failed to remove stale UDS socket: %w", err)
+	}
+	return nil
 }
 
 func (s *Server) Run() error {
@@ -134,6 +160,12 @@ func (s *Server) handleUDSConnection(conn net.Conn) {
 }
 
 func (s *Server) forwardToChrome(raw []byte, responseWriter io.Writer) {
+	s.identitySyncOnce.Do(func() {
+		if !waitForInstallIDConfirmed(identitySyncWait) {
+			slog.Warn("analytics identity not yet synced, forwarding anyway")
+		}
+	})
+
 	// Serialize: only one request-response pair in flight at a time
 	s.chromeMu.Lock()
 	defer s.chromeMu.Unlock()
@@ -179,9 +211,20 @@ func (s *Server) handleChromeMessage(raw []byte, msg *protocol.Message) {
 		protocol.SendMessage(os.Stdout, map[string]string{"type": "mcp_connected"})
 		protocol.SendMessage(os.Stdout, map[string]string{"type": "status_response"})
 	case "get_analytics_id":
+		analytics.ConfirmInstallID()
 		protocol.SendMessage(os.Stdout, map[string]string{
 			"type":        "analytics_id_response",
 			"distinct_id": analytics.GetOrCreateDistinctID(),
+		})
+	case "sync_analytics_id":
+		var syncMsg struct {
+			DistinctID string `json:"distinct_id"`
+		}
+		_ = json.Unmarshal(raw, &syncMsg)
+		analytics.ConfirmInstallID()
+		protocol.SendMessage(os.Stdout, map[string]string{
+			"type":        "analytics_id_response",
+			"distinct_id": analytics.AdoptInstallID(syncMsg.DistinctID),
 		})
 	case "notification":
 		slog.Debug("notification", "method", msg.Method, "params", msg.Params)
@@ -209,6 +252,8 @@ func (s *Server) Close() error {
 }
 
 func main() {
+	analytics.EnsureInstallID()
+
 	logFile, err := os.OpenFile("/tmp/chrome-native-host.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to open log file: %v\n", err)
@@ -264,4 +309,18 @@ func sendToolError(writer io.Writer, msg string) {
 		Type:  "tool_response",
 		Error: &protocol.ContentWrap{Content: msg},
 	})
+}
+
+func waitForInstallIDConfirmed(timeout time.Duration) bool {
+	if analytics.IsInstallIDConfirmed() {
+		return true
+	}
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		time.Sleep(50 * time.Millisecond)
+		if analytics.IsInstallIDConfirmed() {
+			return true
+		}
+	}
+	return false
 }

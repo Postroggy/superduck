@@ -1,101 +1,92 @@
-import { getStorageValue, setStorageValue, StorageKeys } from './core';
+import { getStorageValue, removeStorageValues, setStorageValue, StorageKeys } from './core';
 
-const NATIVE_HOST_NAMES = [
-  'com.me.superduck_browser_extension',
-  'com.me.superduck_code_browser_extension'
-] as const;
+const ANALYTICS_ID_WAIT_MS = 300;
 
-let nativeIdCache: string | undefined = undefined;
+let analyticsIdPromise: Promise<string> | null = null;
 
-type NativeAnalyticsResponse = {
-  type?: string;
-  distinct_id?: string;
-};
-
-async function getNativeHostAnalyticsId(): Promise<string | null> {
-  if (nativeIdCache !== undefined) return nativeIdCache;
-
-  if (typeof chrome.runtime.connectNative !== 'function') return null;
-  const hasPermission = await chrome.permissions.contains({ permissions: ['nativeMessaging'] });
-  if (!hasPermission) return null;
-
-  for (const hostName of NATIVE_HOST_NAMES) {
-    try {
-      const response = await new Promise<NativeAnalyticsResponse | null>((resolve) => {
-        const port = chrome.runtime.connectNative(hostName);
-        let settled = false;
-        const timeoutId = setTimeout(() => {
-          if (settled) return;
-          settled = true;
-          try {
-            port.disconnect();
-          } catch {
-            // ignore
-          }
-          resolve(null);
-        }, 3000);
-
-        port.onMessage.addListener((message: NativeAnalyticsResponse) => {
-          if (settled) return;
-          if (message?.type !== 'analytics_id_response') return;
-          settled = true;
-          clearTimeout(timeoutId);
-          try {
-            port.disconnect();
-          } catch {
-            // ignore
-          }
-          resolve(message);
-        });
-
-        port.onDisconnect.addListener(() => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(timeoutId);
-          resolve(null);
-        });
-
-        port.postMessage({ type: 'get_analytics_id' });
-      });
-
-      const distinctId = response?.distinct_id?.trim();
-      if (distinctId) {
-        nativeIdCache = distinctId;
-        return distinctId;
-      }
-    } catch {
-      // try next host
-    }
-  }
-
-  return null;
+function createInstallAnalyticsId(): string {
+  return `sdid-${crypto.randomUUID().replace(/-/g, '')}`;
 }
 
-let anonymousIdPromise: Promise<string> | null = null;
+function normalizeStoredAnalyticsId(id: string | undefined): string | undefined {
+  const trimmed = id?.trim();
+  if (!trimmed || trimmed.startsWith('anon-') || trimmed.startsWith('sdext-')) return undefined;
+  return trimmed;
+}
+
+async function readAndCleanStoredAnalyticsId(): Promise<string | undefined> {
+  const rawAnalyticsId = await getStorageValue<string>(StorageKeys.ANALYTICS_ID);
+  const rawAnonymousId = await getStorageValue<string>(StorageKeys.ANONYMOUS_ID);
+  const normalized =
+    normalizeStoredAnalyticsId(rawAnalyticsId) ?? normalizeStoredAnalyticsId(rawAnonymousId);
+
+  if (!normalized && (rawAnalyticsId || rawAnonymousId)) {
+    await removeStorageValues([StorageKeys.ANALYTICS_ID, StorageKeys.ANONYMOUS_ID]);
+  }
+
+  return normalized;
+}
+
+export async function getStoredSharedAnalyticsId(): Promise<string | undefined> {
+  return readAndCleanStoredAnalyticsId();
+}
+
+export async function setSharedAnalyticsId(id: string): Promise<void> {
+  const trimmed = id.trim();
+  if (!trimmed) return;
+  await setStorageValue(StorageKeys.ANALYTICS_ID, trimmed);
+  await setStorageValue(StorageKeys.ANONYMOUS_ID, trimmed);
+}
+
+async function waitForSharedAnalyticsId(): Promise<string | undefined> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (value?: string) => {
+      if (settled) return;
+      settled = true;
+      chrome.storage.onChanged.removeListener(listener);
+      clearTimeout(timeoutId);
+      resolve(value);
+    };
+    const listener = (changes: Record<string, chrome.storage.StorageChange>, areaName: string) => {
+      if (areaName !== 'local') return;
+      const next =
+        normalizeStoredAnalyticsId(
+          typeof changes[StorageKeys.ANALYTICS_ID]?.newValue === 'string'
+            ? changes[StorageKeys.ANALYTICS_ID]?.newValue
+            : undefined
+        ) ??
+        normalizeStoredAnalyticsId(
+          typeof changes[StorageKeys.ANONYMOUS_ID]?.newValue === 'string'
+            ? changes[StorageKeys.ANONYMOUS_ID]?.newValue
+            : undefined
+        );
+      if (next) finish(next);
+    };
+    chrome.storage.onChanged.addListener(listener);
+    const timeoutId = setTimeout(() => finish(), ANALYTICS_ID_WAIT_MS);
+
+    readAndCleanStoredAnalyticsId().then((stored) => {
+      if (stored) finish(stored);
+    });
+  });
+}
 
 export async function getOrCreateAnonymousId(): Promise<string> {
-  if (anonymousIdPromise) return anonymousIdPromise;
+  if (analyticsIdPromise) return analyticsIdPromise;
 
-  anonymousIdPromise = (async () => {
-    let id = await getStorageValue<string>(StorageKeys.ANONYMOUS_ID);
-    if (id) {
-      if (nativeIdCache === undefined) {
-        const nativeId = await getNativeHostAnalyticsId();
-        if (nativeId && nativeId !== id) {
-          id = nativeId;
-          await setStorageValue(StorageKeys.ANONYMOUS_ID, id);
-        }
-      }
-    } else {
-      id = (await getNativeHostAnalyticsId()) ?? `anon-${crypto.randomUUID()}`;
-      await setStorageValue(StorageKeys.ANONYMOUS_ID, id);
+  analyticsIdPromise = (async () => {
+    let id = await waitForSharedAnalyticsId();
+    if (!id) {
+      id = createInstallAnalyticsId();
+      await setSharedAnalyticsId(id);
     }
     return id;
   })();
 
   try {
-    return await anonymousIdPromise;
+    return await analyticsIdPromise;
   } finally {
-    anonymousIdPromise = null;
+    analyticsIdPromise = null;
   }
 }
