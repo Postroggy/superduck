@@ -1,9 +1,9 @@
 import {
-  StorageKeys,
-  removeStorageValues,
-  getStorageValue,
+  getOrCreateAnonymousId,
   getConfig,
-  getOrCreateAnonymousId
+  getStorageValue,
+  removeStorageValues,
+  StorageKeys
 } from '../extensionServices';
 
 // ---------------------------------------------------------------------------
@@ -18,28 +18,17 @@ import {
 const POSTHOG_HOST = 'https://us.i.posthog.com';
 const POSTHOG_API_KEY = 'phc_usrQSJ4QknZBB8iZT9jmJZE5XixypAwvFn49dB8wFSss';
 
-let analyticsUserId: string | null = null;
-let identifyPromise: Promise<void> | null = null;
-
-function ensureIdentified(): Promise<void> {
-  if (!identifyPromise) {
-    identifyPromise = identifyUser();
-  }
-  return identifyPromise;
-}
-
 async function posthogCapture(
   event: string,
   properties: Record<string, unknown> = {}
 ): Promise<void> {
   try {
-    await ensureIdentified();
     const anonymousId = await getOrCreateAnonymousId();
     const extensionVersion = chrome.runtime.getManifest().version;
     const payload: Record<string, unknown> = {
       api_key: POSTHOG_API_KEY,
       event,
-      distinct_id: analyticsUserId || anonymousId,
+      distinct_id: anonymousId,
       timestamp: new Date().toISOString(),
       properties: {
         ...properties,
@@ -60,61 +49,7 @@ async function posthogCapture(
 
 // --- initializeAnalytics ---
 const initializeAnalytics = async (): Promise<void> => {
-  await ensureIdentified();
-};
-
-// --- identifyUser ---
-const identifyUser = async (): Promise<void> => {
-  try {
-    analyticsUserId = null;
-    const token = await getStorageValue<string>(StorageKeys.ACCESS_TOKEN);
-    if (!token) return;
-    const profileUrl = `${getConfig().apiBaseUrl}/api/oauth/profile`;
-    const response = await fetch(profileUrl, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    });
-    if (401 === response.status) {
-      await removeStorageValues([StorageKeys.ACCESS_TOKEN, StorageKeys.TOKEN_EXPIRY]);
-      return;
-    }
-    if (!response.ok) return;
-    const profile = await response.json();
-    const userId = profile?.account?.uuid;
-    if (!userId) return;
-    analyticsUserId = userId;
-
-    const anonymousId = await getOrCreateAnonymousId();
-    const extensionVersion = chrome.runtime.getManifest().version;
-    const traits: Record<string, unknown> = {
-      email: profile.account?.email,
-      name: profile.account?.name,
-      organizationId: profile.organization?.uuid,
-      organizationType: profile.organization?.organization_type,
-      hasClaudeMax: profile.account?.has_claude_max,
-      hasClaudePro: profile.account?.has_claude_pro,
-      extensionVersion
-    };
-
-    void fetch(`${POSTHOG_HOST}/capture/`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        api_key: POSTHOG_API_KEY,
-        event: '$identify',
-        distinct_id: userId,
-        timestamp: new Date().toISOString(),
-        properties: {
-          $anon_distinct_id: anonymousId,
-          $set: traits
-        }
-      })
-    }).catch(() => {});
-  } catch {
-    // silently fail
-  }
+  void getOrCreateAnonymousId().catch(() => {});
 };
 
 // --- trackEvent --- EXPORT
@@ -167,7 +102,10 @@ class FeatureFlagManager {
     try {
       const config = getConfig();
       const token = await getStorageValue<string>(StorageKeys.ACCESS_TOKEN);
-      if (!token) return;
+      if (!token) {
+        this.initPromise = null;
+        return;
+      }
       const response = await fetch(`${config.apiBaseUrl}/api/bootstrap/features/claude_in_chrome`, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -176,9 +114,14 @@ class FeatureFlagManager {
       });
       if (401 === response.status) {
         await removeStorageValues([StorageKeys.ACCESS_TOKEN, StorageKeys.TOKEN_EXPIRY]);
+        this.initPromise = null;
+        this.features = null;
         return;
       }
-      if (!response.ok) return;
+      if (!response.ok) {
+        this.initPromise = null;
+        return;
+      }
       const responseBody: unknown = await response.json();
       if (isFeatureResponse(responseBody)) {
         this.features = responseBody.features as Record<string, unknown>;
@@ -216,4 +159,4 @@ export async function refreshFeatures(): Promise<void> {
   await manager.refresh();
 }
 
-export { getFeatureFlagManager, initializeAnalytics, identifyUser };
+export { getFeatureFlagManager, initializeAnalytics };
