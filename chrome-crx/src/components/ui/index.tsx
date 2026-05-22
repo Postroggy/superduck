@@ -1493,7 +1493,7 @@ function Modal({
           ? { paddingTop: `${lockedTop}px` }
           : undefined
       }
-      onMouseDown={(event) => {
+      onPointerDownCapture={(event) => {
         overlayMouseDownTarget.current = event.target;
       }}
       onClick={(event) => {
@@ -1501,7 +1501,10 @@ function Modal({
           event.target === event.currentTarget &&
           overlayMouseDownTarget.current === event.currentTarget
         ) {
+          overlayMouseDownTarget.current = null;
           onClose();
+        } else {
+          overlayMouseDownTarget.current = null;
         }
       }}
     >
