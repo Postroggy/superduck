@@ -5,6 +5,7 @@ import {
   DEFAULT_BASE_URL,
   PROVIDER_KIND_LABEL,
   fetchProviderModels,
+  isValidProviderBaseURL,
   newProviderId,
   normalizeProviderBaseURL,
   type AiProvider,
@@ -76,6 +77,12 @@ const ProviderEditorModal: React.FC<ProviderEditorModalProps> = ({
       setIsLoadingModels(false);
       return;
     }
+    if (trimmedBaseURL && !isValidProviderBaseURL(baseURL)) {
+      setModelOptions([]);
+      setModelDropdownOpen(false);
+      setIsLoadingModels(false);
+      return;
+    }
 
     let cancelled = false;
     setModelOptions([]);
@@ -133,6 +140,7 @@ const ProviderEditorModal: React.FC<ProviderEditorModalProps> = ({
   }, [isEditing, kind, name]);
 
   const submitDisabled = !name.trim() && !PROVIDER_KIND_LABEL[kind];
+  const hasInvalidBaseURL = !isValidProviderBaseURL(baseURL);
   const filteredModelOptions = useMemo(() => {
     const normalizedModelId = modelId.trim().toLowerCase();
     if (!normalizedModelId) return modelOptions;
@@ -142,7 +150,17 @@ const ProviderEditorModal: React.FC<ProviderEditorModalProps> = ({
     return filtered.length > 0 ? filtered : modelOptions;
   }, [modelId, modelOptions]);
 
+  const handleBaseURLBlur = () => {
+    setBaseURL((current) => {
+      const trimmed = current.trim();
+      if (!trimmed) return '';
+      if (!isValidProviderBaseURL(trimmed)) return trimmed;
+      return normalizeProviderBaseURL(kind, trimmed);
+    });
+  };
+
   const handleSubmit = () => {
+    if (!isValidProviderBaseURL(baseURL)) return;
     onSave({
       id: provider?.id ?? newProviderId(),
       kind,
@@ -175,7 +193,12 @@ const ProviderEditorModal: React.FC<ProviderEditorModalProps> = ({
             onChange={(value) => {
               const next = value as ProviderKind;
               setKind(next);
-              setBaseURL((current) => normalizeProviderBaseURL(next, current));
+              setBaseURL((current) => {
+                const trimmed = current.trim();
+                if (!trimmed) return '';
+                if (!isValidProviderBaseURL(trimmed)) return trimmed;
+                return normalizeProviderBaseURL(next, trimmed);
+              });
               setModelOptions([]);
               setModelDropdownOpen(false);
               setIsLoadingModels(false);
@@ -205,12 +228,20 @@ const ProviderEditorModal: React.FC<ProviderEditorModalProps> = ({
           <TextInput
             value={baseURL}
             onChange={(event) => setBaseURL(event.target.value)}
-            onBlur={() => setBaseURL((current) => normalizeProviderBaseURL(kind, current))}
+            onBlur={handleBaseURLBlur}
             placeholder={intl.formatMessage(
               { id: 'api_url_hint', defaultMessage: 'Leave blank to use the default ({url}).' },
               { url: placeholderBaseURL }
             )}
           />
+          {hasInvalidBaseURL && (
+            <p className="mt-1 text-xs text-danger-000">
+              <FormattedMessage
+                id="api_url_invalid"
+                defaultMessage="请输入有效域名或以 http:// / https:// 开头的 URL。"
+              />
+            </p>
+          )}
         </div>
 
         <div>
@@ -274,7 +305,7 @@ const ProviderEditorModal: React.FC<ProviderEditorModalProps> = ({
         <Button variant="secondary" onClick={onCancel}>
           <FormattedMessage id="cancel" defaultMessage="取消" />
         </Button>
-        <Button onClick={handleSubmit} disabled={submitDisabled}>
+        <Button onClick={handleSubmit} disabled={submitDisabled || hasInvalidBaseURL}>
           <FormattedMessage
             id={isEditing ? 'update' : 'add'}
             defaultMessage={isEditing ? '更新' : '添加'}

@@ -1,5 +1,10 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { fetchProviderModels, type AiProvider } from './providerStore';
+import {
+  fetchProviderModels,
+  isValidProviderBaseURL,
+  normalizeProviderBaseURL,
+  type AiProvider
+} from './providerStore';
 
 const baseProvider: AiProvider = {
   id: 'provider-1',
@@ -52,5 +57,52 @@ describe('fetchProviderModels', () => {
     );
 
     await expect(fetchProviderModels(baseProvider)).rejects.toThrow('HTTP 401 - bad key');
+  });
+});
+
+describe('normalizeProviderBaseURL', () => {
+  it('auto prefixes bare domains with https', () => {
+    expect(normalizeProviderBaseURL('openai-compatible', 'api.example.com')).toBe(
+      'https://api.example.com'
+    );
+  });
+
+  it('keeps full https url and trims endpoint suffix', () => {
+    expect(
+      normalizeProviderBaseURL('openai-compatible', 'https://api.example.com/v1/responses')
+    ).toBe('https://api.example.com/v1');
+  });
+
+  it('accepts explicit http urls with single-label hostnames', () => {
+    expect(normalizeProviderBaseURL('openai-compatible', 'http://ollama:11434/v1')).toBe(
+      'http://ollama:11434/v1'
+    );
+  });
+
+  it('returns empty string for invalid input', () => {
+    expect(normalizeProviderBaseURL('openai-compatible', 'not a url')).toBe('');
+    expect(normalizeProviderBaseURL('openai-compatible', 'https://')).toBe('');
+  });
+});
+
+describe('isValidProviderBaseURL', () => {
+  it('accepts blank, bare domains, and full https urls', () => {
+    expect(isValidProviderBaseURL('')).toBe(true);
+    expect(isValidProviderBaseURL('api.example.com')).toBe(true);
+    expect(isValidProviderBaseURL('https://api.example.com/v1')).toBe(true);
+    expect(isValidProviderBaseURL('http://ollama:11434/v1')).toBe(true);
+    expect(isValidProviderBaseURL('http://my-gateway:8080')).toBe(true);
+  });
+
+  it('rejects bare single-label hostnames without an explicit scheme', () => {
+    expect(isValidProviderBaseURL('ollama')).toBe(false);
+    expect(isValidProviderBaseURL('my-gateway:8080')).toBe(false);
+  });
+
+  it('rejects invalid and unsupported protocol urls', () => {
+    expect(isValidProviderBaseURL('https://')).toBe(false);
+    expect(isValidProviderBaseURL('not a url')).toBe(false);
+    expect(isValidProviderBaseURL('javascript:alert(1)')).toBe(false);
+    expect(isValidProviderBaseURL('https://user:pass@api.example.com')).toBe(false);
   });
 });

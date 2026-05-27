@@ -336,6 +336,40 @@ export function clearProviderCache(): void {
   migrated = false;
 }
 
+const HAS_URL_SCHEME_RE = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//;
+
+function withDefaultProviderScheme(trimmed: string): string {
+  return HAS_URL_SCHEME_RE.test(trimmed) ? trimmed : `https://${trimmed}`;
+}
+
+function isAllowedProviderHostname(hostname: string, hadExplicitScheme: boolean): boolean {
+  if (!hostname) return false;
+  if (hostname === 'localhost') return true;
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(hostname)) return true;
+  if (hostname.includes('.')) return true;
+  return hadExplicitScheme;
+}
+
+function parseProviderBaseURLInput(trimmed: string): URL | null {
+  if (!trimmed) return null;
+  const hadExplicitScheme = HAS_URL_SCHEME_RE.test(trimmed);
+  try {
+    const parsed = new URL(withDefaultProviderScheme(trimmed));
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+    if (parsed.username || parsed.password) return null;
+    if (!isAllowedProviderHostname(parsed.hostname, hadExplicitScheme)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export function isValidProviderBaseURL(rawBaseURL: string): boolean {
+  const trimmed = rawBaseURL.trim();
+  if (!trimmed) return true;
+  return parseProviderBaseURLInput(trimmed) !== null;
+}
+
 export function normalizeProviderBaseURL(kind: ProviderKind, rawBaseURL: string): string {
   const trimmed = rawBaseURL.trim();
   if (!trimmed) return '';
@@ -347,29 +381,20 @@ export function normalizeProviderBaseURL(kind: ProviderKind, rawBaseURL: string)
     'openai-compatible': ['/chat/completions', '/responses']
   };
 
-  try {
-    const parsed = new URL(trimmed);
-    let pathname = parsed.pathname.replace(/\/+$/, '');
-    for (const suffix of endpointSuffixes[kind]) {
-      if (pathname === suffix || pathname.endsWith(suffix)) {
-        pathname = pathname.slice(0, -suffix.length) || '/';
-        break;
-      }
+  const parsed = parseProviderBaseURLInput(trimmed);
+  if (!parsed) return '';
+
+  let pathname = parsed.pathname.replace(/\/+$/, '');
+  for (const suffix of endpointSuffixes[kind]) {
+    if (pathname === suffix || pathname.endsWith(suffix)) {
+      pathname = pathname.slice(0, -suffix.length) || '/';
+      break;
     }
-    parsed.pathname = pathname;
-    parsed.search = '';
-    parsed.hash = '';
-    return parsed.toString().replace(/\/+$/, '');
-  } catch {
-    let normalized = trimmed.split(/[?#]/, 1)[0]?.replace(/\/+$/, '') ?? '';
-    for (const suffix of endpointSuffixes[kind]) {
-      if (normalized.endsWith(suffix)) {
-        normalized = normalized.slice(0, -suffix.length).replace(/\/+$/, '');
-        break;
-      }
-    }
-    return normalized;
   }
+  parsed.pathname = pathname;
+  parsed.search = '';
+  parsed.hash = '';
+  return parsed.toString().replace(/\/+$/, '');
 }
 
 function joinUrl(baseURL: string, path: string): string {
