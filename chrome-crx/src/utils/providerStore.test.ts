@@ -3,8 +3,29 @@ import {
   fetchProviderModels,
   isValidProviderBaseURL,
   normalizeProviderBaseURL,
+  OPENAI_RESPONSES_MIN_OUTPUT_TOKENS,
+  testProviderConnection,
   type AiProvider
 } from './providerStore';
+
+const OPENAI_MOCKS = vi.hoisted(() => ({
+  chatCompletionsCreate: vi.fn(),
+  responsesCreate: vi.fn()
+}));
+
+vi.mock('openai', () => {
+  class APIError extends Error {
+    status?: number;
+  }
+  const OpenAI = vi.fn().mockImplementation(function () {
+    return {
+      chat: { completions: { create: OPENAI_MOCKS.chatCompletionsCreate } },
+      responses: { create: OPENAI_MOCKS.responsesCreate }
+    };
+  });
+  Object.assign(OpenAI, { APIError });
+  return { default: OpenAI };
+});
 
 const baseProvider: AiProvider = {
   id: 'provider-1',
@@ -57,6 +78,33 @@ describe('fetchProviderModels', () => {
     );
 
     await expect(fetchProviderModels(baseProvider)).rejects.toThrow('HTTP 401 - bad key');
+  });
+});
+
+describe('testProviderConnection', () => {
+  afterEach(() => {
+    OPENAI_MOCKS.chatCompletionsCreate.mockReset();
+    OPENAI_MOCKS.responsesCreate.mockReset();
+  });
+
+  it('uses the minimum Responses output token budget accepted by GPT gateways', async () => {
+    OPENAI_MOCKS.responsesCreate.mockResolvedValue({});
+
+    await expect(
+      testProviderConnection({
+        ...baseProvider,
+        modelId: 'gpt-5.4'
+      })
+    ).resolves.toEqual({ ok: true });
+
+    expect(OPENAI_MOCKS.responsesCreate).toHaveBeenCalledWith(
+      {
+        model: 'gpt-5.4',
+        input: 'ping',
+        max_output_tokens: OPENAI_RESPONSES_MIN_OUTPUT_TOKENS
+      },
+      { signal: expect.any(AbortSignal) }
+    );
   });
 });
 
