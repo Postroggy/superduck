@@ -977,36 +977,46 @@ import { CursorRenderer } from './cursorAnimation/cursorRenderer';
     // Wire cursor renderer to overlay container inside shadow DOM
     safeCursor((r) => r.setAttachRoot(overlay));
 
+    const showInterruptive = !isHiddenForToolUse;
+    const interruptiveDisplay = showInterruptive ? '' : 'none';
+
     // Create/show glow border (inside shadow DOM)
     if (glowBorderEl) {
-      glowBorderEl.style.display = '';
+      glowBorderEl.style.display = interruptiveDisplay;
     } else {
       glowBorderEl = createGlowBorder();
+      glowBorderEl.style.display = interruptiveDisplay;
       overlay.appendChild(glowBorderEl);
     }
 
     // Create/show water ripple (inside shadow DOM)
     if (waterRippleContainerEl) {
-      waterRippleContainerEl.style.display = '';
+      waterRippleContainerEl.style.display = interruptiveDisplay;
     } else {
       waterRippleContainerEl = createWaterRipple();
+      waterRippleContainerEl.style.display = interruptiveDisplay;
       overlay.appendChild(waterRippleContainerEl);
     }
 
     // Create/show blocking overlay (stays in host DOM for event interception)
     if (blockingOverlayEl) {
-      blockingOverlayEl.style.display = '';
+      blockingOverlayEl.style.display = interruptiveDisplay;
     } else {
       blockingOverlayEl = createBlockingOverlay();
+      blockingOverlayEl.style.display = interruptiveDisplay;
       getDocumentMountRoot().appendChild(blockingOverlayEl);
     }
 
+    if (!showInterruptive) pauseToolUseDecorAnimations();
+
     // Animate the always-visible elements in immediately, before i18n.
-    requestAnimationFrame(() => {
-      if (glowBorderEl) glowBorderEl.style.opacity = '1';
-      if (waterRippleContainerEl) waterRippleContainerEl.style.opacity = '1';
-      if (blockingOverlayEl) blockingOverlayEl.style.opacity = '1';
-    });
+    if (showInterruptive) {
+      requestAnimationFrame(() => {
+        if (glowBorderEl) glowBorderEl.style.opacity = '1';
+        if (waterRippleContainerEl) waterRippleContainerEl.style.opacity = '1';
+        if (blockingOverlayEl) blockingOverlayEl.style.opacity = '1';
+      });
+    }
 
     safeCursor((r) => r.showIdle());
 
@@ -1016,24 +1026,28 @@ import { CursorRenderer } from './cursorAnimation/cursorRenderer';
 
     if (isMcpEnabled) {
       console.log('[Agent Indicator] Creating/showing stop button');
-      if (stopContainerEl) {
-        stopContainerEl.style.setProperty('display', 'flex', 'important');
-      } else {
+      if (!stopContainerEl) {
         stopContainerEl = createStopContainer();
         overlay.appendChild(stopContainerEl);
-      }
-      if (stopContainerEl && !stopContainerEl.parentNode) {
+      } else if (!stopContainerEl.parentNode) {
         overlay.appendChild(stopContainerEl);
       }
-      requestAnimationFrame(() => {
-        if (stopContainerEl) {
-          stopContainerEl.style.opacity = '1';
-          stopContainerEl.style.transform = 'translateX(-50%) translateY(0)';
-        }
-      });
+      if (!isHiddenForToolUse) {
+        stopContainerEl!.style.setProperty('display', 'flex', 'important');
+        requestAnimationFrame(() => {
+          if (stopContainerEl) {
+            stopContainerEl.style.opacity = '1';
+            stopContainerEl.style.transform = 'translateX(-50%) translateY(0)';
+          }
+        });
+      } else {
+        stopContainerEl!.style.display = 'none';
+      }
     } else {
       console.log('[Agent Indicator] NOT creating stop button because isMcpEnabled is false');
     }
+
+    if (isHiddenForToolUse) hideInterruptiveIndicatorsForToolUse();
   }
 
   /**
@@ -1080,8 +1094,10 @@ import { CursorRenderer } from './cursorAnimation/cursorRenderer';
           waterRippleContainerEl.parentNode.removeChild(waterRippleContainerEl);
           waterRippleContainerEl = null;
         }
-        if (blockingOverlayEl && blockingOverlayEl.parentNode) {
-          blockingOverlayEl.parentNode.removeChild(blockingOverlayEl);
+        if (blockingOverlayEl) {
+          if (blockingOverlayEl.parentNode) {
+            blockingOverlayEl.parentNode.removeChild(blockingOverlayEl);
+          }
           blockingOverlayEl = null;
         }
         if (stopContainerEl && stopContainerEl.parentNode) {
@@ -1143,6 +1159,72 @@ import { CursorRenderer } from './cursorAnimation/cursorRenderer';
         hideStaticIndicator();
       }
     }, 5000);
+  }
+
+  function pauseToolUseDecorAnimations(): void {
+    if (waterRippleAnimationId) {
+      cancelAnimationFrame(waterRippleAnimationId);
+      waterRippleAnimationId = null;
+    }
+    if (stopContainerAnimFrame) {
+      cancelAnimationFrame(stopContainerAnimFrame);
+      stopContainerAnimFrame = null;
+    }
+    if (ellipsisInterval) {
+      clearInterval(ellipsisInterval);
+      ellipsisInterval = null;
+    }
+  }
+
+  /** Hide glow/ripple/stop/blocking/static for screenshots; keep proxy cursor in DOM. */
+  function hideInterruptiveIndicatorsForToolUse(): void {
+    pauseToolUseDecorAnimations();
+
+    if (glowBorderEl) glowBorderEl.style.display = 'none';
+    if (waterRippleContainerEl) waterRippleContainerEl.style.display = 'none';
+    if (stopContainerEl) stopContainerEl.style.display = 'none';
+    if (blockingOverlayEl) blockingOverlayEl.style.display = 'none';
+    if (staticIndicatorEl?.parentNode && isStaticIndicatorActive)
+      staticIndicatorEl.parentNode.removeChild(staticIndicatorEl);
+  }
+
+  function restoreInterruptiveIndicatorsAfterToolUse(): void {
+    if (glowBorderEl) {
+      glowBorderEl.style.display = '';
+      glowBorderEl.style.opacity = '1';
+    }
+    if (waterRippleContainerEl) {
+      waterRippleContainerEl.style.display = '';
+      waterRippleContainerEl.style.opacity = '1';
+    }
+    if (isMcpEnabled && stopContainerEl) {
+      stopContainerEl.style.setProperty('display', 'flex', 'important');
+      stopContainerEl.style.opacity = '1';
+      stopContainerEl.style.transform = 'translateX(-50%) translateY(0)';
+    }
+
+    if (blockingOverlayEl) {
+      blockingOverlayEl.style.display = '';
+      blockingOverlayEl.style.opacity = '1';
+      if (!blockingOverlayEl.parentNode) getDocumentMountRoot().appendChild(blockingOverlayEl);
+    }
+
+    if (waterRippleContainerEl && !waterRippleAnimationId && waterRippleAnimateFunc) {
+      waterRippleAnimationId = requestAnimationFrame(waterRippleAnimateFunc);
+    }
+    if (stopContainerEl && !stopContainerAnimFrame && stopContainerAnimateFunc) {
+      stopContainerAnimFrame = requestAnimationFrame(stopContainerAnimateFunc);
+    }
+    if (stopContainerEl && !ellipsisInterval) {
+      const dotsEl = stopContainerEl.querySelector('span:last-of-type');
+      if (dotsEl) {
+        let dotCount = 1;
+        ellipsisInterval = setInterval(() => {
+          dotCount = (dotCount % 3) + 1;
+          dotsEl.textContent = '.'.repeat(dotCount);
+        }, 500);
+      }
+    }
   }
 
   /**
@@ -1216,25 +1298,8 @@ import { CursorRenderer } from './cursorAnimation/cursorRenderer';
             isHiddenForToolUse = isAgentActive;
             wasStaticActiveBeforeToolUse = isStaticIndicatorActive;
 
-            if (waterRippleAnimationId) {
-              cancelAnimationFrame(waterRippleAnimationId);
-              waterRippleAnimationId = null;
-            }
-            if (stopContainerAnimFrame) {
-              cancelAnimationFrame(stopContainerAnimFrame);
-              stopContainerAnimFrame = null;
-            }
-            if (ellipsisInterval) {
-              clearInterval(ellipsisInterval);
-              ellipsisInterval = null;
-            }
-
-            // Detach shadowHost (contains glow/ripple/stop/cursor) from DOM
-            if (shadowHostEl?.parentNode) shadowHostEl.parentNode.removeChild(shadowHostEl);
-            // Blocking overlay lives in host DOM
-            if (blockingOverlayEl?.parentNode)
-              blockingOverlayEl.parentNode.removeChild(blockingOverlayEl);
-            if (staticIndicatorEl?.parentNode && isStaticIndicatorActive)
+            if (isAgentActive) hideInterruptiveIndicatorsForToolUse();
+            else if (isStaticIndicatorActive && staticIndicatorEl?.parentNode)
               staticIndicatorEl.parentNode.removeChild(staticIndicatorEl);
 
             const respondOnce = (() => {
@@ -1266,30 +1331,8 @@ import { CursorRenderer } from './cursorAnimation/cursorRenderer';
           }
 
           case 'SHOW_AFTER_TOOL_USE':
-            if (isHiddenForToolUse) {
-              // Re-attach shadowHost (all shadow DOM children come back with it)
-              if (shadowHostEl && !shadowHostEl.parentNode)
-                getDocumentMountRoot().appendChild(shadowHostEl);
-              // Blocking overlay lives in host DOM
-              if (blockingOverlayEl && !blockingOverlayEl.parentNode)
-                getDocumentMountRoot().appendChild(blockingOverlayEl);
-
-              if (waterRippleContainerEl && !waterRippleAnimationId && waterRippleAnimateFunc) {
-                waterRippleAnimationId = requestAnimationFrame(waterRippleAnimateFunc);
-              }
-              if (stopContainerEl && !stopContainerAnimFrame && stopContainerAnimateFunc) {
-                stopContainerAnimFrame = requestAnimationFrame(stopContainerAnimateFunc);
-              }
-              if (stopContainerEl && !ellipsisInterval) {
-                const dotsEl = stopContainerEl.querySelector('span:last-of-type');
-                if (dotsEl) {
-                  let dotCount = 1;
-                  ellipsisInterval = setInterval(() => {
-                    dotCount = (dotCount % 3) + 1;
-                    dotsEl.textContent = '.'.repeat(dotCount);
-                  }, 500);
-                }
-              }
+            if (isHiddenForToolUse && isAgentActive) {
+              restoreInterruptiveIndicatorsAfterToolUse();
             }
             if (
               wasStaticActiveBeforeToolUse &&
