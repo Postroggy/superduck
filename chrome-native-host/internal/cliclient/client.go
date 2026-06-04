@@ -2,10 +2,13 @@
 package cliclient
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -16,6 +19,7 @@ const DefaultSocketPath = "/tmp/chrome-native-host.sock"
 
 var ErrNotConnected = errors.New("native-host not reachable")
 var ErrTimeout = errors.New("native-host call timed out")
+var ErrAuthFailed = errors.New("UDS authentication failed")
 
 type ToolError struct {
 	Msg string
@@ -48,6 +52,38 @@ func Call(tool string, args map[string]any, opts Options) (any, error) {
 	}
 	defer conn.Close()
 	_ = conn.SetDeadline(time.Now().Add(opts.Timeout))
+
+	// Authenticate with the native host
+	token, err := readAuthToken()
+	if err != nil {
+		return nil, fmt.Errorf("auth token: %w", err)
+	}
+
+	authReq := map[string]string{"type": "auth", "token": token}
+	if err := protocol.SendMessage(conn, authReq); err != nil {
+		return nil, fmt.Errorf("send auth: %w", err)
+	}
+
+	authRaw, err := protocol.ReadMessage(conn)
+	if err != nil {
+		var nerr net.Error
+		if errors.As(err, &nerr) && nerr.Timeout() {
+			return nil, ErrTimeout
+		}
+		return nil, fmt.Errorf("read auth response: %w", err)
+	}
+
+	var authResp struct {
+		Type  string `json:"type"`
+		OK    string `json:"ok"`
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(authRaw, &authResp); err != nil {
+		return nil, fmt.Errorf("parse auth response: %w", err)
+	}
+	if authResp.Error != "" {
+		return nil, fmt.Errorf("%w: %s", ErrAuthFailed, authResp.Error)
+	}
 
 	req := map[string]any{
 		"type":   "tool_request",
@@ -85,6 +121,23 @@ func Call(tool string, args map[string]any, opts Options) (any, error) {
 		return resp.Result.StructuredContent, nil
 	}
 	return resp.Result.Content, nil
+}
+
+func readAuthToken() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("cannot determine home directory: %w", err)
+	}
+	path := filepath.Join(home, ".superduck", "uds-token")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("read %s: %w", path, err)
+	}
+	token := string(bytes.TrimSpace(data))
+	if token == "" {
+		return "", fmt.Errorf("empty auth token in %s", path)
+	}
+	return token, nil
 }
 
 // CallString is a convenience for tools whose primary payload is a JSON string in `output`.

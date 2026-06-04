@@ -1,15 +1,20 @@
 package main
 
 import (
+	"bytes"
 	"chrome-native-host/internal/analytics"
 	"chrome-native-host/internal/protocol"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
@@ -21,10 +26,15 @@ const (
 
 const identitySyncWait = 2 * time.Second
 
+// maxUDSConnections caps concurrent UDS client connections to prevent
+// resource exhaustion from buggy or malicious local processes.
+const maxUDSConnections = 16
+
 // --- Server with dual channels ---
 
 type Server struct {
 	udsListener    net.Listener
+	udsAuth        string
 	udsConnections map[net.Conn]bool
 	connMu         sync.Mutex
 	closed         chan struct{}
@@ -47,6 +57,9 @@ func NewServer() (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create UDS listener: %w", err)
 	}
+
+	// Restrict socket to owner-only so other local users cannot connect.
+	_ = os.Chmod(socketPath, 0700)
 
 	slog.Info("UDS server listening", "path", socketPath)
 
@@ -95,11 +108,42 @@ func (s *Server) Run() error {
 		}
 
 		s.connMu.Lock()
+		if len(s.udsConnections) >= maxUDSConnections {
+			s.connMu.Unlock()
+			slog.Warn("UDS connection rejected: max connections reached", "max", maxUDSConnections)
+			_ = conn.Close()
+			continue
+		}
 		s.udsConnections[conn] = true
 		s.connMu.Unlock()
 
 		go s.handleUDSConnection(conn)
 	}
+}
+
+func (s *Server) authenticateUDSClient(conn net.Conn) error {
+	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	raw, err := protocol.ReadMessage(conn)
+	if err != nil {
+		return fmt.Errorf("auth read: %w", err)
+	}
+	_ = conn.SetReadDeadline(time.Time{})
+	var auth struct {
+		Type  string `json:"type"`
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal(raw, &auth); err != nil {
+		return fmt.Errorf("auth parse: %w", err)
+	}
+	if auth.Type != "auth" || auth.Token != s.udsAuth {
+		_ = protocol.SendMessage(conn, map[string]string{
+			"type":  "auth_response",
+			"error": "authentication failed",
+		})
+		return errors.New("invalid auth token")
+	}
+	_ = protocol.SendMessage(conn, map[string]string{"type": "auth_response", "ok": "true"})
+	return nil
 }
 
 // readChromeStdio is the ONLY goroutine that reads os.Stdin.
@@ -144,6 +188,12 @@ func (s *Server) handleUDSConnection(conn net.Conn) {
 	}()
 
 	slog.Debug("new UDS connection from MCP server")
+
+	if err := s.authenticateUDSClient(conn); err != nil {
+		slog.Warn("UDS authentication failed", "error", err)
+		return
+	}
+	slog.Debug("UDS client authenticated")
 
 	for {
 		raw, err := protocol.ReadMessage(conn)
@@ -275,6 +325,18 @@ func main() {
 	}
 	defer server.Close()
 
+	token, err := generateAuthToken()
+	if err != nil {
+		slog.Error("failed to generate UDS auth token", "error", err)
+		os.Exit(1)
+	}
+	server.udsAuth = token
+	if err := writeAuthToken(token); err != nil {
+		slog.Error("failed to write UDS auth token", "error", err)
+		os.Exit(1)
+	}
+	slog.Info("UDS auth token written", "path", authTokenPath())
+
 	// Handle signals for graceful shutdown
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
@@ -323,4 +385,48 @@ func waitForInstallIDConfirmed(timeout time.Duration) bool {
 		}
 	}
 	return false
+}
+
+func authTokenPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".superduck", "uds-token")
+}
+
+func generateAuthToken() (string, error) {
+	var b [32]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", fmt.Errorf("crypto/rand: %w", err)
+	}
+	return hex.EncodeToString(b[:]), nil
+}
+
+func writeAuthToken(token string) error {
+	path := authTokenPath()
+	if path == "" {
+		return errors.New("cannot determine home directory")
+	}
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("mkdir %s: %w", dir, err)
+	}
+	return os.WriteFile(path, []byte(token), 0o600)
+}
+
+func ReadAuthToken() (string, error) {
+	path := authTokenPath()
+	if path == "" {
+		return "", errors.New("cannot determine home directory")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	token := string(bytes.TrimSpace(data))
+	if token == "" {
+		return "", errors.New("empty auth token")
+	}
+	return token, nil
 }

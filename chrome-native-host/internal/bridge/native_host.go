@@ -1,10 +1,13 @@
 package bridge
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net"
+	"os"
+	"path/filepath"
 	"time"
 
 	"chrome-native-host/internal/protocol"
@@ -40,6 +43,39 @@ func New() (*NativeHostBridge, error) {
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to chrome-native-host at %s: %w\nMake sure chrome-native-host is running with --uds flag", UDSPath, err)
+	}
+
+	// Authenticate with the native host using the shared token.
+	token, err := readAuthToken()
+	if err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("failed to read UDS auth token: %w", err)
+	}
+
+	authReq := map[string]string{"type": "auth", "token": token}
+	if err := protocol.SendMessage(conn, authReq); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("failed to send auth: %w", err)
+	}
+
+	// Wait for auth response
+	raw, err := protocol.ReadMessage(conn)
+	if err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("auth response read failed: %w", err)
+	}
+	var authResp struct {
+		Type  string `json:"type"`
+		OK    string `json:"ok"`
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(raw, &authResp); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("auth response parse failed: %w", err)
+	}
+	if authResp.Error != "" {
+		conn.Close()
+		return nil, fmt.Errorf("UDS authentication failed: %s", authResp.Error)
 	}
 
 	slog.Info("connected to chrome-native-host", "path", UDSPath)
@@ -107,20 +143,39 @@ func (b *NativeHostBridge) normalizeArgs(tool string, args map[string]interface{
 		normalized[k] = v
 	}
 
-	// Handle computer tool duration parameter (convert milliseconds to seconds if needed)
+	// Validate computer tool parameters based on action
 	if tool == "computer" {
-		if duration, ok := normalized["duration"].(float64); ok {
-			// If duration > 30, assume it's in milliseconds and convert to seconds
-			if duration > 30 {
-				normalized["duration"] = duration / 1000
-				slog.Debug("converted duration from milliseconds to seconds", "original", duration, "converted", normalized["duration"])
-			}
-			// Validate max duration
-			if normalized["duration"].(float64) > 30 {
-				slog.Warn("duration exceeds maximum", "duration", normalized["duration"], "max", 30)
-			}
-		}
+		validateComputerArgs(normalized)
 	}
 
 	return normalized
+}
+
+func validateComputerArgs(args map[string]interface{}) {
+	// Validate duration is within schema limits
+	if duration, ok := args["duration"].(float64); ok {
+		if duration > 30 {
+			slog.Warn("duration exceeds schema maximum", "duration", duration, "max", 30)
+		}
+		if duration < 0 {
+			slog.Warn("negative duration", "duration", duration)
+		}
+	}
+}
+
+func readAuthToken() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("cannot determine home directory: %w", err)
+	}
+	path := filepath.Join(home, ".superduck", "uds-token")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("read %s: %w", path, err)
+	}
+	token := string(bytes.TrimSpace(data))
+	if token == "" {
+		return "", fmt.Errorf("empty auth token in %s", path)
+	}
+	return token, nil
 }
