@@ -20,6 +20,13 @@ func cmdScroll(argv []string) error {
 	if *dir == "" {
 		return fmt.Errorf("--direction is required")
 	}
+	validDirections := map[string]bool{"up": true, "down": true, "left": true, "right": true}
+	if !validDirections[*dir] {
+		return fmt.Errorf("direction must be one of: up, down, left, right, got %q", *dir)
+	}
+	if *amount > 0 && (*amount < 1 || *amount > 100) {
+		return fmt.Errorf("scroll amount must be between 1 and 100, got %d", *amount)
+	}
 	args := map[string]any{
 		"coordinate":       []float64{c[0], c[1]},
 		"scroll_direction": *dir,

@@ -21,6 +21,9 @@ func cmdKey(argv []string) error {
 	}
 	args := map[string]any{"text": rest[0]}
 	if *repeat > 0 {
+		if *repeat < 1 || *repeat > 100 {
+			return fmt.Errorf("repeat must be between 1 and 100, got %d", *repeat)
+		}
 		args["repeat"] = *repeat
 	}
 	return runAction("key", args)

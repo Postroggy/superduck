@@ -18,5 +18,11 @@ func cmdResize(argv []string) error {
 	if err != nil {
 		return fmt.Errorf("invalid height: %v", err)
 	}
+	if w <= 0 || w > 7680 {
+		return fmt.Errorf("width must be between 1 and 7680 pixels, got %d", w)
+	}
+	if h <= 0 || h > 4320 {
+		return fmt.Errorf("height must be between 1 and 4320 pixels, got %d", h)
+	}
 	return runSimpleTool("resize_window", "resize", map[string]any{"width": w, "height": h})
 }
