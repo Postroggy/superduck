@@ -5,12 +5,17 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"time"
 
 	"chrome-native-host/internal/analytics"
 	"chrome-native-host/internal/bridge"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+// defaultToolTimeout is the default timeout for tool execution when the
+// MCP client doesn't specify a deadline.
+const defaultToolTimeout = 30 * time.Second
 
 func main() {
 	analytics.EnsureInstallID()
@@ -58,10 +63,19 @@ func main() {
 	slog.Info("MCP Server stopped")
 }
 
-// createToolHandler creates a generic tool handler that forwards to native host
+// createToolHandler creates a generic tool handler that forwards to native host.
+// It ensures the context has a deadline (defaulting to defaultToolTimeout if not set)
+// and passes it through to ExecuteTool so the bridge can enforce timeouts.
 func createToolHandler(nativeHost *bridge.NativeHostBridge, toolName string) func(context.Context, *mcp.CallToolRequest, map[string]interface{}) (*mcp.CallToolResult, any, error) {
 	return func(ctx context.Context, req *mcp.CallToolRequest, input map[string]interface{}) (*mcp.CallToolResult, any, error) {
-		result, err := nativeHost.ExecuteTool(toolName, input)
+		// Ensure context has a deadline so ExecuteTool never blocks indefinitely
+		if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, defaultToolTimeout)
+			defer cancel()
+		}
+
+		result, err := nativeHost.ExecuteTool(ctx, toolName, input)
 		if err != nil {
 			return nil, nil, fmt.Errorf("tool execution failed: %w", err)
 		}

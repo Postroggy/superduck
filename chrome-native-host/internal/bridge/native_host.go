@@ -1,10 +1,12 @@
 package bridge
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net"
+	"sync"
 	"time"
 
 	"chrome-native-host/internal/protocol"
@@ -15,32 +17,21 @@ const (
 	UDSPath        = "/tmp/chrome-native-host.sock"
 	ConnectTimeout = 5 * time.Second
 	ConnectRetries = 3
+	DefaultTimeout = 30 * time.Second
+	MaxTimeout     = 5 * time.Minute
 )
 
 // NativeHostBridge handles communication with the Chrome Native Host
 type NativeHostBridge struct {
-	conn net.Conn
+	conn   net.Conn
+	connMu sync.Mutex
 }
 
 // New creates a new bridge to the Chrome Native Host
 func New() (*NativeHostBridge, error) {
-	var conn net.Conn
-	var err error
-
-	// Retry connection with timeout
-	for i := 0; i < ConnectRetries; i++ {
-		conn, err = net.DialTimeout("unix", UDSPath, ConnectTimeout)
-		if err == nil {
-			break
-		}
-		slog.Warn("failed to connect to UDS", "attempt", i+1, "max", ConnectRetries, "error", err)
-		if i < ConnectRetries-1 {
-			time.Sleep(time.Second)
-		}
-	}
-
+	conn, err := connectWithRetry()
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to chrome-native-host at %s: %w\nMake sure chrome-native-host is running with --uds flag", UDSPath, err)
+		return nil, err
 	}
 
 	// Authenticate with the native host using the shared token.
@@ -86,20 +77,101 @@ func New() (*NativeHostBridge, error) {
 	}, nil
 }
 
+func connectWithRetry() (net.Conn, error) {
+	var conn net.Conn
+	var err error
+
+	for i := 0; i < ConnectRetries; i++ {
+		conn, err = net.DialTimeout("unix", UDSPath, ConnectTimeout)
+		if err == nil {
+			return conn, nil
+		}
+		slog.Warn("failed to connect to UDS", "attempt", i+1, "max", ConnectRetries, "error", err)
+		if i < ConnectRetries-1 {
+			time.Sleep(time.Second)
+		}
+	}
+
+	return nil, fmt.Errorf("failed to connect to chrome-native-host at %s: %w\nMake sure chrome-native-host is running with --uds flag", UDSPath, err)
+}
+
 // Close closes the connection to the native host
 func (b *NativeHostBridge) Close() error {
+	b.connMu.Lock()
+	defer b.connMu.Unlock()
 	if b.conn != nil {
-		return b.conn.Close()
+		err := b.conn.Close()
+		b.conn = nil
+		return err
 	}
 	return nil
 }
 
-// ExecuteTool sends a tool request to the native host and returns the result
-func (b *NativeHostBridge) ExecuteTool(toolName string, args map[string]interface{}) (interface{}, error) {
+// reconnect attempts to re-establish the connection if it's broken
+func (b *NativeHostBridge) reconnect() error {
+	b.connMu.Lock()
+	defer b.connMu.Unlock()
+
+	// Check if current connection is still valid
+	if b.conn != nil {
+		// Try a zero-byte read with immediate deadline to check if connection is alive
+		b.conn.SetReadDeadline(time.Now())
+		var buf [1]byte
+		n, err := b.conn.Read(buf[:])
+		b.conn.SetReadDeadline(time.Time{})
+
+		// If we got data (shouldn't happen) or a non-timeout error, connection is broken
+		if n > 0 || (err != nil && !isTimeoutError(err)) {
+			slog.Warn("connection appears broken, reconnecting", "error", err)
+			b.conn.Close()
+			b.conn = nil
+		}
+	}
+
+	// Establish new connection if needed
+	if b.conn == nil {
+		slog.Info("attempting to reconnect to chrome-native-host")
+		conn, err := connectWithRetry()
+		if err != nil {
+			return err
+		}
+		b.conn = conn
+		slog.Info("reconnected to chrome-native-host")
+	}
+
+	return nil
+}
+
+// ExecuteTool sends a tool request to the native host and returns the result.
+// It respects the context deadline and will attempt reconnection if the connection is lost.
+func (b *NativeHostBridge) ExecuteTool(ctx context.Context, toolName string, args map[string]interface{}) (interface{}, error) {
+	// Ensure we have a valid connection
+	if err := b.reconnect(); err != nil {
+		return nil, fmt.Errorf("connection failed: %w", err)
+	}
+
 	// Normalize arguments before forwarding
 	args = b.normalizeArgs(toolName, args)
 
 	slog.Debug("forwarding to native host", "tool", toolName, "args", args)
+
+	// Calculate timeout from context or use default
+	timeout := DefaultTimeout
+	if deadline, ok := ctx.Deadline(); ok {
+		remaining := time.Until(deadline)
+		if remaining > 0 && remaining < MaxTimeout {
+			timeout = remaining
+		}
+	}
+
+	b.connMu.Lock()
+	defer b.connMu.Unlock()
+
+	// Set deadline on the connection
+	deadline := time.Now().Add(timeout)
+	if err := b.conn.SetDeadline(deadline); err != nil {
+		return nil, fmt.Errorf("failed to set deadline: %w", err)
+	}
 
 	// Send tool_request to native host
 	req := map[string]interface{}{
@@ -126,8 +198,15 @@ func (b *NativeHostBridge) ExecuteTool(toolName string, args map[string]interfac
 	response, err := protocol.ReadMessage(b.conn)
 	_ = b.conn.SetReadDeadline(time.Time{})
 	if err != nil {
+		// Check if it's a timeout
+		if isTimeoutError(err) {
+			return nil, fmt.Errorf("tool execution timed out after %v: %w", timeout, err)
+		}
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
+
+	// Clear the deadline
+	b.conn.SetDeadline(time.Time{})
 
 	var resp protocol.ToolResponseMsg
 	if err := json.Unmarshal(response, &resp); err != nil {
@@ -143,6 +222,13 @@ func (b *NativeHostBridge) ExecuteTool(toolName string, args map[string]interfac
 	}
 
 	return resp.Result.Content, nil
+}
+
+func isTimeoutError(err error) bool {
+	if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+		return true
+	}
+	return false
 }
 
 // normalizeArgs normalizes tool arguments to match Chrome extension expectations
