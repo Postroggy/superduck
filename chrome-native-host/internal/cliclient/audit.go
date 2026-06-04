@@ -5,6 +5,7 @@ import (
 	neturl "net/url"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 )
 
@@ -46,7 +47,13 @@ func (r *AuditRecord) SetURL(u string) {
 	}
 }
 
+// auditMu protects concurrent writes to the audit log file.
+var auditMu sync.Mutex
+
 func WriteAudit(rec AuditRecord) error {
+	auditMu.Lock()
+	defer auditMu.Unlock()
+
 	d, err := AuditDir()
 	if err != nil {
 		return err
