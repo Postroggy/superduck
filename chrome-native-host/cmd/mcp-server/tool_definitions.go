@@ -120,10 +120,10 @@ var toolDefinitions = []toolDefinition{
 	},
 	{
 		name:        "computer",
-		description: "Use a mouse and keyboard to interact with a web browser, and take screenshots. If you don't have a valid tab ID, use tabs_context_mcp first to get available tabs.\n* Whenever you intend to click on an element like an icon, you should consult a screenshot to determine the coordinates of the element before moving the cursor.\n* If you tried clicking on a program or link but it failed to load, even after waiting, try adjusting your click location so that the tip of the cursor visually falls on the element that you want to click.\n* Make sure to click any buttons, links, icons, etc with the cursor tip in the center of the element. Don't click boxes on their edges unless asked.",
+		description: "Use a mouse and keyboard to interact with a web browser, and take screenshots. If you don't have a valid tab ID, use tabs_context_mcp first to get available tabs.\n\nIMPORTANT: Different actions require different parameters:\n- left_click, right_click, double_click, triple_click: require 'coordinate' (or 'ref')\n- scroll: requires 'coordinate' and 'scroll_direction'\n- type: requires 'text'\n- key: requires 'text' (key combination like 'Enter', 'cmd+a')\n- wait: requires 'duration' (in seconds, 0-30)\n- screenshot: no additional parameters\n- left_click_drag: requires 'start_coordinate' and 'coordinate'\n- zoom: requires 'region' [x1, y1, x2, y2]\n- scroll_to: requires 'ref'\n- hover: requires 'coordinate' (or 'ref')\n\n* Whenever you intend to click on an element like an icon, you should consult a screenshot to determine the coordinates of the element before moving the cursor.\n* If you tried clicking on a program or link but it failed to load, even after waiting, try adjusting your click location so that the tip of the cursor visually falls on the element that you want to click.\n* Make sure to click any buttons, links, icons, etc with the cursor tip in the center of the element. Don't click boxes on their edges unless asked.",
 		inputSchema: objectSchema(map[string]any{
 			"action": stringSchema(
-				"The action to perform.",
+				"The action to perform. Each action has specific required parameters - see tool description for details.",
 				withEnum(
 					"left_click",
 					"right_click",
@@ -141,28 +141,28 @@ var toolDefinitions = []toolDefinition{
 				),
 			),
 			"coordinate": arraySchema(
-				"(x, y): The x and y coordinates. Required for left_click, right_click, double_click, triple_click, and scroll. For left_click_drag, this is the end position.",
+				"(x, y): The x and y coordinates in pixels. REQUIRED for: left_click, right_click, double_click, triple_click, scroll, hover. For left_click_drag, this is the END position. Alternatively, use 'ref' parameter with element reference ID.",
 				map[string]any{"type": "number"},
 				withMinItems(2),
 				withMaxItems(2),
 			),
 			"text":             stringSchema("The text to type (for type) or the key(s) to press (for key). For key, provide space-separated keys or shortcuts such as cmd+a or ctrl+a."),
-			"duration":         numberSchema("The number of seconds to wait. Required for wait. Maximum 30 seconds.", withMinimum(0), withMaximum(30)),
-			"scroll_direction": stringSchema("The direction to scroll. Required for scroll.", withEnum("up", "down", "left", "right")),
-			"scroll_amount":    numberSchema("The number of scroll wheel ticks. Optional for scroll, defaults to 3.", withMinimum(1), withMaximum(10)),
+			"duration":         numberSchema("REQUIRED for 'wait' action: duration in SECONDS (not milliseconds). Must be between 0 and 30. Example: 2.5 means 2.5 seconds.", withMinimum(0), withMaximum(30)),
+			"scroll_direction": stringSchema("REQUIRED for 'scroll' action: the direction to scroll.", withEnum("up", "down", "left", "right")),
+			"scroll_amount":    numberSchema("Optional for 'scroll' action: the number of scroll wheel ticks (1-10). Defaults to 3 if not specified.", withMinimum(1), withMaximum(10)),
 			"start_coordinate": arraySchema(
-				"(x, y): The starting coordinates for left_click_drag.",
+				"(x, y): REQUIRED for 'left_click_drag' action: the STARTING coordinates in pixels.",
 				map[string]any{"type": "number"},
 				withMinItems(2),
 				withMaxItems(2),
 			),
 			"region": arraySchema(
-				"(x0, y0, x1, y1): The rectangular region to capture for zoom. Required for zoom.",
+				"(x1, y1, x2, y2): REQUIRED for 'zoom' action: rectangular region coordinates in pixels [top-left-x, top-left-y, bottom-right-x, bottom-right-y].",
 				map[string]any{"type": "number"},
 				withMinItems(4),
 				withMaxItems(4),
 			),
-			"repeat":    numberSchema("Number of times to repeat the key sequence. Only applicable for key. Default is 1.", withMinimum(1), withMaximum(100)),
+			"repeat":    numberSchema("Optional for 'key' action: number of times to repeat the key sequence (1-100). Default is 1.", withMinimum(1), withMaximum(100)),
 			"ref":       stringSchema("Element reference ID from read_page or find. Required for scroll_to. Can be used as an alternative to coordinate for click actions."),
 			"modifiers": stringSchema("Modifier keys for click actions. Supports ctrl, shift, alt, cmd/meta, and win/windows. Can be combined with +."),
 			"tabId":     numberSchema("Tab ID to execute the action on. Must be a tab in the current MCP tab group. Use tabs_context_mcp first if needed."),
