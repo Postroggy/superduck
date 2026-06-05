@@ -193,10 +193,12 @@ func main() {
 	sub := extractSubcommand(cmd, rest)
 
 	var updateCh <-chan selfupdate.CheckResult
+	var cancelUpdate context.CancelFunc
 	switch cmd {
 	case "update", "version", "--version", "-v", "help", "--help", "-h":
 	default:
-		updateCh = selfupdate.BackgroundCheck()
+		updateCh, cancelUpdate = selfupdate.BackgroundCheck()
+		defer cancelUpdate()
 	}
 
 	var err error
