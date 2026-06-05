@@ -158,15 +158,18 @@ func (b *NativeHostBridge) ExecuteTool(ctx context.Context, toolName string, arg
 
 	slog.Debug("forwarding to native host", "tool", toolName, "args", args)
 
-	// Calculate timeout from context or use default
+	// Calculate timeout from context or use default.
+	// Add headroom for forwarding overhead (the extension itself may sleep
+	// up to `duration` seconds, so the bridge deadline must outlive that).
 	timeout := DefaultTimeout
+	headroom := 5 * time.Second
 	if deadline, ok := ctx.Deadline(); ok {
 		remaining := time.Until(deadline)
 		if remaining <= 0 {
 			return nil, fmt.Errorf("context deadline exceeded before send: %w", ctx.Err())
 		}
-		if remaining < MaxTimeout {
-			timeout = remaining
+		if remaining+headroom < MaxTimeout {
+			timeout = remaining + headroom
 		}
 	}
 
@@ -179,7 +182,9 @@ func (b *NativeHostBridge) ExecuteTool(ctx context.Context, toolName string, arg
 		return nil, fmt.Errorf("failed to set deadline: %w", err)
 	}
 	defer func() {
-		_ = b.conn.SetDeadline(time.Time{})
+		if b.conn != nil {
+			_ = b.conn.SetDeadline(time.Time{})
+		}
 	}()
 
 	// Send tool_request to native host
@@ -197,7 +202,10 @@ func (b *NativeHostBridge) ExecuteTool(ctx context.Context, toolName string, arg
 	// plus 5s forwarding headroom.
 	_ = b.conn.SetWriteDeadline(time.Now().Add(30 * time.Second))
 	if err := protocol.SendMessage(b.conn, req); err != nil {
+		// Connection is broken; close it so reconnect() picks up a fresh one.
 		_ = b.conn.SetWriteDeadline(time.Time{})
+		b.conn.Close()
+		b.conn = nil
 		return nil, fmt.Errorf("failed to send to native host: %w", err)
 	}
 	_ = b.conn.SetWriteDeadline(time.Time{})
@@ -207,7 +215,11 @@ func (b *NativeHostBridge) ExecuteTool(ctx context.Context, toolName string, arg
 	response, err := protocol.ReadMessage(b.conn)
 	_ = b.conn.SetReadDeadline(time.Time{})
 	if err != nil {
-		// Check if it's a timeout
+		// Connection is broken (timeout, EOF, or protocol desync).
+		// Close it so the next call reconnects on a clean stream
+		// and avoids reading stale responses.
+		b.conn.Close()
+		b.conn = nil
 		if isTimeoutError(err) {
 			return nil, fmt.Errorf("tool execution timed out after %v: %w", timeout, err)
 		}
