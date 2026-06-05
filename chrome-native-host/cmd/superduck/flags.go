@@ -25,13 +25,6 @@ func splitGlobalFlags(in []string) []string {
 			}
 			gflags.Tab = n
 			i += 2
-		case len(a) > 6 && a[:6] == "--tab=":
-			n, err := strconv.Atoi(a[6:])
-			if err != nil {
-				fatalUsage("invalid --tab: %v", err)
-			}
-			gflags.Tab = n
-			i++
 		case a == "--socket" && i+1 < len(in):
 			gflags.SocketPath = in[i+1]
 			i += 2

@@ -15,8 +15,5 @@ func cmdWait(argv []string) error {
 	if err != nil {
 		return fmt.Errorf("invalid duration: %v", err)
 	}
-	if d < 0 || d > 30 {
-		return fmt.Errorf("duration must be between 0 and 30 seconds, got %v", d)
-	}
 	return runAction("wait", map[string]any{"duration": d})
 }
