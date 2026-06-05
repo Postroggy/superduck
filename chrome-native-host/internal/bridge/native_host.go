@@ -108,12 +108,18 @@ func (b *NativeHostBridge) ExecuteTool(toolName string, args map[string]interfac
 		},
 	}
 
+	// Bound each send/recv so a half-open UDS connection can't block forever.
+	_ = b.conn.SetWriteDeadline(time.Now().Add(30 * time.Second))
 	if err := protocol.SendMessage(b.conn, req); err != nil {
+		_ = b.conn.SetWriteDeadline(time.Time{})
 		return nil, fmt.Errorf("failed to send to native host: %w", err)
 	}
+	_ = b.conn.SetWriteDeadline(time.Time{})
 
 	// Wait for tool_response
+	_ = b.conn.SetReadDeadline(time.Now().Add(30 * time.Second))
 	response, err := protocol.ReadMessage(b.conn)
+	_ = b.conn.SetReadDeadline(time.Time{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
