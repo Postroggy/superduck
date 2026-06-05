@@ -29,12 +29,11 @@ func TestExecuteTool_ContextTimeout(t *testing.T) {
 	// Create a bridge with a mock connection that never responds
 	bridge := &NativeHostBridge{}
 
-	// Create a context that's already cancelled
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+	// Create a context that's already cancelled (deterministic, no sleep)
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
 	defer cancel()
-	time.Sleep(2 * time.Millisecond) // Let it expire
 
-	// This should fail quickly because we have no connection
+	// This should fail quickly because we have no connection and context is done
 	_, err := bridge.ExecuteTool(ctx, "test_tool", map[string]interface{}{})
 	if err == nil {
 		t.Error("expected error from ExecuteTool with no connection")
@@ -42,23 +41,18 @@ func TestExecuteTool_ContextTimeout(t *testing.T) {
 }
 
 func TestReconnect_BrokenConnection(t *testing.T) {
-	// Create two ends of a pipe
-	server, client := net.Pipe()
-	defer server.Close()
+	// Create a bridge with no connection - should attempt to reconnect
+	bridge := &NativeHostBridge{}
 
-	bridge := &NativeHostBridge{conn: client}
-
-	// Close the server side to break the connection
-	server.Close()
-
-	// reconnect should detect the broken connection
-	err := bridge.reconnect()
-	// This will fail because there's no real UDS server, but it should attempt to reconnect
+	// reconnect should try to establish a new connection and fail
+	// because there's no real UDS server
+	ctx := context.Background()
+	err := bridge.reconnect(ctx)
 	if err == nil {
 		t.Error("expected reconnect to fail without a real server")
 	}
 
-	// The old connection should be closed
+	// bridge.conn should still be nil after failed reconnect
 	if bridge.conn != nil {
 		t.Error("expected bridge.conn to be nil after failed reconnect")
 	}
