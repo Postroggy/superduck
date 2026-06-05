@@ -7,14 +7,19 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 HOST_BINARY="$PROJECT_DIR/build/chrome-native-host"
 MCP_BINARY="$PROJECT_DIR/build/chrome-mcp-server"
 
-# Detect OS and set manifest directory
+# Detect OS and set manifest directories for all supported browsers
+MANIFEST_DIRS=()
 case "$(uname -s)" in
   Darwin)
-    MANIFEST_DIR="$HOME/Library/Application Support/Google/Chrome/NativeMessagingHosts"
+    MANIFEST_DIRS+=("$HOME/Library/Application Support/Google/Chrome/NativeMessagingHosts")
+    MANIFEST_DIRS+=("$HOME/Library/Application Support/Microsoft Edge/NativeMessagingHosts")
+    MANIFEST_DIRS+=("$HOME/Library/Application Support/BraveSoftware/Brave-Browser/NativeMessagingHosts")
     CLAUDE_CONFIG="$HOME/Library/Application Support/Claude/claude_desktop_config.json"
     ;;
   Linux)
-    MANIFEST_DIR="$HOME/.config/google-chrome/NativeMessagingHosts"
+    MANIFEST_DIRS+=("$HOME/.config/google-chrome/NativeMessagingHosts")
+    MANIFEST_DIRS+=("$HOME/.config/microsoft-edge/NativeMessagingHosts")
+    MANIFEST_DIRS+=("$HOME/.config/BraveSoftware/Brave-Browser/NativeMessagingHosts")
     CLAUDE_CONFIG="$HOME/.config/Claude/claude_desktop_config.json"
     ;;
   *)
@@ -28,12 +33,12 @@ cd "$SCRIPT_DIR/.."
 make all
 
 echo ""
-echo "=== Installing Chrome Native Host ==="
-mkdir -p "$MANIFEST_DIR"
+echo "=== Installing Native Host (Chrome, Edge, Brave) ==="
 
-# Write manifest
-MANIFEST_PATH="$MANIFEST_DIR/$HOST_NAME.json"
-cat > "$MANIFEST_PATH" <<EOF
+for MANIFEST_DIR in "${MANIFEST_DIRS[@]}"; do
+  mkdir -p "$MANIFEST_DIR"
+  MANIFEST_PATH="$MANIFEST_DIR/$HOST_NAME.json"
+  cat > "$MANIFEST_PATH" <<EOF
 {
   "name": "$HOST_NAME",
   "description": "SuperDuck Browser Extension Native Host",
@@ -42,8 +47,8 @@ cat > "$MANIFEST_PATH" <<EOF
   "allowed_origins": ["chrome-extension://komnjkkihimgafgblijcchlgeiogpjgi/"]
 }
 EOF
-
-echo "Installed manifest: $MANIFEST_PATH"
+  echo "  ✓ $MANIFEST_PATH"
+done
 
 echo ""
 echo "=== MCP Server Configuration ==="
@@ -65,8 +70,8 @@ echo '  }'
 echo '}'
 echo ""
 echo "IMPORTANT:"
-echo "1. Edit $MANIFEST_PATH and replace the extension ID with your actual Chrome extension ID."
-echo "   You can find it at chrome://extensions/"
+echo "1. Edit the manifest and replace the extension ID with your actual extension ID."
+echo "   You can find it at chrome://extensions/ or edge://extensions/"
 echo "2. Start chrome-native-host before using MCP server"
 echo ""
 echo "Installation complete!"

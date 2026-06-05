@@ -438,7 +438,13 @@ class TabGroupManager {
     const tab = await chrome.tabs.get(tabId);
     let chromeGroupId: number | undefined;
     let domain = 'blank';
-    if (tab.url && '' !== tab.url && !tab.url.startsWith('chrome://'))
+    if (
+      tab.url &&
+      '' !== tab.url &&
+      !tab.url.startsWith('chrome://') &&
+      !tab.url.startsWith('edge://') &&
+      !tab.url.startsWith('brave://')
+    )
       try {
         domain = new URL(tab.url).hostname || 'blank';
       } catch {
@@ -602,6 +608,8 @@ class TabGroupManager {
         tab.url &&
         !tab.url.startsWith('chrome://') &&
         !tab.url.startsWith('chrome-extension://') &&
+        !tab.url.startsWith('edge://') &&
+        !tab.url.startsWith('brave://') &&
         !('about:blank' === tab.url) &&
         orphaned.push({
           tabId: tab.id,
@@ -1453,7 +1461,13 @@ class TabGroupManager {
             ((this.mcpTabGroupId = group.chromeGroupId),
             await this.saveMcpTabGroupId(),
             await this.ensureMcpGroupCharacteristics(group.chromeGroupId));
-          const tabUrl = tab.url && !tab.url.startsWith('chrome://') ? tab.url : void 0;
+          const tabUrl =
+            tab.url &&
+            !tab.url.startsWith('chrome://') &&
+            !tab.url.startsWith('edge://') &&
+            !tab.url.startsWith('brave://')
+              ? tab.url
+              : void 0;
           if (tabUrl)
             try {
               domain = new URL(tabUrl).hostname || void 0;
@@ -1471,7 +1485,13 @@ class TabGroupManager {
           try {
             const tab = await chrome.tabs.get(mainId);
             if (tab) {
-              const tabUrl = tab.url && !tab.url.startsWith('chrome://') ? tab.url : void 0;
+              const tabUrl =
+                tab.url &&
+                !tab.url.startsWith('chrome://') &&
+                !tab.url.startsWith('edge://') &&
+                !tab.url.startsWith('brave://')
+                  ? tab.url
+                  : void 0;
               return { tabId: mainId, domain: meta.domain, url: tabUrl };
             }
           } catch {
@@ -1482,7 +1502,13 @@ class TabGroupManager {
         if (tabs.length > 0 && tabs[0].id) {
           let domain: string | undefined;
           const tabUrl = tabs[0].url;
-          const url = tabUrl && !tabUrl.startsWith('chrome://') ? tabUrl : void 0;
+          const url =
+            tabUrl &&
+            !tabUrl.startsWith('chrome://') &&
+            !tabUrl.startsWith('edge://') &&
+            !tabUrl.startsWith('brave://')
+              ? tabUrl
+              : void 0;
           if (url)
             try {
               domain = new URL(url).hostname || void 0;

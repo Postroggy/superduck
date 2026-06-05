@@ -1319,6 +1319,8 @@ function detectDomainTransition(
     !currentUrl ||
     currentUrl.startsWith('chrome://') ||
     currentUrl.startsWith('chrome-extension://') ||
+    currentUrl.startsWith('edge://') ||
+    currentUrl.startsWith('brave://') ||
     currentUrl.startsWith('about:') ||
     '' === currentUrl
   ) {
