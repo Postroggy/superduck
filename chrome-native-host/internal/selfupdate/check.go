@@ -1,6 +1,7 @@
 package selfupdate
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -70,24 +71,40 @@ func needsRemoteCheck(cached CheckResult) bool {
 	return time.Since(cached.CheckedAt) > CheckInterval
 }
 
-func BackgroundCheck() <-chan CheckResult {
+func BackgroundCheck() (<-chan CheckResult, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(context.Background())
 	ch := make(chan CheckResult, 1)
 	go func() {
+		defer close(ch)
 		cached, _ := readCache()
 		if !needsRemoteCheck(cached) {
-			ch <- cached
+			select {
+			case ch <- cached:
+			case <-ctx.Done():
+			}
 			return
 		}
-		latest, err := LatestVersion()
+
+		// Use a timeout for the HTTP request to prevent indefinite blocking
+		reqCtx, reqCancel := context.WithTimeout(ctx, 5*time.Second)
+		defer reqCancel()
+
+		latest, err := latestVersionWithContext(reqCtx)
 		if err != nil {
-			ch <- cached
+			select {
+			case ch <- cached:
+			case <-ctx.Done():
+			}
 			return
 		}
 		result := CheckResult{Latest: latest, CheckedAt: time.Now()}
 		_ = WriteCache(result)
-		ch <- result
+		select {
+		case ch <- result:
+		case <-ctx.Done():
+		}
 	}()
-	return ch
+	return ch, cancel
 }
 
 func UpdateHint(current, latest string) string {

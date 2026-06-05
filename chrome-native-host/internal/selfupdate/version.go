@@ -1,6 +1,7 @@
 package selfupdate
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -69,8 +70,12 @@ type npmDistTags struct {
 }
 
 func LatestVersion() (string, error) {
+	return latestVersionWithContext(context.Background())
+}
+
+func latestVersionWithContext(ctx context.Context) (string, error) {
 	client := &http.Client{Timeout: 3 * time.Second}
-	req, err := http.NewRequest(http.MethodGet, npmRegistryURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, npmRegistryURL, nil)
 	if err != nil {
 		return "", err
 	}
