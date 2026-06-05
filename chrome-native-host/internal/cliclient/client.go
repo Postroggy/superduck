@@ -2,6 +2,7 @@
 package cliclient
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -100,9 +101,11 @@ func Call(tool string, args map[string]any, opts Options) (any, error) {
 	}
 	raw, err := protocol.ReadMessage(conn)
 	if err != nil {
-		// timeout or EOF
+		// Detect timeout: check context.DeadlineExceeded, net.Error, or i/o timeout string
 		var nerr net.Error
-		if errors.As(err, &nerr) && nerr.Timeout() {
+		if errors.Is(err, context.DeadlineExceeded) ||
+			(errors.As(err, &nerr) && nerr.Timeout()) ||
+			strings.Contains(err.Error(), "i/o timeout") {
 			return nil, ErrTimeout
 		}
 		return nil, fmt.Errorf("read: %w", err)
@@ -218,6 +221,9 @@ func TimedCall(tool string, args map[string]any, opts Options, rec *AuditRecord)
 }
 
 func contentToString(v any) string {
+	if v == nil {
+		return ""
+	}
 	switch t := v.(type) {
 	case string:
 		return t

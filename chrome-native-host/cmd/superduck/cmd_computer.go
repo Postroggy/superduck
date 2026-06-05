@@ -226,6 +226,9 @@ func extractScreenshotPayload(v any) (string, *imagePart) {
 //     its old chrome://newtab placeholder before CDP can attach.
 //   - "Detached while handling command" — a CDP session was torn down between
 //     attach and the actual command (often after a previous tool re-attached).
+//
+// These patterns are intentionally case-insensitive and use partial matching
+// to be resilient to minor error message format changes.
 func callWithRetry(tool string, args map[string]any, attempts int, delay time.Duration) (any, error) {
 	var lastErr error
 	for i := 0; i < attempts; i++ {
@@ -237,9 +240,14 @@ func callWithRetry(tool string, args map[string]any, attempts int, delay time.Du
 		var te *cliclient.ToolError
 		if errors.As(err, &te) {
 			msg := te.Msg
-			if strings.Contains(msg, "chrome:// URL") ||
-				strings.Contains(msg, "chrome-extension:// URL") ||
-				strings.Contains(msg, "Detached while handling") {
+			msgLower := strings.ToLower(msg)
+			// Check for transient errors that warrant retry
+			isTransient := strings.Contains(msgLower, "chrome:// url") ||
+				strings.Contains(msgLower, "chrome-extension:// url") ||
+				strings.Contains(msgLower, "detached while handling") ||
+				strings.Contains(msgLower, "target closed") ||
+				strings.Contains(msgLower, "session closed")
+			if isTransient {
 				tracker.Capture("cli.tool.retried", map[string]any{
 					"tool":    tool,
 					"attempt": i + 1,
