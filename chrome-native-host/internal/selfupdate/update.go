@@ -2,7 +2,10 @@ package selfupdate
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
@@ -33,6 +36,12 @@ func (m InstallMethod) String() string {
 }
 
 const gitHubRepo = "superduck-ai/superduck"
+
+// maxTarballSize caps how much data we buffer in memory when downloading
+// a release tarball. 500 MB is far above any realistic release artifact;
+// a response that exceeds this is almost certainly a misconfigured server
+// or a malicious payload.
+const maxTarballSize = 500 << 20 // 500 MB
 
 func DetectInstallMethod() (InstallMethod, error) {
 	exe, err := os.Executable()
@@ -99,6 +108,11 @@ func releaseURL(version, os, arch string) string {
 		gitHubRepo, version, os, arch)
 }
 
+func checksumURL(version, os, arch string) string {
+	return fmt.Sprintf("https://github.com/%s/releases/download/v%s/superduck-%s-%s.tar.gz.sha256",
+		gitHubRepo, version, os, arch)
+}
+
 func UpdateViaBinary(targetVersion string, output io.Writer) error {
 	osName, archName, err := platformPair()
 	if err != nil {
@@ -119,6 +133,23 @@ func UpdateViaBinary(targetVersion string, output io.Writer) error {
 		return fmt.Errorf("download failed: HTTP %d", resp.StatusCode)
 	}
 
+	// Read the entire tarball into memory so we can verify the checksum
+	// before extracting anything. The LimitReader guards against OOM from
+	// a misconfigured server or a malicious payload.
+	tarData, err := io.ReadAll(io.LimitReader(resp.Body, maxTarballSize+1))
+	if err != nil {
+		return fmt.Errorf("failed to read download: %w", err)
+	}
+	if len(tarData) > maxTarballSize {
+		return fmt.Errorf("download too large: exceeds %d MB limit", maxTarballSize>>20)
+	}
+
+	// Verify SHA256 checksum
+	if err := verifyChecksum(client, targetVersion, osName, archName, tarData, output); err != nil {
+		return fmt.Errorf("checksum verification failed: %w", err)
+	}
+	fmt.Fprintf(output, "  ✓ checksum verified\n")
+
 	exe, err := os.Executable()
 	if err != nil {
 		return err
@@ -129,7 +160,7 @@ func UpdateViaBinary(targetVersion string, output io.Writer) error {
 	}
 	binDir := filepath.Dir(resolved)
 
-	gz, err := gzip.NewReader(resp.Body)
+	gz, err := gzip.NewReader(bytes.NewReader(tarData))
 	if err != nil {
 		return fmt.Errorf("failed to decompress: %w", err)
 	}
@@ -165,6 +196,52 @@ func UpdateViaBinary(targetVersion string, output io.Writer) error {
 	if extracted == 0 {
 		return fmt.Errorf("no binaries found in tarball; expected bin/superduck")
 	}
+	return nil
+}
+
+// verifyChecksum downloads the .sha256 file and verifies the tarball hash.
+func verifyChecksum(client *http.Client, version, osName, archName string, tarData []byte, output io.Writer) error {
+	checksumFileURL := checksumURL(version, osName, archName)
+	fmt.Fprintf(output, "Verifying checksum from %s...\n", checksumFileURL)
+
+	resp, err := client.Get(checksumFileURL)
+	if err != nil {
+		return fmt.Errorf("failed to download checksum file: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("checksum file not available: HTTP %d", resp.StatusCode)
+	}
+
+	checksumData, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read checksum file: %w", err)
+	}
+
+	// Parse the checksum file (format: "<hash>  <filename>" or just "<hash>")
+	fields := strings.Fields(string(checksumData))
+	if len(fields) == 0 {
+		return fmt.Errorf("checksum file is empty")
+	}
+	expectedHash := strings.TrimSpace(fields[0])
+	if len(expectedHash) != 64 {
+		return fmt.Errorf("invalid checksum format: %q", string(checksumData))
+	}
+	// Validate that the hash is valid hex
+	if _, err := hex.DecodeString(expectedHash); err != nil {
+		return fmt.Errorf("invalid checksum hex: %w", err)
+	}
+
+	// Compute SHA256 of the downloaded tarball
+	hasher := sha256.New()
+	hasher.Write(tarData)
+	actualHash := hex.EncodeToString(hasher.Sum(nil))
+
+	if actualHash != expectedHash {
+		return fmt.Errorf("SHA256 mismatch: expected %s, got %s", expectedHash, actualHash)
+	}
+
 	return nil
 }
 
