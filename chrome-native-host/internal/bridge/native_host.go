@@ -14,22 +14,38 @@ import (
 )
 
 const (
-	UDSPath        = "/tmp/chrome-native-host.sock"
+	DefaultUDSPath = "/tmp/chrome-native-host.sock"
 	ConnectTimeout = 5 * time.Second
 	ConnectRetries = 3
 	DefaultTimeout = 30 * time.Second
 	MaxTimeout     = 5 * time.Minute
 )
 
-// NativeHostBridge handles communication with the Chrome Native Host
-type NativeHostBridge struct {
-	conn   net.Conn
-	connMu sync.Mutex
+// Options configures the NativeHostBridge.
+type Options struct {
+	UDSPath string
 }
 
-// New creates a new bridge to the Chrome Native Host
+// NativeHostBridge handles communication with the Chrome Native Host
+type NativeHostBridge struct {
+	conn    net.Conn
+	connMu  sync.Mutex
+	udsPath string
+}
+
+// New creates a new bridge to the Chrome Native Host with default options.
 func New() (*NativeHostBridge, error) {
-	conn, err := connectWithRetry(context.Background())
+	return NewWithOptions(Options{UDSPath: DefaultUDSPath})
+}
+
+// NewWithOptions creates a new bridge with custom options.
+func NewWithOptions(opts Options) (*NativeHostBridge, error) {
+	udsPath := opts.UDSPath
+	if udsPath == "" {
+		udsPath = DefaultUDSPath
+	}
+
+	conn, err := connectWithRetry(context.Background(), udsPath)
 	if err != nil {
 		return nil, err
 	}
@@ -42,13 +58,20 @@ func New() (*NativeHostBridge, error) {
 	}
 
 	authReq := map[string]string{"type": "auth", "token": token}
+	// Bound the auth handshake so a misconfigured or unresponsive listener
+	// can't block startup indefinitely.
+	_ = conn.SetWriteDeadline(time.Now().Add(ConnectTimeout))
 	if err := protocol.SendMessage(conn, authReq); err != nil {
+		_ = conn.SetWriteDeadline(time.Time{})
 		conn.Close()
 		return nil, fmt.Errorf("failed to send auth: %w", err)
 	}
+	_ = conn.SetWriteDeadline(time.Time{})
 
 	// Wait for auth response
+	_ = conn.SetReadDeadline(time.Now().Add(ConnectTimeout))
 	raw, err := protocol.ReadMessage(conn)
+	_ = conn.SetReadDeadline(time.Time{})
 	if err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("auth response read failed: %w", err)
@@ -70,14 +93,15 @@ func New() (*NativeHostBridge, error) {
 		return nil, fmt.Errorf("UDS authentication failed: unexpected response type=%q ok=%q", authResp.Type, authResp.OK)
 	}
 
-	slog.Info("connected to chrome-native-host", "path", UDSPath)
+	slog.Info("connected to chrome-native-host", "path", udsPath)
 
 	return &NativeHostBridge{
-		conn: conn,
+		conn:    conn,
+		udsPath: udsPath,
 	}, nil
 }
 
-func connectWithRetry(ctx context.Context) (net.Conn, error) {
+func connectWithRetry(ctx context.Context, udsPath string) (net.Conn, error) {
 	var conn net.Conn
 	var err error
 
@@ -87,7 +111,7 @@ func connectWithRetry(ctx context.Context) (net.Conn, error) {
 			return nil, fmt.Errorf("connect canceled: %w", err)
 		}
 
-		conn, err = net.DialTimeout("unix", UDSPath, ConnectTimeout)
+		conn, err = net.DialTimeout("unix", udsPath, ConnectTimeout)
 		if err == nil {
 			return conn, nil
 		}
@@ -101,7 +125,7 @@ func connectWithRetry(ctx context.Context) (net.Conn, error) {
 		}
 	}
 
-	return nil, fmt.Errorf("failed to connect to chrome-native-host at %s: %w\nMake sure chrome-native-host is running", UDSPath, err)
+	return nil, fmt.Errorf("failed to connect to chrome-native-host at %s: %w\nMake sure chrome-native-host is running", udsPath, err)
 }
 
 // Close closes the connection to the native host
@@ -130,7 +154,7 @@ func (b *NativeHostBridge) reconnect(ctx context.Context) error {
 	}
 
 	slog.Info("attempting to reconnect to chrome-native-host")
-	conn, err := connectWithRetry(ctx)
+	conn, err := connectWithRetry(ctx, b.udsPath)
 	if err != nil {
 		return err
 	}
