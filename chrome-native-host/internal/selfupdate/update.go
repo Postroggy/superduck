@@ -2,6 +2,7 @@ package selfupdate
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
@@ -35,6 +36,12 @@ func (m InstallMethod) String() string {
 }
 
 const gitHubRepo = "superduck-ai/superduck"
+
+// maxTarballSize caps how much data we buffer in memory when downloading
+// a release tarball. 500 MB is far above any realistic release artifact;
+// a response that exceeds this is almost certainly a misconfigured server
+// or a malicious payload.
+const maxTarballSize = 500 << 20 // 500 MB
 
 func DetectInstallMethod() (InstallMethod, error) {
 	exe, err := os.Executable()
@@ -127,10 +134,14 @@ func UpdateViaBinary(targetVersion string, output io.Writer) error {
 	}
 
 	// Read the entire tarball into memory so we can verify the checksum
-	// before extracting anything.
-	tarData, err := io.ReadAll(resp.Body)
+	// before extracting anything. The LimitReader guards against OOM from
+	// a misconfigured server or a malicious payload.
+	tarData, err := io.ReadAll(io.LimitReader(resp.Body, maxTarballSize+1))
 	if err != nil {
 		return fmt.Errorf("failed to read download: %w", err)
+	}
+	if len(tarData) > maxTarballSize {
+		return fmt.Errorf("download too large: exceeds %d MB limit", maxTarballSize>>20)
 	}
 
 	// Verify SHA256 checksum
@@ -149,7 +160,7 @@ func UpdateViaBinary(targetVersion string, output io.Writer) error {
 	}
 	binDir := filepath.Dir(resolved)
 
-	gz, err := gzip.NewReader(strings.NewReader(string(tarData)))
+	gz, err := gzip.NewReader(bytes.NewReader(tarData))
 	if err != nil {
 		return fmt.Errorf("failed to decompress: %w", err)
 	}
@@ -209,10 +220,17 @@ func verifyChecksum(client *http.Client, version, osName, archName string, tarDa
 	}
 
 	// Parse the checksum file (format: "<hash>  <filename>" or just "<hash>")
-	expectedHash := strings.Fields(string(checksumData))[0]
-	expectedHash = strings.TrimSpace(expectedHash)
+	fields := strings.Fields(string(checksumData))
+	if len(fields) == 0 {
+		return fmt.Errorf("checksum file is empty")
+	}
+	expectedHash := strings.TrimSpace(fields[0])
 	if len(expectedHash) != 64 {
 		return fmt.Errorf("invalid checksum format: %q", string(checksumData))
+	}
+	// Validate that the hash is valid hex
+	if _, err := hex.DecodeString(expectedHash); err != nil {
+		return fmt.Errorf("invalid checksum hex: %w", err)
 	}
 
 	// Compute SHA256 of the downloaded tarball
