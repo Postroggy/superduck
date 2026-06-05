@@ -48,7 +48,20 @@ func WriteToken(token string) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("mkdir %s: %w", dir, err)
 	}
-	return os.WriteFile(path, []byte(token), 0o600)
+	// Tighten directory permissions if it already existed with weaker mode.
+	_ = os.Chmod(dir, 0o700)
+
+	// Write to a temporary file first, then rename atomically to avoid
+	// partial writes if the process crashes mid-write.
+	tmpPath := path + ".tmp"
+	if err := os.WriteFile(tmpPath, []byte(token), 0o600); err != nil {
+		return fmt.Errorf("write token: %w", err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("rename token: %w", err)
+	}
+	return nil
 }
 
 // ReadToken returns the token previously written by WriteToken. The

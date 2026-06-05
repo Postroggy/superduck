@@ -71,9 +71,12 @@ func New() (*NativeHostBridge, error) {
 		conn.Close()
 		return nil, fmt.Errorf("auth response parse failed: %w", err)
 	}
-	if authResp.Error != "" {
+	if authResp.Type != "auth_response" || authResp.OK != "true" {
 		conn.Close()
-		return nil, fmt.Errorf("UDS authentication failed: %s", authResp.Error)
+		if authResp.Error != "" {
+			return nil, fmt.Errorf("UDS authentication failed: %s", authResp.Error)
+		}
+		return nil, fmt.Errorf("UDS authentication failed: unexpected response type=%q ok=%q", authResp.Type, authResp.OK)
 	}
 
 	slog.Info("connected to chrome-native-host", "path", UDSPath)

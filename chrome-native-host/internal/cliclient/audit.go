@@ -51,14 +51,18 @@ func WriteAudit(rec AuditRecord) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(d, 0o755); err != nil {
+	if err := os.MkdirAll(d, 0o700); err != nil {
 		return err
 	}
+	// Tighten directory permissions if it already existed with weaker mode.
+	_ = os.Chmod(d, 0o700)
 	path := filepath.Join(d, "audit.jsonl")
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		return err
 	}
+	// Tighten file permissions if it already existed with weaker mode.
+	_ = os.Chmod(path, 0o600)
 	defer f.Close()
 	if rec.TS == "" {
 		rec.TS = time.Now().UTC().Format(time.RFC3339)
