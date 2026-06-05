@@ -12,7 +12,7 @@ var validDirections = map[string]bool{"up": true, "down": true, "left": true, "r
 func cmdScroll(argv []string) error {
 	fs := flag.NewFlagSet("scroll", flag.ContinueOnError)
 	dir := fs.String("direction", "", "up|down|left|right")
-	amount := fs.Int("amount", 0, "Scroll wheel ticks (1-10)")
+	amount := fs.Int("amount", -1, "Scroll wheel ticks (1-10)")
 	if err := fs.Parse(reorderFlagsFirst(argv)); err != nil {
 		return err
 	}
@@ -26,14 +26,14 @@ func cmdScroll(argv []string) error {
 	if !validDirections[*dir] {
 		return fmt.Errorf("--direction must be one of: up, down, left, right, got %q", *dir)
 	}
-	if *amount < 0 || *amount > 10 {
-		return fmt.Errorf("--amount must be between 0 and 10, got %d", *amount)
-	}
 	args := map[string]any{
 		"coordinate":       []float64{c[0], c[1]},
 		"scroll_direction": *dir,
 	}
-	if *amount > 0 {
+	if *amount != -1 {
+		if *amount < 1 || *amount > 10 {
+			return fmt.Errorf("scroll amount must be between 1 and 10, got %d", *amount)
+		}
 		args["scroll_amount"] = *amount
 	}
 	return runAction("scroll", args)
