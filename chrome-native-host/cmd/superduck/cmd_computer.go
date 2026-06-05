@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -251,4 +252,47 @@ func callWithRetry(tool string, args map[string]any, attempts int, delay time.Du
 		return nil, err
 	}
 	return nil, lastErr
+}
+
+// handleImageCapture processes image capture results from screenshot/zoom commands.
+// It extracts the image data, optionally saves to file, and formats output.
+func handleImageCapture(v any, output string, label string) error {
+	textParts, image := extractScreenshotPayload(v)
+
+	if output != "" {
+		if image == nil {
+			return fmt.Errorf("native host returned no image data: %s", textParts)
+		}
+		raw, err := base64.StdEncoding.DecodeString(image.Data)
+		if err != nil {
+			return fmt.Errorf("decode base64: %w", err)
+		}
+		path := resolveOutputPath(output, textParts, image.MediaType)
+		if err := os.WriteFile(path, raw, 0o644); err != nil {
+			return err
+		}
+		if path != output {
+			fmt.Fprintf(os.Stderr, "note: wrote to %s (auto-named/extension-aligned)\n", path)
+		}
+		fmt.Printf("saved %s (%s, %d bytes) to %s\n", label, image.MediaType, len(raw), path)
+		return nil
+	}
+
+	if gflags.JSON {
+		obj := map[string]any{"output": textParts}
+		if image != nil {
+			obj["mediaType"] = image.MediaType
+			obj["base64"] = image.Data
+		}
+		out, _ := json.Marshal(obj)
+		fmt.Println(string(out))
+		return nil
+	}
+	if textParts != "" {
+		fmt.Println(textParts)
+	}
+	if image != nil {
+		fmt.Printf("(image %s, %d bytes base64; pass --output <path> to save)\n", image.MediaType, len(image.Data))
+	}
+	return nil
 }
