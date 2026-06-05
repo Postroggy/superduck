@@ -12,6 +12,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -70,24 +71,76 @@ func NewServer() (*Server, error) {
 	}, nil
 }
 
+// prepareSocketPath checks if a socket file exists at the given path and handles
+// stale socket cleanup. It reduces the TOCTOU race window by renaming before
+// removal rather than removing in place.
 func prepareSocketPath(path string) error {
-	if _, err := os.Lstat(path); err != nil {
+	// Check if socket exists
+	info, err := os.Lstat(path)
+	if err != nil {
 		if os.IsNotExist(err) {
-			return nil
+			return nil // No existing socket, safe to proceed
 		}
 		return fmt.Errorf("failed to stat UDS socket: %w", err)
 	}
 
+	// Verify it's actually a socket, not a regular file or directory
+	if info.Mode()&os.ModeSocket == 0 {
+		return fmt.Errorf("path %s exists but is not a socket (mode: %v)", path, info.Mode())
+	}
+
+	// Socket exists, try to connect to see if it's active
 	conn, err := net.DialTimeout("unix", path, 200*time.Millisecond)
 	if err == nil {
 		_ = conn.Close()
 		return fmt.Errorf("chrome-native-host already listening at %s", path)
 	}
 
-	if err := os.Remove(path); err != nil {
-		return fmt.Errorf("failed to remove stale UDS socket: %w", err)
+	// Only treat connection-refused errors as stale sockets.
+	// Other dial failures (permission denied, path is a directory, etc.)
+	// indicate a real problem and should not be silently removed.
+	if !isConnRefused(err) {
+		return fmt.Errorf("socket at %s exists and dial failed with unexpected error: %w", path, err)
+	}
+
+	// Socket is stale. Rename first to free the path immediately, then
+	// remove the renamed file. A unique suffix avoids colliding with a
+	// leftover .stale file from a previous crashed cleanup.
+	stalePath := fmt.Sprintf("%s.stale.%d", path, os.Getpid())
+	if err := os.Rename(path, stalePath); err != nil {
+		// If rename fails, try direct remove as fallback
+		if err := os.Remove(path); err != nil {
+			return fmt.Errorf("failed to remove stale UDS socket: %w", err)
+		}
+		return nil
+	}
+	// Successfully renamed, now remove the renamed file
+	if err := os.Remove(stalePath); err != nil {
+		// Log but don't fail - the important thing is the original path is clear
+		slog.Warn("failed to remove renamed stale socket", "path", stalePath, "error", err)
 	}
 	return nil
+}
+
+// isConnRefused reports whether the error indicates the peer is not listening
+// (connection refused or socket file does not exist), as opposed to a
+// permission error or other dial failure.
+func isConnRefused(err error) bool {
+	if err == nil {
+		return false
+	}
+	// net.OpError wraps the underlying syscall error
+	var opErr *net.OpError
+	if errors.As(err, &opErr) {
+		var sysErr *os.SyscallError
+		if errors.As(opErr.Err, &sysErr) {
+			return sysErr.Err == syscall.ECONNREFUSED || sysErr.Err == syscall.ENOENT
+		}
+	}
+	// Fallback: check the error string for common refused patterns
+	errStr := err.Error()
+	return strings.Contains(errStr, "connection refused") ||
+		strings.Contains(errStr, "no such file or directory")
 }
 
 func (s *Server) Run() error {
