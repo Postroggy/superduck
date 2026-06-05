@@ -88,16 +88,29 @@ jobs:
           done
           ls -la release/
 
+      - name: Generate SHA256 checksums
+        working-directory: ${{ github.workspace }}
+        run: |
+          cd release
+          for tarball in *.tar.gz; do
+            sha256sum "$tarball" > "${tarball}.sha256"
+          done
+          ls -la *.sha256
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
         with:
           name: superduck-binaries
-          path: release/*.tar.gz
+          path: |
+            release/*.tar.gz
+            release/*.sha256
           retention-days: 30
 
       - name: Attach to GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v3
         with:
-          files: release/*.tar.gz
+          files: |
+            release/*.tar.gz
+            release/*.sha256
           generate_release_notes: true
