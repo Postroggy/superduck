@@ -1,9 +1,13 @@
 package main
 
-import "flag"
+import (
+	"flag"
+	"fmt"
+)
 
 // cmdReadPage: superduck read_page --tab <id> [--filter interactive|all]
-//                                  [--depth N] [--ref R] [--max-chars N]
+//
+//	[--depth N] [--ref R] [--max-chars N]
 func cmdReadPage(argv []string) error {
 	fs := flag.NewFlagSet("read_page", flag.ContinueOnError)
 	filter := fs.String("filter", "", `"interactive" or "all" (default: all)`)
@@ -13,6 +17,14 @@ func cmdReadPage(argv []string) error {
 	if err := fs.Parse(reorderFlagsFirst(argv)); err != nil {
 		return err
 	}
+
+	// Validate filter enum values
+	if *filter != "" {
+		if *filter != "interactive" && *filter != "all" {
+			return fmt.Errorf("invalid --filter value %q: must be 'interactive' or 'all'", *filter)
+		}
+	}
+
 	args := map[string]any{}
 	if *filter != "" {
 		args["filter"] = *filter
