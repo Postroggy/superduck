@@ -112,6 +112,8 @@ func (b *NativeHostBridge) ExecuteTool(toolName string, args map[string]interfac
 	}
 
 	// Bound each send/recv so a half-open UDS connection can't block forever.
+	// Use 35s read deadline to accommodate the schema-maximum 30s wait action
+	// plus 5s forwarding headroom.
 	_ = b.conn.SetWriteDeadline(time.Now().Add(30 * time.Second))
 	if err := protocol.SendMessage(b.conn, req); err != nil {
 		_ = b.conn.SetWriteDeadline(time.Time{})
@@ -120,7 +122,7 @@ func (b *NativeHostBridge) ExecuteTool(toolName string, args map[string]interfac
 	_ = b.conn.SetWriteDeadline(time.Time{})
 
 	// Wait for tool_response
-	_ = b.conn.SetReadDeadline(time.Now().Add(30 * time.Second))
+	_ = b.conn.SetReadDeadline(time.Now().Add(35 * time.Second))
 	response, err := protocol.ReadMessage(b.conn)
 	_ = b.conn.SetReadDeadline(time.Time{})
 	if err != nil {
@@ -150,7 +152,7 @@ func (b *NativeHostBridge) normalizeArgs(tool string, args map[string]interface{
 		normalized[k] = v
 	}
 
-	// Validate computer tool parameters based on action
+	// Validate computer tool parameters (duration bounds, etc.)
 	if tool == "computer" {
 		validateComputerArgs(normalized)
 	}
