@@ -5,6 +5,9 @@ import (
 	"fmt"
 )
 
+// validDirections is the set of allowed scroll directions.
+var validDirections = map[string]bool{"up": true, "down": true, "left": true, "right": true}
+
 // cmdScroll: `superduck scroll --tab <id> <x> <y> --direction D [--amount N]`.
 func cmdScroll(argv []string) error {
 	fs := flag.NewFlagSet("scroll", flag.ContinueOnError)
@@ -20,12 +23,11 @@ func cmdScroll(argv []string) error {
 	if *dir == "" {
 		return fmt.Errorf("--direction is required")
 	}
-	validDirections := map[string]bool{"up": true, "down": true, "left": true, "right": true}
 	if !validDirections[*dir] {
-		return fmt.Errorf("direction must be one of: up, down, left, right, got %q", *dir)
+		return fmt.Errorf("--direction must be one of: up, down, left, right, got %q", *dir)
 	}
-	if *amount > 0 && (*amount < 1 || *amount > 10) {
-		return fmt.Errorf("scroll amount must be between 1 and 10, got %d", *amount)
+	if *amount < 0 || *amount > 10 {
+		return fmt.Errorf("--amount must be between 0 and 10, got %d", *amount)
 	}
 	args := map[string]any{
 		"coordinate":       []float64{c[0], c[1]},
