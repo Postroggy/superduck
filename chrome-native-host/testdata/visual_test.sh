@@ -79,9 +79,9 @@ sleep 0.3
 run left_click_drag 95 855 240 855; step after-drag
 
 # 5) scroll: go all the way to the bottom
-run scroll 400 400 --direction down --amount 15; step after-scroll-down
+run scroll 400 400 --direction down --amount 10; step after-scroll-down
 # back up
-run scroll 400 400 --direction up --amount 15; step after-scroll-up
+run scroll 400 400 --direction up --amount 10; step after-scroll-up
 
 # 6) network: arm, click fetch (via coord), read
 run network --limit 1 >/dev/null 2>&1 || true
