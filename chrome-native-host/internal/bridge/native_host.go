@@ -170,11 +170,19 @@ func (b *NativeHostBridge) ExecuteTool(ctx context.Context, toolName string, arg
 		}
 		if remaining+headroom < MaxTimeout {
 			timeout = remaining + headroom
+		} else {
+			timeout = MaxTimeout
 		}
 	}
 
 	b.connMu.Lock()
 	defer b.connMu.Unlock()
+
+	// Recheck context after acquiring the lock — it may have expired while
+	// waiting for a concurrent tool call to finish.
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("context expired while waiting for bridge lock: %w", err)
+	}
 
 	// Set deadline on the connection and ensure it's cleared on all paths
 	deadline := time.Now().Add(timeout)
