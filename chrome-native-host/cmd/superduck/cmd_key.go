@@ -11,7 +11,7 @@ import (
 // through the extension's `superduck_press` tool instead.
 func cmdKey(argv []string) error {
 	fs := flag.NewFlagSet("key", flag.ContinueOnError)
-	repeat := fs.Int("repeat", -1, "Repeat count (1-100)")
+	repeat := fs.Int("repeat", -9999, "Repeat count (1-100)")
 	if err := fs.Parse(reorderFlagsFirst(argv)); err != nil {
 		return err
 	}
@@ -20,7 +20,7 @@ func cmdKey(argv []string) error {
 		return fmt.Errorf(`usage: superduck key --tab <id> "<keys>" [--repeat N]`)
 	}
 	args := map[string]any{"text": rest[0]}
-	if *repeat != -1 {
+	if *repeat != -9999 {
 		if *repeat < 1 || *repeat > 100 {
 			return fmt.Errorf("repeat must be between 1 and 100, got %d", *repeat)
 		}
