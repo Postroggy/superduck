@@ -44,22 +44,30 @@ func cmdLog(argv []string) error {
 	}
 
 	// Efficient tail implementation: read from end of file
-	return tailFile(f, *tail)
-}
-
-// tailFile efficiently reads the last n lines from a file
-func tailFile(f *os.File, n int) error {
-	// Get file size
-	stat, err := f.Stat()
+	lines, err := tailLines(f, *tail)
 	if err != nil {
 		return err
 	}
+	for _, line := range lines {
+		fmt.Println(line)
+	}
+	return nil
+}
+
+// tailLines returns the last n non-empty lines from f, in original
+// (oldest-to-newest) order. An empty file returns an empty slice.
+// Empty lines (lines that are blank even after \r stripping) are dropped
+// to match the previous ring-buffer behavior, which never recorded "".
+func tailLines(f *os.File, n int) ([]string, error) {
+	stat, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
 	size := stat.Size()
 	if size == 0 {
-		return nil
+		return nil, nil
 	}
 
-	// Read from end in chunks
 	const chunkSize = 8192
 	lines := make([]string, 0, n)
 	pos := size
@@ -74,14 +82,12 @@ func tailFile(f *os.File, n int) error {
 
 		buf := make([]byte, readSize)
 		if _, err := f.ReadAt(buf, pos); err != nil {
-			return err
+			return nil, err
 		}
 
-		// Combine with leftover from previous chunk
 		chunk := string(buf) + leftover
 		chunkLines := splitLines(chunk)
 
-		// First line might be incomplete, save it for next iteration
 		if pos > 0 {
 			leftover = chunkLines[0]
 			chunkLines = chunkLines[1:]
@@ -89,7 +95,6 @@ func tailFile(f *os.File, n int) error {
 			leftover = ""
 		}
 
-		// Add lines in reverse order
 		for i := len(chunkLines) - 1; i >= 0 && len(lines) < n; i-- {
 			if chunkLines[i] != "" {
 				lines = append(lines, chunkLines[i])
@@ -97,36 +102,33 @@ func tailFile(f *os.File, n int) error {
 		}
 	}
 
-	// Print lines in correct order (reverse of how we collected them)
-	for i := len(lines) - 1; i >= 0; i-- {
-		fmt.Println(lines[i])
+	// Reverse so the caller gets oldest-to-newest order.
+	for i, j := 0, len(lines)-1; i < j; i, j = i+1, j-1 {
+		lines[i], lines[j] = lines[j], lines[i]
 	}
-
-	return nil
+	return lines, nil
 }
 
-// splitLines splits a string into lines, handling both \n and \r\n
+// splitLines splits a string into lines on \n, stripping a trailing \r
+// from each line so CRLF and bare-LF inputs both produce the same lines.
 func splitLines(s string) []string {
 	var lines []string
 	start := 0
 	for i := 0; i < len(s); i++ {
 		if s[i] == '\n' {
-			line := s[start:i]
-			// Remove trailing \r if present
-			if len(line) > 0 && line[len(line)-1] == '\r' {
-				line = line[:len(line)-1]
-			}
-			lines = append(lines, line)
+			lines = append(lines, trimCR(s[start:i]))
 			start = i + 1
 		}
 	}
-	// Handle last line without newline
 	if start < len(s) {
-		line := s[start:]
-		if len(line) > 0 && line[len(line)-1] == '\r' {
-			line = line[:len(line)-1]
-		}
-		lines = append(lines, line)
+		lines = append(lines, trimCR(s[start:]))
 	}
 	return lines
+}
+
+func trimCR(s string) string {
+	if len(s) > 0 && s[len(s)-1] == '\r' {
+		return s[:len(s)-1]
+	}
+	return s
 }
