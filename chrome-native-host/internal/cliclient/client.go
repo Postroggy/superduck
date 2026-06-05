@@ -10,12 +10,14 @@ import (
 	"time"
 
 	"chrome-native-host/internal/protocol"
+	"chrome-native-host/internal/udsauth"
 )
 
 const DefaultSocketPath = "/tmp/chrome-native-host.sock"
 
 var ErrNotConnected = errors.New("native-host not reachable")
 var ErrTimeout = errors.New("native-host call timed out")
+var ErrAuthFailed = errors.New("UDS authentication failed")
 
 type ToolError struct {
 	Msg string
@@ -48,6 +50,41 @@ func Call(tool string, args map[string]any, opts Options) (any, error) {
 	}
 	defer conn.Close()
 	_ = conn.SetDeadline(time.Now().Add(opts.Timeout))
+
+	// Authenticate with the native host
+	token, err := udsauth.ReadToken()
+	if err != nil {
+		return nil, fmt.Errorf("auth token: %w", err)
+	}
+
+	authReq := map[string]string{"type": "auth", "token": token}
+	if err := protocol.SendMessage(conn, authReq); err != nil {
+		return nil, fmt.Errorf("send auth: %w", err)
+	}
+
+	authRaw, err := protocol.ReadMessage(conn)
+	if err != nil {
+		var nerr net.Error
+		if errors.As(err, &nerr) && nerr.Timeout() {
+			return nil, ErrTimeout
+		}
+		return nil, fmt.Errorf("read auth response: %w", err)
+	}
+
+	var authResp struct {
+		Type  string `json:"type"`
+		OK    string `json:"ok"`
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(authRaw, &authResp); err != nil {
+		return nil, fmt.Errorf("parse auth response: %w", err)
+	}
+	if authResp.Type != "auth_response" || authResp.OK != "true" {
+		if authResp.Error != "" {
+			return nil, fmt.Errorf("%w: %s", ErrAuthFailed, authResp.Error)
+		}
+		return nil, fmt.Errorf("%w: unexpected response type=%q ok=%q", ErrAuthFailed, authResp.Type, authResp.OK)
+	}
 
 	req := map[string]any{
 		"type":   "tool_request",

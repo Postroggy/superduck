@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"chrome-native-host/internal/protocol"
+	"chrome-native-host/internal/udsauth"
 )
 
 const (
@@ -42,6 +43,42 @@ func New() (*NativeHostBridge, error) {
 		return nil, fmt.Errorf("failed to connect to chrome-native-host at %s: %w\nMake sure chrome-native-host is running with --uds flag", UDSPath, err)
 	}
 
+	// Authenticate with the native host using the shared token.
+	token, err := udsauth.ReadToken()
+	if err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("failed to read UDS auth token: %w", err)
+	}
+
+	authReq := map[string]string{"type": "auth", "token": token}
+	if err := protocol.SendMessage(conn, authReq); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("failed to send auth: %w", err)
+	}
+
+	// Wait for auth response
+	raw, err := protocol.ReadMessage(conn)
+	if err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("auth response read failed: %w", err)
+	}
+	var authResp struct {
+		Type  string `json:"type"`
+		OK    string `json:"ok"`
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(raw, &authResp); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("auth response parse failed: %w", err)
+	}
+	if authResp.Type != "auth_response" || authResp.OK != "true" {
+		conn.Close()
+		if authResp.Error != "" {
+			return nil, fmt.Errorf("UDS authentication failed: %s", authResp.Error)
+		}
+		return nil, fmt.Errorf("UDS authentication failed: unexpected response type=%q ok=%q", authResp.Type, authResp.OK)
+	}
+
 	slog.Info("connected to chrome-native-host", "path", UDSPath)
 
 	return &NativeHostBridge{
@@ -74,12 +111,20 @@ func (b *NativeHostBridge) ExecuteTool(toolName string, args map[string]interfac
 		},
 	}
 
+	// Bound each send/recv so a half-open UDS connection can't block forever.
+	// Use 35s read deadline to accommodate the schema-maximum 30s wait action
+	// plus 5s forwarding headroom.
+	_ = b.conn.SetWriteDeadline(time.Now().Add(30 * time.Second))
 	if err := protocol.SendMessage(b.conn, req); err != nil {
+		_ = b.conn.SetWriteDeadline(time.Time{})
 		return nil, fmt.Errorf("failed to send to native host: %w", err)
 	}
+	_ = b.conn.SetWriteDeadline(time.Time{})
 
 	// Wait for tool_response
+	_ = b.conn.SetReadDeadline(time.Now().Add(35 * time.Second))
 	response, err := protocol.ReadMessage(b.conn)
+	_ = b.conn.SetReadDeadline(time.Time{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
@@ -107,20 +152,22 @@ func (b *NativeHostBridge) normalizeArgs(tool string, args map[string]interface{
 		normalized[k] = v
 	}
 
-	// Handle computer tool duration parameter (convert milliseconds to seconds if needed)
+	// Validate computer tool parameters (duration bounds, etc.)
 	if tool == "computer" {
-		if duration, ok := normalized["duration"].(float64); ok {
-			// If duration > 30, assume it's in milliseconds and convert to seconds
-			if duration > 30 {
-				normalized["duration"] = duration / 1000
-				slog.Debug("converted duration from milliseconds to seconds", "original", duration, "converted", normalized["duration"])
-			}
-			// Validate max duration
-			if normalized["duration"].(float64) > 30 {
-				slog.Warn("duration exceeds maximum", "duration", normalized["duration"], "max", 30)
-			}
-		}
+		validateComputerArgs(normalized)
 	}
 
 	return normalized
+}
+
+func validateComputerArgs(args map[string]interface{}) {
+	// Validate duration is within schema limits
+	if duration, ok := args["duration"].(float64); ok {
+		if duration > 30 {
+			slog.Warn("duration exceeds schema maximum", "duration", duration, "max", 30)
+		}
+		if duration < 0 {
+			slog.Warn("negative duration", "duration", duration)
+		}
+	}
 }
