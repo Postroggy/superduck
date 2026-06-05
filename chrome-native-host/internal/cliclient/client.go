@@ -2,17 +2,15 @@
 package cliclient
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"chrome-native-host/internal/protocol"
+	"chrome-native-host/internal/udsauth"
 )
 
 const DefaultSocketPath = "/tmp/chrome-native-host.sock"
@@ -54,7 +52,7 @@ func Call(tool string, args map[string]any, opts Options) (any, error) {
 	_ = conn.SetDeadline(time.Now().Add(opts.Timeout))
 
 	// Authenticate with the native host
-	token, err := readAuthToken()
+	token, err := udsauth.ReadToken()
 	if err != nil {
 		return nil, fmt.Errorf("auth token: %w", err)
 	}
@@ -121,23 +119,6 @@ func Call(tool string, args map[string]any, opts Options) (any, error) {
 		return resp.Result.StructuredContent, nil
 	}
 	return resp.Result.Content, nil
-}
-
-func readAuthToken() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("cannot determine home directory: %w", err)
-	}
-	path := filepath.Join(home, ".superduck", "uds-token")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return "", fmt.Errorf("read %s: %w", path, err)
-	}
-	token := string(bytes.TrimSpace(data))
-	if token == "" {
-		return "", fmt.Errorf("empty auth token in %s", path)
-	}
-	return token, nil
 }
 
 // CallString is a convenience for tools whose primary payload is a JSON string in `output`.

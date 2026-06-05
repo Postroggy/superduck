@@ -1,11 +1,9 @@
 package main
 
 import (
-	"bytes"
 	"chrome-native-host/internal/analytics"
 	"chrome-native-host/internal/protocol"
-	"crypto/rand"
-	"encoding/hex"
+	"chrome-native-host/internal/udsauth"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,7 +12,6 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
@@ -325,17 +322,17 @@ func main() {
 	}
 	defer server.Close()
 
-	token, err := generateAuthToken()
+	token, err := udsauth.Generate()
 	if err != nil {
 		slog.Error("failed to generate UDS auth token", "error", err)
 		os.Exit(1)
 	}
 	server.udsAuth = token
-	if err := writeAuthToken(token); err != nil {
+	if err := udsauth.WriteToken(token); err != nil {
 		slog.Error("failed to write UDS auth token", "error", err)
 		os.Exit(1)
 	}
-	slog.Info("UDS auth token written", "path", authTokenPath())
+	slog.Info("UDS auth token written", "path", udsauth.TokenPath())
 
 	// Handle signals for graceful shutdown
 	sigChan := make(chan os.Signal, 1)
@@ -385,48 +382,4 @@ func waitForInstallIDConfirmed(timeout time.Duration) bool {
 		}
 	}
 	return false
-}
-
-func authTokenPath() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(home, ".superduck", "uds-token")
-}
-
-func generateAuthToken() (string, error) {
-	var b [32]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", fmt.Errorf("crypto/rand: %w", err)
-	}
-	return hex.EncodeToString(b[:]), nil
-}
-
-func writeAuthToken(token string) error {
-	path := authTokenPath()
-	if path == "" {
-		return errors.New("cannot determine home directory")
-	}
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return fmt.Errorf("mkdir %s: %w", dir, err)
-	}
-	return os.WriteFile(path, []byte(token), 0o600)
-}
-
-func ReadAuthToken() (string, error) {
-	path := authTokenPath()
-	if path == "" {
-		return "", errors.New("cannot determine home directory")
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return "", err
-	}
-	token := string(bytes.TrimSpace(data))
-	if token == "" {
-		return "", errors.New("empty auth token")
-	}
-	return token, nil
 }

@@ -1,16 +1,14 @@
 package bridge
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net"
-	"os"
-	"path/filepath"
 	"time"
 
 	"chrome-native-host/internal/protocol"
+	"chrome-native-host/internal/udsauth"
 )
 
 const (
@@ -46,7 +44,7 @@ func New() (*NativeHostBridge, error) {
 	}
 
 	// Authenticate with the native host using the shared token.
-	token, err := readAuthToken()
+	token, err := udsauth.ReadToken()
 	if err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("failed to read UDS auth token: %w", err)
@@ -161,21 +159,4 @@ func validateComputerArgs(args map[string]interface{}) {
 			slog.Warn("negative duration", "duration", duration)
 		}
 	}
-}
-
-func readAuthToken() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("cannot determine home directory: %w", err)
-	}
-	path := filepath.Join(home, ".superduck", "uds-token")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return "", fmt.Errorf("read %s: %w", path, err)
-	}
-	token := string(bytes.TrimSpace(data))
-	if token == "" {
-		return "", fmt.Errorf("empty auth token in %s", path)
-	}
-	return token, nil
 }
