@@ -58,9 +58,9 @@ var knownValueFlags = map[string]bool{
 	"--selector": true, "--text": true,
 	"--modifiers": true, "--ref": true,
 	"--direction": true, "--amount": true,
-	"--repeat": true,
-	"--output": true,
-	"--file":   true,
+	"--repeat":  true,
+	"--output":  true,
+	"--file":    true,
 	"--pattern": true, "--limit": true,
 	"--url-pattern": true, "--filter": true,
 	"--depth":     true,
@@ -79,8 +79,11 @@ func reorderFlagsFirst(in []string) []string {
 		a := in[i]
 		switch {
 		case a == "--":
-			pos = append(pos, in[i+1:]...)
-			return append(flags, pos...)
+			// Preserve "--" to stop flag.Parse from interpreting
+			// subsequent args (e.g. "--help") as flags.
+			result := append(flags, "--")
+			result = append(result, in[i+1:]...)
+			return result
 		case len(a) > 1 && a[0] == '-':
 			flags = append(flags, a)
 			if knownValueFlags[a] && i+1 < len(in) {
