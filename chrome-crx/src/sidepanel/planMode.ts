@@ -21,6 +21,8 @@ export function getPageType(url: string | undefined): 'system' | 'non-script' | 
   if (
     url.startsWith('chrome://') ||
     url.startsWith('chrome-extension://') ||
+    url.startsWith('edge://') ||
+    url.startsWith('brave://') ||
     url === 'about:blank'
   ) {
     return 'system';

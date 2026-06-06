@@ -41,20 +41,48 @@ func cmdDoctor(argv []string) error {
 		fmt.Printf("    %s\n", exe)
 	}
 
-	// 2. native messaging manifest 文件存在
+	// 2. native messaging manifest 文件存在 (check all supported browsers)
 	if home, err := os.UserHomeDir(); err == nil {
-		var mp string
+		type browserPath struct {
+			name string
+			path string
+		}
+		var paths []browserPath
 		switch runtime.GOOS {
 		case "darwin":
-			mp = filepath.Join(home, "Library", "Application Support", "Google", "Chrome", "NativeMessagingHosts", nativeHostName+".json")
+			base := filepath.Join(home, "Library", "Application Support")
+			paths = []browserPath{
+				{"Chrome", filepath.Join(base, "Google", "Chrome", "NativeMessagingHosts", nativeHostName+".json")},
+				{"Edge", filepath.Join(base, "Microsoft Edge", "NativeMessagingHosts", nativeHostName+".json")},
+				{"Brave", filepath.Join(base, "BraveSoftware", "Brave-Browser", "NativeMessagingHosts", nativeHostName+".json")},
+			}
 		case "linux":
-			mp = filepath.Join(home, ".config", "google-chrome", "NativeMessagingHosts", nativeHostName+".json")
+			paths = []browserPath{
+				{"Chrome", filepath.Join(home, ".config", "google-chrome", "NativeMessagingHosts", nativeHostName+".json")},
+				{"Edge", filepath.Join(home, ".config", "microsoft-edge", "NativeMessagingHosts", nativeHostName+".json")},
+				{"Brave", filepath.Join(home, ".config", "BraveSoftware", "Brave-Browser", "NativeMessagingHosts", nativeHostName+".json")},
+			}
 		}
-		if mp != "" {
-			_, statErr := os.Stat(mp)
-			check("Chrome native messaging manifest", statErr == nil, "run `superduck setup`")
-			if statErr == nil {
-				fmt.Printf("    %s\n", mp)
+		if len(paths) == 0 {
+			// Unsupported OS — skip manifest check
+			check("Native messaging manifest", true, "skipped: unsupported OS")
+		} else {
+			var found []string
+			for _, bp := range paths {
+				if _, err := os.Stat(bp.path); err == nil {
+					found = append(found, bp.name)
+				}
+			}
+			passed := len(found) > 0
+			if passed {
+				check("Native messaging manifest", true, "")
+				for _, bp := range paths {
+					if _, err := os.Stat(bp.path); err == nil {
+						fmt.Printf("    %s: %s\n", bp.name, bp.path)
+					}
+				}
+			} else {
+				check("Native messaging manifest", false, "run `superduck setup`")
 			}
 		}
 	}
@@ -65,7 +93,7 @@ func cmdDoctor(argv []string) error {
 	if conn != nil {
 		conn.Close()
 	}
-	check("native-host UDS reachable", connOK, "make sure Chrome is running with the SuperDuck extension loaded")
+	check("native-host UDS reachable", connOK, "make sure your browser is running with the SuperDuck extension loaded")
 
 	// 4. 扩展存活: 调一次 list_tabs
 	if connOK {

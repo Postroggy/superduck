@@ -73,7 +73,12 @@ export function WorkflowModeSelectionModal({
 
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       const tab = tabs[0];
-      if (tab?.favIconUrl && !tab.favIconUrl.startsWith('chrome://')) {
+      if (
+        tab?.favIconUrl &&
+        !tab.favIconUrl.startsWith('chrome://') &&
+        !tab.favIconUrl.startsWith('edge://') &&
+        !tab.favIconUrl.startsWith('brave://')
+      ) {
         setFaviconUrl(tab.favIconUrl);
       } else if (domain) {
         setFaviconUrl(`https://www.google.com/s2/favicons?domain=${domain}&sz=64`);
@@ -169,7 +174,10 @@ export function WorkflowModeSelectionModal({
           {/* Text Content */}
           <div className="space-y-2">
             <h2 className="font-base-bold text-text-100">
-              <FormattedMessage defaultMessage="Teach SuperDuck your workflow" id="teach_superduck_your_workflow" />
+              <FormattedMessage
+                defaultMessage="Teach SuperDuck your workflow"
+                id="teach_superduck_your_workflow"
+              />
             </h2>
             <p className="text-text-300 font-base max-w-[280px] mx-auto">
               {hasMicrophonePermission ? (

@@ -105,7 +105,8 @@ class ScreenshotCaptureManager {
     } catch (error) {
       if (error instanceof Error && error.message.includes('Cannot access')) {
         throw new Error(
-          'Cannot capture screenshot: Tab might be on a restricted page (chrome://, chrome-extension://, etc.)'
+          'Cannot capture screenshot: Tab might be on a restricted page (chrome://, edge://, brave://, chrome-extension://, etc.)',
+          { cause: error }
         );
       }
       throw error;

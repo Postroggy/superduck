@@ -1123,7 +1123,9 @@ async function executeToolInner(options: ExecuteToolOptions): Promise<ExecuteToo
       error_type: 'no_tabs_available',
       duration_ms: Date.now() - startTime
     });
-    return createErrorResponse('No tabs available. Please open a new tab or window in Chrome.');
+    return createErrorResponse(
+      'No tabs available. Please open a new tab or window in your browser.'
+    );
   }
 
   if (tabId !== undefined) {
@@ -1319,6 +1321,8 @@ function detectDomainTransition(
     !currentUrl ||
     currentUrl.startsWith('chrome://') ||
     currentUrl.startsWith('chrome-extension://') ||
+    currentUrl.startsWith('edge://') ||
+    currentUrl.startsWith('brave://') ||
     currentUrl.startsWith('about:') ||
     '' === currentUrl
   ) {

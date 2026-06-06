@@ -92,7 +92,12 @@ export function WorkflowRecordingInterface({
   useEffect(() => {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       const tab = tabs[0];
-      if (tab?.favIconUrl && !tab.favIconUrl.startsWith('chrome://')) {
+      if (
+        tab?.favIconUrl &&
+        !tab.favIconUrl.startsWith('chrome://') &&
+        !tab.favIconUrl.startsWith('edge://') &&
+        !tab.favIconUrl.startsWith('brave://')
+      ) {
         setFaviconUrl(tab.favIconUrl);
       } else if (domain) {
         setFaviconUrl(`https://www.google.com/s2/favicons?domain=${domain}&sz=64`);
@@ -367,7 +372,10 @@ export function WorkflowRecordingInterface({
               className="w-full"
             >
               {isGeneratingSummary ? (
-                <FormattedMessage defaultMessage="Generating shortcut..." id="generating_shortcut" />
+                <FormattedMessage
+                  defaultMessage="Generating shortcut..."
+                  id="generating_shortcut"
+                />
               ) : (
                 <FormattedMessage defaultMessage="Done" id="done" />
               )}
