@@ -56,7 +56,8 @@ import { Tooltip } from '../Tooltip';
 import { useUIStore } from '../stores';
 import { ConversationSummary } from '../MessageViews';
 import { getTextFromBlockContent, getBase64ImageBlocks } from '../sidepanelUtils';
-import { StreamingTextBlock, UserMessageRow } from './index';
+import { StreamingTextBlock } from './StreamingTextBlock';
+import { UserMessageRow } from './UserMessageRow';
 import type {
   MessageGroup,
   StreamingTextStore,
@@ -320,7 +321,12 @@ export function PlanApprovalModal({
         onClick={handleBackdropClick}
       >
         <div className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-fade-in" />
-        <div className="relative max-w-lg w-full animate-modal-enter">{modalContent}</div>
+        <div
+          className="relative max-w-lg w-full animate-modal-enter"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {modalContent}
+        </div>
       </div>
     );
   }
@@ -1140,7 +1146,7 @@ export const BlockRenderer = React.memo(function BlockRenderer({
           isFirstItemInGroup={isFirstItemInGroup}
           isLastItemInGroup={isLastItemInGroup}
           isStreaming={streamingForTool}
-          onUrlClick={(url) => window.open(url, '_blank')}
+          onUrlClick={(url) => window.open(url, '_blank', 'noopener,noreferrer')}
         />
       );
     }
