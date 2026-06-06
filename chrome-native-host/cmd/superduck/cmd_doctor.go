@@ -63,22 +63,27 @@ func cmdDoctor(argv []string) error {
 				{"Brave", filepath.Join(home, ".config", "BraveSoftware", "Brave-Browser", "NativeMessagingHosts", nativeHostName+".json")},
 			}
 		}
-		var found []string
-		for _, bp := range paths {
-			if _, err := os.Stat(bp.path); err == nil {
-				found = append(found, bp.name)
-			}
-		}
-		passed := len(found) > 0
-		if passed {
-			check("Native messaging manifest", true, "")
+		if len(paths) == 0 {
+			// Unsupported OS — skip manifest check
+			check("Native messaging manifest", true, "skipped: unsupported OS")
+		} else {
+			var found []string
 			for _, bp := range paths {
 				if _, err := os.Stat(bp.path); err == nil {
-					fmt.Printf("    %s: %s\n", bp.name, bp.path)
+					found = append(found, bp.name)
 				}
 			}
-		} else {
-			check("Native messaging manifest", false, "run `superduck setup`")
+			passed := len(found) > 0
+			if passed {
+				check("Native messaging manifest", true, "")
+				for _, bp := range paths {
+					if _, err := os.Stat(bp.path); err == nil {
+						fmt.Printf("    %s: %s\n", bp.name, bp.path)
+					}
+				}
+			} else {
+				check("Native messaging manifest", false, "run `superduck setup`")
+			}
 		}
 	}
 

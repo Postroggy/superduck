@@ -52,7 +52,7 @@ done
 
 echo ""
 echo "=== MCP Server Configuration ==="
-echo "1. Start Chrome Native Host:"
+echo "1. Start the Native Host:"
 echo "   ./chrome-native-host"
 echo ""
 echo "   (Dual channel mode: stdio + UDS will start automatically)"
@@ -71,7 +71,7 @@ echo '}'
 echo ""
 echo "IMPORTANT:"
 echo "1. Edit the manifest and replace the extension ID with your actual extension ID."
-echo "   You can find it at chrome://extensions/ or edge://extensions/"
-echo "2. Start chrome-native-host before using MCP server"
+echo "   You can find it at chrome://extensions/, edge://extensions/, or brave://extensions/"
+echo "2. Start the native host before using MCP server"
 echo ""
 echo "Installation complete!"
