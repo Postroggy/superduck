@@ -243,6 +243,19 @@ go run ./testdata/server -addr :8765 &    # 本地测试服
 - **AI 协助填写 PR 描述**:在 PR 上 `@droid fill` 按 [`pull_request_template.md`](.github/pull_request_template.md) 重写;其他 `@droid` 命令(review / security 等)见 [`droid.yml`](.github/workflows/droid.yml) 头部注释。
 - **PR 审阅意见闭环**:收到 CodeRabbit / Codex / Factory Droid 等 inline review 后,先对照当前代码核实是否仍成立;**已修复**的须在对应 thread 回复说明(引用 commit SHA)并用 GitHub **Resolve conversation** 关闭 thread;**不采纳**的须简短说明理由再 resolve,避免悬而未决。推送修复提交后复查是否还有新 comment 或 CI 失败;全部处理完再给人类审阅者总结。
 
+### 低风险 PR 批量提交流程
+
+当需要批量提交一系列低风险修复 PR 时,执行以下流程:
+
+1. **风险评估**:提交前先按影响范围对每个分支做风险评估(低/中/高),只提低风险的。
+2. **逐个提交**:按风险从低到高逐个创建 PR,不要并行开多个 PR。
+3. **监听 Bot 评论**:每个 PR 创建后,监听 CodeRabbit / Droid 等 bot 的 review comment。
+4. **等待窗口**:如果 **10 分钟内没有新的 bot comment**,且自己评估认为可以合并,则执行合并。
+5. **合并方式**:使用 `gh pr merge <N> --squash --delete-branch`。
+6. **CI 必须全部通过**:合并前确认所有 CI check(coverage gate、TypeDoc、lint 等)状态为 pass。
+7. **覆盖率门禁**:如果 coverage gate 失败,需要补测试或修复后再提 PR。
+8. **清理**:合并后删除本地已合并的分支(`git branch -D <name>`)。
+
 ## Issue / PR 标签体系 (Labeling System)
 
 仓库的 label 列表是**源代码化**的:唯一来源是 [`.github/labels.yml`](.github/labels.yml),由 [`.github/workflows/labels-sync.yml`](.github/workflows/labels-sync.yml) 在 push 到 `main` 时自动同步到 GitHub(也支持手动触发)。修改 label 必须改 `labels.yml`,不要在 GitHub UI 里直接改。
