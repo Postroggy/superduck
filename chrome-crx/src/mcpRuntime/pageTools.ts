@@ -1684,8 +1684,13 @@ const readConsoleMessagesTool: ToolDefinition<ReadConsoleMessagesToolInput> = {
 
       try {
         await cdpDebugger.enableConsoleTracking(trackedTabId);
-      } catch {
-        // ignore
+      } catch (err) {
+        // Tracking enable failed — surface the error so the model knows
+        // "no messages" is because tracking couldn't start, not because
+        // the page is silent. Per Addy Osmani: "failures are verbose."
+        return {
+          error: `Could not enable console tracking: ${err instanceof Error ? err.message : String(err)}. Try refreshing the page and calling this tool again.`
+        };
       }
 
       const messages = cdpDebugger.getConsoleMessages(trackedTabId, onlyErrors, pattern);
@@ -1839,8 +1844,10 @@ const readNetworkRequestsTool: ToolDefinition<ReadNetworkRequestsToolInput> = {
 
       try {
         await cdpDebugger.enableNetworkTracking(trackedTabId);
-      } catch {
-        // ignore
+      } catch (err) {
+        return {
+          error: `Could not enable network tracking: ${err instanceof Error ? err.message : String(err)}. Try refreshing the page and calling this tool again.`
+        };
       }
 
       const requests = cdpDebugger.getNetworkRequests(trackedTabId, urlPattern);
