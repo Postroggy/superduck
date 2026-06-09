@@ -11,6 +11,7 @@ import { registerRefsInPage, pruneStaleRefs } from './refBridge';
 import type { CdpRuntimeEvaluateResult, ConsoleMessage, NetworkRequest } from './cdpTypes';
 import {
   coerceToolInputTypes,
+  validateToolInput,
   filterAndApproveDomains,
   filterDomainsByCategory,
   formatTabsContext,
@@ -1951,6 +1952,7 @@ export {
   filterAndApproveDomains,
   filterDomainsByCategory,
   coerceToolInputTypes,
+  validateToolInput,
   toolsToProviderSchema,
   parseArrayInput
 };

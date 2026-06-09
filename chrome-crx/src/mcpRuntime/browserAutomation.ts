@@ -17,6 +17,7 @@ export {
   filterAndApproveDomains,
   filterDomainsByCategory,
   coerceToolInputTypes,
+  validateToolInput,
   toolsToProviderSchema,
   parseArrayInput
 } from './pageTools';
