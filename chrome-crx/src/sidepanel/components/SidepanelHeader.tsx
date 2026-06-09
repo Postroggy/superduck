@@ -2,6 +2,7 @@ import {
   ChevronDown,
   ChevronRight,
   Check,
+  Clock,
   MessageSquarePlus,
   MoreHorizontal,
   Languages,
@@ -44,6 +45,7 @@ export interface SidepanelHeaderProps {
   hasChatMessages: boolean;
   input: string;
   openOptionsPage: () => void;
+  onShowHistory: () => void;
 
   // Language
   SUPPORTED_LOCALES: readonly SupportedLocale[];
@@ -79,6 +81,7 @@ export function SidepanelHeader({
   hasChatMessages,
   input,
   openOptionsPage,
+  onShowHistory,
   SUPPORTED_LOCALES,
   LOCALE_DISPLAY_NAMES,
   locale,
@@ -160,6 +163,15 @@ export function SidepanelHeader({
             </button>
           </Tooltip>
         )}
+        <button
+          type="button"
+          className="p-1.5 rounded-md transition-colors text-text-300 hover:bg-bg-300 hover:text-text-100"
+          onClick={onShowHistory}
+          aria-label={intl.formatMessage({ defaultMessage: 'History', id: 'history' })}
+          title={intl.formatMessage({ defaultMessage: 'History', id: 'history' })}
+        >
+          <Clock size={14} />
+        </button>
         <button
           type="button"
           className="p-1.5 rounded-md transition-colors text-text-300 hover:bg-bg-300 hover:text-text-100"

@@ -12,6 +12,7 @@ import {
   ChevronDown,
   ChevronRight,
   CircleStop,
+  Clock,
   Languages,
   Loader2,
   MessageSquarePlus,
@@ -55,7 +56,7 @@ import { getMappedModelName } from '../utils/modelMapping';
 import { dispatchMessagesClient } from '../utils/providerClient';
 import { useProviderClient } from './provider';
 import { EmptyState } from './EmptyState';
-import { useQueryState, useTabEvent } from './hooks';
+import { useQueryState, useTabEvent, useActiveTabId } from './hooks';
 import { ImagePreviewModal, ScreenshotLightbox } from './MessageViews';
 import { MessageList } from './MessageComponents';
 import { InlinePermissionPrompt, isPermissionPromptData } from './PermissionPrompt';
@@ -78,6 +79,7 @@ import { useRuntimeMessages } from './hooks/useRuntimeMessages';
 import { Tooltip } from './Tooltip';
 import { useUIStore } from './stores';
 import { AutoScrollSpacer, LastMessageSentinel } from './AutoScrollSpacer';
+import { SessionHistoryPanel, SESSION_HISTORY_PANEL_STYLES } from './SessionHistoryPanel';
 import {
   CONTEXT_WINDOW,
   MAX_TOKENS,
@@ -98,6 +100,8 @@ import {
 } from './sidepanelUtils';
 import {
   createStreamingTextStore,
+  getTabSessionKey,
+  LAST_ACTIVE_SESSION_KEY,
   normalizeToolResultContent,
   usePrefersReducedMotion
 } from './sidepanelGuards';
@@ -141,6 +145,15 @@ import type {
   AnnouncementConfig
 } from './types';
 
+// Module-level constant for useTabEvent's properties. It MUST live at
+// the module scope (not be inlined in the call) because useTabEvent's
+// internal useEffect lists `properties` as a dependency. An inline
+// `['groupId', 'url', 'status']` would create a new array reference on
+// every render, causing the effect to re-run subscribe/unsubscribe on
+// every render and combining with useActiveTabId's setState to form an
+// infinite render loop (SidepanelApp rendered 100/200 times in dev).
+const TAB_GROUP_EVENT_PROPERTIES: string[] = ['groupId', 'url', 'status'];
+
 // ─── Plan Mode types and utilities ───
 
 export function SidepanelApp() {
@@ -154,9 +167,29 @@ export function SidepanelApp() {
 
   useEffect(() => {
     void trackEvent('superduck.sidebar.opened', {});
+    // Ask the service worker to make sure the active tab is in a SuperDuck
+    // group. Runs once per sidepanel open; tabGroupManager.createGroup() is
+    // idempotent (skips when the tab is already in a group), so this is
+    // safe to call on every open. This is the new home of group creation
+    // since chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })
+    // bypasses our chrome.action.onClicked handler.
+    chrome.runtime.sendMessage({ type: 'PANEL_READY' }).catch(() => {
+      // PANEL_READY is best-effort: if the service worker isn't ready or the
+      // user closes the sidepanel before the message roundtrips, that's fine.
+    });
   }, []);
 
-  const query = useQueryState();
+  const _query = useQueryState();
+
+  // Dynamically track the active tab so the sidepanel survives tab switches.
+  // When the sidepanel is opened as a window-bound panel (not tab-bound),
+  // the iframe is NOT destroyed on tab switch — it stays open and this hook
+  // updates the target tabId to match the user's active tab.
+  const dynamicTabId = useActiveTabId(_query.tabId);
+  const query = useMemo(
+    () => ({ ..._query, tabId: dynamicTabId ?? _query.tabId }),
+    [_query, dynamicTabId]
+  );
 
   // Feature flags removed — all values are defaults (empty)
   const versionInfoRaw = null;
@@ -177,7 +210,9 @@ export function SidepanelApp() {
     [announcementConfigRaw]
   );
 
-  const [activeSessionId, setActiveSessionId] = useState(query.sessionId || crypto.randomUUID());
+  // Initialize with empty string; resolved via async effect below to restore
+  // the last session for this tab (fixes chat history loss on panel reopen).
+  const [activeSessionId, setActiveSessionId] = useState(query.sessionId || '');
   const [activeConversationUuid, setActiveConversationUuid] = useState<string | null>(null);
   const [activeRemoteSessionId, setActiveRemoteSessionId] = useState<string | null>(null);
   const [input, setInput] = useState('');
@@ -270,6 +305,7 @@ export function SidepanelApp() {
 
   // Workflow mode selection modal state
   const { showWorkflowModeSelectionModal, setShowWorkflowModeSelectionModal } = useUIStore();
+  const [showHistoryPanel, setShowHistoryPanel] = useState(false);
   const [currentPageUrl, setCurrentPageUrl] = useState('');
   const [currentPageTitle, setCurrentPageTitle] = useState('');
   const currentDomain = useMemo(() => {
@@ -316,6 +352,11 @@ export function SidepanelApp() {
     | null
   >(null);
   const isAgentRunningRef = useRef(isAgentRunning);
+  // Lock the tab ID when the agent starts running so that switching tabs
+  // doesn't redirect tool calls to a different tab (which would trigger
+  // CDP attach on the new tab → duplicate "debugging" banners and
+  // unexpected tab group creation).
+  const lockedTabIdRef = useRef<number | undefined>(undefined);
   const hasBrowserControlPermissionAcceptedRef = useRef(hasBrowserControlPermissionAccepted);
   const pushMessageRef = useRef<((role: ChatRole, text: string) => void) | null>(null);
   const _injectedDomainSkillsRef = useRef<Set<string>>(new Set());
@@ -424,7 +465,6 @@ export function SidepanelApp() {
   } = useWorkflowRecording({
     tabId: query.tabId || 0,
     onComplete: (steps) => {
-      console.log('Recording completed with', steps.length, 'steps');
       // TODO: Implement workflow save logic
     },
     createMessage: stableCreateMessage
@@ -467,10 +507,20 @@ export function SidepanelApp() {
     const text = streamingTextStoreRef.current.getSnapshot();
     if (text) {
       setMessages((prev) => {
-        const lastIndex = prev.length - 1;
-        if (lastIndex < 0 || prev[lastIndex].role !== 'assistant') return prev;
+        // Find the last assistant message — not just the last element — because
+        // tool calls insert system messages (e.g. "🔧 tool_name") after the
+        // assistant placeholder, which would cause the naive lastIndex check
+        // to silently drop the streamed text.
+        let lastAssistantIdx = -1;
+        for (let i = prev.length - 1; i >= 0; i--) {
+          if (prev[i].role === 'assistant') {
+            lastAssistantIdx = i;
+            break;
+          }
+        }
+        if (lastAssistantIdx < 0) return prev;
         const updated = [...prev];
-        updated[lastIndex] = { ...updated[lastIndex], text };
+        updated[lastAssistantIdx] = { ...updated[lastAssistantIdx], text };
         return updated;
       });
     }
@@ -798,7 +848,11 @@ export function SidepanelApp() {
 
   const executeToolUse = useCallback(
     async (toolUse: ToolUseBlock): Promise<ApiToolResultBlock> => {
-      if (typeof query.tabId !== 'number') {
+      // Use the locked tab ID during agent execution to prevent tool calls
+      // from being redirected to a different tab when the user switches tabs.
+      // This avoids duplicate "debugging" banners and unexpected tab group creation.
+      const targetTabId = lockedTabIdRef.current ?? query.tabId;
+      if (typeof targetTabId !== 'number') {
         return {
           type: 'tool_result',
           tool_use_id: toolUse.id,
@@ -815,7 +869,7 @@ export function SidepanelApp() {
         const result = await executeTool({
           toolName: toolUse.name,
           args: toolUse.input,
-          tabId: query.tabId,
+          tabId: targetTabId,
           permissionMode: permissionModeRef.current,
           toolUseId: toolUse.id,
           messagesClient: effectiveMessagesClient,
@@ -944,12 +998,19 @@ export function SidepanelApp() {
       text: string,
       options?: { attachments?: PromptAttachmentPayload[]; isAnnotated?: boolean }
     ) => {
+      // Lock tab ID synchronously BEFORE starting the agent, so that tool calls
+      // always target the tab the user was on when they sent the message.
+      // Using useEffect for this creates a race condition where the first tool
+      // call could fire before the effect runs.
+      if (typeof query.tabId === 'number') {
+        lockedTabIdRef.current = query.tabId;
+      }
       if (isPurlMode && lightningResult) {
         return lightningResult.sendMessage(text, options?.attachments, null, false);
       }
       return sendPrompt(text, options);
     },
-    [isPurlMode, lightningResult, sendPrompt]
+    [isPurlMode, lightningResult, sendPrompt, query.tabId]
   );
 
   const effectiveCancel = useCallback(() => {
@@ -963,10 +1024,12 @@ export function SidepanelApp() {
       abortControllerRef.current?.abort();
       setIsAgentRunning(false);
     }
-    // Ensure indicators are hidden even if no sendPrompt finally-block fires
-    if (typeof query.tabId === 'number') {
-      chrome.tabs.sendMessage(query.tabId, { type: 'HIDE_AGENT_INDICATORS' }).catch(() => {});
-      tabGroupManager.setTabIndicatorState(query.tabId, 'none').catch(() => {});
+    // Ensure indicators are hidden even if no sendPrompt finally-block fires.
+    // Use lockedTabId to target the correct tab (the one agent was running on).
+    const cancelTabId = lockedTabIdRef.current ?? query.tabId;
+    if (typeof cancelTabId === 'number') {
+      chrome.tabs.sendMessage(cancelTabId, { type: 'HIDE_AGENT_INDICATORS' }).catch(() => {});
+      tabGroupManager.setTabIndicatorState(cancelTabId, 'none').catch(() => {});
     }
   }, [isPurlMode, lightningResult, query.tabId]);
 
@@ -982,6 +1045,15 @@ export function SidepanelApp() {
   isAgentRunningRef.current = effectiveIsAgentRunning;
   hasBrowserControlPermissionAcceptedRef.current = hasBrowserControlPermissionAccepted;
   pushMessageRef.current = pushMessage;
+
+  // Unlock tab ID when agent stops running. The lock is set synchronously
+  // in effectiveSendPrompt (not here) to avoid a race condition where the
+  // first tool call fires before this effect runs.
+  useEffect(() => {
+    if (!effectiveIsAgentRunning) {
+      lockedTabIdRef.current = undefined;
+    }
+  }, [effectiveIsAgentRunning]);
 
   const retryWithFallback = useCallback(async () => {
     const fallback = modelConfig.modelFallbacks?.[selectedModel];
@@ -1015,9 +1087,11 @@ export function SidepanelApp() {
           mainTabId: mainTabId ?? null
         });
       } else {
-        if (!inGroup) {
-          await tabGroupManager.createGroup(query.tabId).catch(() => {});
-        }
+        // Don't create a group here — group creation should only happen
+        // when the user explicitly opens the sidepanel (handleActionClick
+        // in sidePanel.ts). Creating groups on tab activation causes
+        // unrelated tabs to be pulled into 🦆SuperDuck groups when the
+        // user switches tabs while the agent is running.
         setSecondaryState({ checking: false, isSecondaryTab: false, mainTabId: null });
       }
     } catch {
@@ -1085,7 +1159,7 @@ export function SidepanelApp() {
 
   useTabEvent(
     query.tabId,
-    ['groupId', 'url', 'status'],
+    TAB_GROUP_EVENT_PROPERTIES,
     () => {
       void refreshSecondaryState();
       void refreshBlockedState();
@@ -1189,6 +1263,73 @@ export function SidepanelApp() {
     void setStorageValue(StorageKeys.LAST_PERMISSION_MODE_PREFERENCE, permissionMode);
   }, [permissionMode]);
 
+  // ─── Session ID resolution (restore last session for this tab) ───────────
+  // When the sidepanel is opened without an explicit sessionId in the URL,
+  // we try to restore the last session ID that was used for this tab.
+  // This prevents chat history from being lost on panel close/reopen.
+  useEffect(() => {
+    // If we already have a sessionId (from URL or from resolution), skip
+    if (activeSessionId) return;
+
+    // If tabId is not yet resolved (useActiveTabId is still querying), wait.
+    // This prevents generating a fresh session before we know which tab we're
+    // bound to — otherwise we'd miss the stored tab→session mapping.
+    if (typeof query.tabId !== 'number' && !query.sessionId) return;
+
+    let active = true;
+    (async () => {
+      const tabId = query.tabId;
+      if (typeof tabId !== 'number') {
+        // No tab context — try the global fallback before generating fresh
+        const fallbackSessionId = await getStorageValue(LAST_ACTIVE_SESSION_KEY);
+        if (!active) return;
+        if (typeof fallbackSessionId === 'string' && fallbackSessionId) {
+          setActiveSessionId(fallbackSessionId);
+        } else {
+          setActiveSessionId(crypto.randomUUID());
+        }
+        return;
+      }
+
+      // Try to restore the last session for this tab
+      const lastSessionId = await getStorageValue(getTabSessionKey(tabId));
+      if (!active) return;
+
+      if (typeof lastSessionId === 'string' && lastSessionId) {
+        setActiveSessionId(lastSessionId);
+      } else {
+        // Tab-specific session not found — try the global fallback
+        const fallbackSessionId = await getStorageValue(LAST_ACTIVE_SESSION_KEY);
+        if (!active) return;
+        if (typeof fallbackSessionId === 'string' && fallbackSessionId) {
+          setActiveSessionId(fallbackSessionId);
+        } else {
+          setActiveSessionId(crypto.randomUUID());
+        }
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [activeSessionId, query.tabId, query.sessionId]);
+
+  // ─── Tab-session mapping persistence ──────────────────────────────────────
+  // Save the tab→session mapping whenever the active session changes,
+  // so the next time the panel opens for this tab we can restore it.
+  useEffect(() => {
+    if (!activeSessionId || typeof query.tabId !== 'number') return;
+    void setStorageValue(getTabSessionKey(query.tabId), activeSessionId);
+  }, [activeSessionId, query.tabId]);
+
+  // ─── Global last-active-session persistence ───────────────────────────────
+  // Save the active session globally so it can be restored even when the tab
+  // ID changes (e.g., sidepanel opened as a new page in e2e tests).
+  useEffect(() => {
+    if (!activeSessionId) return;
+    void setStorageValue(LAST_ACTIVE_SESSION_KEY, activeSessionId);
+  }, [activeSessionId]);
+
   // ─── Session persistence hook ─────────────────────────────────────────────
 
   const { loadSnapshotForSession } = useSessionPersistence({
@@ -1226,6 +1367,7 @@ export function SidepanelApp() {
     querySessionId: query.sessionId,
     querySkipPermissions: query.skipPermissions,
     secondaryState,
+    activeSessionId,
     setActiveConversationUuid,
     setActiveRemoteSessionId,
     setActiveSessionId,
@@ -1567,6 +1709,9 @@ export function SidepanelApp() {
   // Shift+Tab cycles permission modes
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      // Skip when IME is composing — Escape during CJK input cancels the
+      // composition, not the agent.
+      if (e.isComposing) return;
       if (e.key === 'Escape' && effectiveIsAgentRunning) {
         effectiveCancel();
       }
@@ -1611,12 +1756,82 @@ export function SidepanelApp() {
       permissionResolveRef.current = null;
     }
     setPermissionPrompt(null);
+    // Reset permission state so the new session doesn't inherit the previous
+    // session's mode, plan approval, or per-turn approved domains.
+    setPermissionMode('skip_all_permission_checks');
+    hasApprovedPlanRef.current = false;
+    permissionManagerRef.current?.clearTurnApprovedDomains();
     if (!query.sessionId) {
       const nextSessionId = crypto.randomUUID();
       sessionCreatedAtRef.current = Date.now();
       setActiveSessionId(nextSessionId);
     }
   }, [messages, query.sessionId]);
+
+  // Load a historical session: clears current state and switches to the selected session.
+  // The useSessionPersistence hook's load effect will pick up the new activeSessionId
+  // and restore the snapshot from storage.
+  const handleLoadHistorySession = useCallback(
+    (sessionId: string, conversationUuid?: string) => {
+      if (sessionId === activeSessionId) return;
+
+      void trackEvent('superduck.sidebar.history_session_loaded', {});
+
+      // Abort any running agent
+      abortControllerRef.current?.abort();
+      setIsAgentRunning(false);
+      if (typeof query.tabId === 'number') {
+        chrome.tabs.sendMessage(query.tabId, { type: 'HIDE_AGENT_INDICATORS' }).catch(() => {});
+        tabGroupManager.setTabIndicatorState(query.tabId, 'none').catch(() => {});
+      }
+
+      // Clear current state before switching
+      setMessages([]);
+      setApiMessages([]);
+      setMessageHistory([]);
+      setRuntimeError(null);
+      setLastStopReason(null);
+      setTokensSaved(null);
+      // Clear stale streaming text so the new session doesn't briefly show
+      // the previous session's last assistant response.
+      streamingTextStoreRef.current.set('');
+
+      // Clear attachments and stale retry payload so they don't leak into
+      // the new session (Issues 4.3, 4.5 from UX audit).
+      setPendingAttachments([]);
+      setPreviewAttachmentImage(null);
+      setAttachmentCount(0);
+      lastSentPayloadRef.current = null;
+
+      // Clear notification banner timer from previous session
+      if (notificationBannerTimerRef.current) {
+        window.clearTimeout(notificationBannerTimerRef.current);
+        notificationBannerTimerRef.current = null;
+      }
+
+      // Clear pending permission prompt
+      if (permissionResolveRef.current) {
+        permissionResolveRef.current(false);
+        permissionResolveRef.current = null;
+      }
+      setPermissionPrompt(null);
+
+      // Gate the persistence save effect BEFORE switching sessionId.
+      // Without this, the save effect fires with empty messages/apiMessages
+      // (set above) and writes an empty snapshot to the new session's storage
+      // key, destroying the historical data before the load effect can read it.
+      hasLoadedSessionRef.current = false;
+
+      // Reset conversation UUID (the load effect will restore from snapshot if available)
+      setActiveConversationUuid(conversationUuid || null);
+      setActiveRemoteSessionId(null);
+
+      // Switch to the historical session — triggers the persistence hook to load snapshot
+      sessionCreatedAtRef.current = Date.now();
+      setActiveSessionId(sessionId);
+    },
+    [activeSessionId, query.tabId]
+  );
 
   const normalizedModelOptions = useMemo(() => {
     const rawOptions = modelConfig.options;
@@ -1686,48 +1901,44 @@ export function SidepanelApp() {
     DEFAULT_MODEL;
 
   useEffect(() => {
-    console.log('[Model Sync] Effect triggered');
-    console.log('[Model Sync] selectedModel:', selectedModel);
-    console.log('[Model Sync] effectiveSelectedModel:', effectiveSelectedModel);
-
     if (selectedModel || !effectiveSelectedModel) {
-      console.log('[Model Sync] Skipping sync');
       return;
     }
 
-    console.log('[Model Sync] Auto-setting selectedModel to:', effectiveSelectedModel);
     setSelectedModel(effectiveSelectedModel);
     void setStorageValue(StorageKeys.SELECTED_MODEL, effectiveSelectedModel);
   }, [effectiveSelectedModel, selectedModel]);
 
   const handleModelChange = useCallback(
     (nextModel: string) => {
-      console.log('[Model Change] Clicked:', nextModel);
-      console.log('[Model Change] Current selectedModel:', selectedModel);
-      console.log('[Model Change] Current effectiveSelectedModel:', effectiveSelectedModel);
-
       if (!nextModel) {
-        console.log('[Model Change] No model provided, closing menu');
         setIsModelMenuOpen(false);
         return;
       }
 
       if (nextModel === selectedModel) {
-        console.log('[Model Change] Same model clicked, closing menu');
         setIsModelMenuOpen(false);
         return;
       }
 
-      console.log('[Model Change] Switching to:', nextModel);
       void trackEvent('superduck.sidebar.model_switched', {
         from: selectedModel || '',
         to: nextModel
       });
+
+      // If the agent is currently running, abort it so the next request uses the
+      // new model. Otherwise the in-flight request would continue with the old
+      // model, which is confusing to users who expect the switch to take effect
+      // immediately (Issue 7.2/7.3 from UX audit).
+      if (effectiveIsAgentRunning) {
+        effectiveCancel();
+      }
+
       setSelectedModel(nextModel);
       setIsModelMenuOpen(false);
       void setStorageValue(StorageKeys.SELECTED_MODEL, nextModel);
     },
-    [selectedModel, effectiveSelectedModel]
+    [selectedModel, effectiveSelectedModel, effectiveIsAgentRunning, effectiveCancel]
   );
 
   const openOptionsPage = useCallback(() => {
@@ -1997,11 +2208,10 @@ export function SidepanelApp() {
   }, [debugMode, apiMessages, serverModelInfo]);
 
   const selectedModelLabel = useMemo(() => {
-    const label =
+    return (
       normalizedModelOptions.find((option) => option.value === effectiveSelectedModel)?.label ||
-      getModelDisplayName(effectiveSelectedModel, modelConfig);
-    console.log('[Model Label] Computed label:', label, 'for model:', effectiveSelectedModel);
-    return label;
+      getModelDisplayName(effectiveSelectedModel, modelConfig)
+    );
   }, [normalizedModelOptions, effectiveSelectedModel, modelConfig]);
   const hasChatMessages = effectiveMessages.length > 0;
 
@@ -2115,6 +2325,7 @@ export function SidepanelApp() {
           hasChatMessages={hasChatMessages}
           input={input}
           openOptionsPage={openOptionsPage}
+          onShowHistory={() => setShowHistoryPanel(true)}
           SUPPORTED_LOCALES={SUPPORTED_LOCALES}
           LOCALE_DISPLAY_NAMES={LOCALE_DISPLAY_NAMES}
           locale={locale}
@@ -2465,7 +2676,18 @@ export function SidepanelApp() {
           imageUrl={previewAttachmentImage}
           onClose={() => setPreviewAttachmentImage(null)}
         />
+
+        {/* Session history slide-in panel */}
+        <SessionHistoryPanel
+          isOpen={showHistoryPanel}
+          onClose={() => setShowHistoryPanel(false)}
+          onLoadSession={handleLoadHistorySession}
+          activeSessionId={activeSessionId}
+        />
       </div>
+
+      {/* CSS for session history panel animation */}
+      <style>{SESSION_HISTORY_PANEL_STYLES}</style>
     </div>
   );
 }

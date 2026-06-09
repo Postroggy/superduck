@@ -113,8 +113,17 @@ export function normalizeImageMediaType(mediaType: string | undefined): Supporte
 export const SESSION_CONVERSATION_MAP_KEY = 'sidepanel_conversation_map_v1';
 export const SESSION_REMOTE_MAP_KEY = 'sidepanel_conversation_remote_map_v1';
 export const SESSION_INDEX_KEY = 'sidepanel_session_index_v1';
+export const TAB_SESSION_KEY_PREFIX = 'sidepanel_tab_session_';
+export const LAST_ACTIVE_SESSION_KEY = 'sidepanel_last_active_session_v1';
 export const CUSTOM_API_URL_KEY = 'customApiUrl';
 export const CUSTOM_API_KEY_KEY = 'customApiKey';
+
+/**
+ * Get the storage key for the last session ID associated with a tab.
+ */
+export function getTabSessionKey(tabId: number): string {
+  return `${TAB_SESSION_KEY_PREFIX}${tabId}`;
+}
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 

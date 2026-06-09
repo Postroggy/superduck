@@ -42,7 +42,7 @@ export function WorkflowStepsList({
   onClose,
   fullScreen = false,
   currentInterimTranscript = '',
-  isSpeechRecording = false,
+  isSpeechRecording = false
 }: WorkflowStepsListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const lastStepRef = useRef<HTMLDivElement>(null);
@@ -58,12 +58,12 @@ export function WorkflowStepsList({
     if (interimRef.current) {
       interimRef.current.scrollIntoView({
         behavior: 'smooth',
-        block: 'nearest',
+        block: 'nearest'
       });
     } else if (lastStepRef.current) {
       lastStepRef.current.scrollIntoView({
         behavior: 'smooth',
-        block: 'end',
+        block: 'end'
       });
     }
   }, [steps.length, currentInterimTranscript]);
@@ -107,12 +107,7 @@ export function WorkflowStepsList({
               />
             </h3>
             {onClose && (
-              <Button
-                variant="ghost"
-                size="icon_sm"
-                onClick={onClose}
-                className="hover:bg-bg-500"
-              >
+              <Button variant="ghost" size="icon_sm" onClick={onClose} className="hover:bg-bg-500">
                 <X size={16} />
               </Button>
             )}
@@ -198,6 +193,7 @@ export function WorkflowStepsList({
                                   setDescriptionDraft('');
                                 }}
                                 onKeyDown={(event) => {
+                                  if (event.nativeEvent.isComposing) return;
                                   if (event.key === 'Enter') {
                                     event.preventDefault();
                                     const nextDescription = descriptionDraft.trim();
@@ -219,7 +215,7 @@ export function WorkflowStepsList({
                                   boxShadow: 'none',
                                   outline: 'none',
                                   WebkitAppearance: 'none',
-                                  appearance: 'none',
+                                  appearance: 'none'
                                 }}
                               />
                             </div>
@@ -311,6 +307,7 @@ export function WorkflowStepsList({
                                     setTranscriptDraft('');
                                   }}
                                   onKeyDown={(event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+                                    if (event.nativeEvent.isComposing) return;
                                     if (event.key === 'Enter' && !event.shiftKey) {
                                       event.preventDefault();
                                       const nextTranscript = transcriptDraft.trim();
@@ -329,7 +326,7 @@ export function WorkflowStepsList({
                                   }}
                                   style={{
                                     boxShadow: 'none',
-                                    outline: 'none',
+                                    outline: 'none'
                                   }}
                                 />
                               </div>
@@ -356,7 +353,7 @@ export function WorkflowStepsList({
                                   transcript:
                                     step.speechTranscript.length > 80
                                       ? `${step.speechTranscript.substring(0, 80)}...`
-                                      : step.speechTranscript,
+                                      : step.speechTranscript
                                 }}
                               />
                             </span>
@@ -409,7 +406,10 @@ export function WorkflowStepsList({
       {!fullScreen && steps.length > 0 && (
         <div className="absolute bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-200">
           <button className="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-base-bold">
-            <FormattedMessage defaultMessage="Save as Teach SuperDuck" id="save_as_teach_superduck" />
+            <FormattedMessage
+              defaultMessage="Save as Teach SuperDuck"
+              id="save_as_teach_superduck"
+            />
           </button>
         </div>
       )}

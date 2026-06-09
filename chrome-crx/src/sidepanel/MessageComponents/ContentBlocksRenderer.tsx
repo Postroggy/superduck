@@ -157,6 +157,7 @@ export function PlanApprovalModal({
       return () => window.removeEventListener('keydown', handler);
     } else {
       const handler = (e: KeyboardEvent) => {
+        if (e.isComposing) return;
         if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
           e.preventDefault();
           e.stopPropagation();

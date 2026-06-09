@@ -168,7 +168,9 @@ export const RichTextInput = forwardRef<RichTextInputHandle, RichTextInputProps>
         },
         handleKeyDown: (view, event) => {
           // Enter 提交（不按 Shift）
-          if (event.key === 'Enter' && !event.shiftKey) {
+          // Skip when IME is composing (e.g. CJK input) — event.isComposing
+          // is true while the user is selecting a character candidate.
+          if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
             event.preventDefault();
             onSubmit();
             return true;
@@ -206,7 +208,9 @@ export const RichTextInput = forwardRef<RichTextInputHandle, RichTextInputProps>
             .run(); // 插入芯片后添加空格
 
           requestAnimationFrame(() => {
-            const chips = editor?.view.dom.querySelectorAll<HTMLElement>('[data-type="shortcut-chip"]');
+            const chips = editor?.view.dom.querySelectorAll<HTMLElement>(
+              '[data-type="shortcut-chip"]'
+            );
             const insertedChip = chips?.[chips.length - 1] ?? null;
             triggerShortcutChipFlash(insertedChip);
           });

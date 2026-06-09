@@ -346,8 +346,9 @@ export function useAgentLoop({
   // ─── Generate conversation title ──────────────────────────────────────────
 
   const generateConversationTitle = useCallback(
-    async (userMessage: Pick<ApiConversationMessage, 'content'>) => {
-      if (typeof queryTabId !== 'number') return;
+    async (userMessage: Pick<ApiConversationMessage, 'content'>, tabId?: number) => {
+      const effectiveTabId = tabId ?? queryTabId;
+      if (typeof effectiveTabId !== 'number') return;
       try {
         const title = await generateConversationTitleFunction(
           userMessage,
@@ -357,7 +358,7 @@ export function useAgentLoop({
 
         if (title) {
           await tabGroupManager.initialize();
-          await tabGroupManager.updateGroupTitle(queryTabId, title, true);
+          await tabGroupManager.updateGroupTitle(effectiveTabId, title, true);
         }
       } catch {
         // silently fail title generation
@@ -380,6 +381,10 @@ export function useAgentLoop({
         setRuntimeError('API not configured. Please set up your provider in Settings.');
         return;
       }
+
+      // Capture the tab ID at the start of execution so that switching tabs
+      // doesn't redirect tool calls or indicator messages to a different tab.
+      const executionTabId = queryTabId;
 
       // --- System command interception (matching compiled zs/Rs) ---
       const slashCommand = trimmed.startsWith('/') ? trimmed.slice(1) : '';
@@ -472,9 +477,9 @@ export function useAgentLoop({
         }
 
         // Inject system-reminder tab context on the user's message
-        if (typeof queryTabId === 'number') {
+        if (typeof executionTabId === 'number') {
           try {
-            const availableTabs = await tabGroupManager.getValidTabsWithMetadata(queryTabId);
+            const availableTabs = await tabGroupManager.getValidTabsWithMetadata(executionTabId);
             if (availableTabs && availableTabs.length > 0) {
               const tabInfo = {
                 availableTabs: availableTabs.map((t) => ({
@@ -482,7 +487,7 @@ export function useAgentLoop({
                   title: t.title,
                   url: t.url
                 })),
-                ...(baseMessages.length === 0 ? { initialTabId: queryTabId } : {})
+                ...(baseMessages.length === 0 ? { initialTabId: executionTabId } : {})
               };
               userContent.push({
                 type: 'text',
@@ -511,14 +516,14 @@ export function useAgentLoop({
         iterationCountRef.current = 0;
 
         // Add loading prefix to tab group
-        if (typeof queryTabId === 'number') {
-          tabGroupManager.addLoadingPrefix(queryTabId).catch(() => {});
+        if (typeof executionTabId === 'number') {
+          tabGroupManager.addLoadingPrefix(executionTabId).catch(() => {});
         }
 
         // Generate title from first user message
         if (baseMessages.length === 0) {
           const lastMsg = workingMessages[workingMessages.length - 1];
-          generateConversationTitle(lastMsg).catch(() => {});
+          generateConversationTitle(lastMsg, executionTabId).catch(() => {});
         }
 
         setCurrentStatus('');
@@ -530,9 +535,9 @@ export function useAgentLoop({
           abortControllerRef.current = controller;
 
           // Re-check tab URL after first iteration
-          if (iterationCountRef.current > 1 && typeof queryTabId === 'number') {
+          if (iterationCountRef.current > 1 && typeof executionTabId === 'number') {
             try {
-              await chrome.tabs.get(queryTabId);
+              await chrome.tabs.get(executionTabId);
             } catch {
               // tab may have been closed
             }
@@ -548,6 +553,10 @@ export function useAgentLoop({
 
           let retryCount = 0;
           let shouldRetry = false;
+          // Track rAF state outside the try block so the catch block can cancel
+          // pending animations before retry (Issue 6.2 from UX audit).
+          let streamingRafId: number | null = null;
+          let streamingRafPending = false;
 
           do {
             shouldRetry = false;
@@ -611,8 +620,6 @@ export function useAgentLoop({
               });
 
               // Stream text to UI in real-time (throttled to rAF to avoid re-render storms)
-              let streamingRafId: number | null = null;
-              let streamingRafPending = false;
               stream.on('text', (delta: string) => {
                 accumulatedText += delta;
                 if (!streamingRafPending) {
@@ -742,9 +749,9 @@ export function useAgentLoop({
                 } else {
                   // Determine page type for checkToolAllowed
                   let currentPageType = 'regular';
-                  if (typeof queryTabId === 'number') {
+                  if (typeof executionTabId === 'number') {
                     try {
-                      const tab = await chrome.tabs.get(queryTabId);
+                      const tab = await chrome.tabs.get(executionTabId);
                       currentPageType = getPageType(tab.url);
                     } catch {
                       // tab may have been closed
@@ -917,6 +924,14 @@ export function useAgentLoop({
                 });
                 await new Promise((resolve) => setTimeout(resolve, delay * 1000));
                 shouldRetry = true;
+                // Cancel any pending rAF before clearing the store to prevent
+                // stale text from being written after the store is cleared
+                // (Issue 6.2 from UX audit — prevents flicker of old text).
+                if (streamingRafId !== null) {
+                  cancelAnimationFrame(streamingRafId);
+                  streamingRafId = null;
+                  streamingRafPending = false;
+                }
                 // Clear streaming store and remove the empty streaming placeholder before retry
                 streamingTextStoreRef.current.set('');
                 setMessages((prev) => {
@@ -995,10 +1010,12 @@ export function useAgentLoop({
         generationStartedAtRef.current = null;
         completionNotificationSentRef.current = false;
         // Hide agent indicators and add completion prefix to tab group
-        if (typeof queryTabId === 'number') {
-          chrome.tabs.sendMessage(queryTabId, { type: 'HIDE_AGENT_INDICATORS' }).catch(() => {});
-          tabGroupManager.setTabIndicatorState(queryTabId, 'none').catch(() => {});
-          tabGroupManager.addCompletionPrefix(queryTabId).catch(() => {});
+        if (typeof executionTabId === 'number') {
+          chrome.tabs
+            .sendMessage(executionTabId, { type: 'HIDE_AGENT_INDICATORS' })
+            .catch(() => {});
+          tabGroupManager.setTabIndicatorState(executionTabId, 'none').catch(() => {});
+          tabGroupManager.addCompletionPrefix(executionTabId).catch(() => {});
         }
       }
     },
