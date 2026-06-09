@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   StorageKeys,
   PermissionActionType,
@@ -1345,25 +1345,43 @@ export function useLightningMode({
 
   if (!enabled) return null;
 
-  return {
-    messages: lnMessages,
-    messageHistory: EMPTY_MESSAGE_HISTORY,
-    sendMessage,
-    retryLastMessage: NOOP_RETRY,
-    cancel,
-    clearMessages,
-    clearError,
-    isLoading: lnIsLoading,
-    isInitializing: false,
-    hasInteractiveTools: false,
-    isCompacting: false,
-    error: lnError,
-    messageLimit: WITHIN_LIMIT_RESULT,
-    setMessages: setLnMessages,
-    tokensSaved: null,
-    createApiMessage,
-    lastStopReason: lnLastStopReason,
-    currentStatus: lnCurrentStatus,
-    conversationUuid: null
-  };
+  // Memoize the return object to stabilize its reference across renders.
+  // Without this, every SidepanelApp re-render creates a new object identity,
+  // which invalidates downstream useCallback deps (effectiveSendPrompt,
+  // effectiveCancel, effectiveClearError) and cascades re-renders into children.
+  return useMemo(
+    () => ({
+      messages: lnMessages,
+      messageHistory: EMPTY_MESSAGE_HISTORY,
+      sendMessage,
+      retryLastMessage: NOOP_RETRY,
+      cancel,
+      clearMessages,
+      clearError,
+      isLoading: lnIsLoading,
+      isInitializing: false,
+      hasInteractiveTools: false,
+      isCompacting: false,
+      error: lnError,
+      messageLimit: WITHIN_LIMIT_RESULT,
+      setMessages: setLnMessages,
+      tokensSaved: null,
+      createApiMessage,
+      lastStopReason: lnLastStopReason,
+      currentStatus: lnCurrentStatus,
+      conversationUuid: null
+    }),
+    [
+      lnMessages,
+      lnIsLoading,
+      lnError,
+      lnLastStopReason,
+      lnCurrentStatus,
+      sendMessage,
+      cancel,
+      clearMessages,
+      clearError,
+      createApiMessage
+    ]
+  );
 }

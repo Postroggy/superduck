@@ -303,8 +303,11 @@ export function SidepanelApp() {
     mainTabId: null
   });
 
-  // Workflow mode selection modal state
-  const { showWorkflowModeSelectionModal, setShowWorkflowModeSelectionModal } = useUIStore();
+  // Workflow mode selection modal state — use selectors to avoid subscribing
+  // to the entire UIStore (20+ fields), which would trigger re-renders on any
+  // unrelated store change (commandSearchTerm, pendingContinue, etc.)
+  const showWorkflowModeSelectionModal = useUIStore((s) => s.showWorkflowModeSelectionModal);
+  const setShowWorkflowModeSelectionModal = useUIStore((s) => s.setShowWorkflowModeSelectionModal);
   const [showHistoryPanel, setShowHistoryPanel] = useState(false);
   const [currentPageUrl, setCurrentPageUrl] = useState('');
   const [currentPageTitle, setCurrentPageTitle] = useState('');
