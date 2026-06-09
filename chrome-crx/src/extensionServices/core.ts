@@ -82,7 +82,10 @@ export enum StorageKeys {
   MCP_CONNECTED = 'mcpConnected',
   ANALYTICS_ID = 'analyticsId',
   QUICK_MODE_TIP_DISMISSED = 'quickModeTipDismissed',
-  WIDGET_ORDER = 'widgetOrder'
+  WIDGET_ORDER = 'widgetOrder',
+  ACTIVE_TOOL_CONTEXTS = 'activeToolContexts',
+  ACTIVE_TOOL_COUNT = 'activeToolCount',
+  PENDING_UPDATE_VERSION = 'pendingUpdateVersion'
 }
 
 export async function getStorageValue<T>(key: string, defaultValue: T): Promise<T>;

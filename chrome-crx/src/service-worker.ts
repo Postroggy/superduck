@@ -7,6 +7,7 @@ import {
   tabGroupManager,
   trackEvent,
 } from "./mcpRuntime";
+import { restoreActiveToolContextsFromStorage } from "./mcpRuntime/core";
 import { createExtensionUrlHandler } from "./background/extensionUrl";
 import { createNativeHostManager } from "./background/nativeHost";
 import { registerExternalMessageListener } from "./background/externalMessages";
@@ -104,6 +105,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 
 chrome.runtime.onStartup.addListener(async () => {
   initializeExtensionPermissions();
+  await restoreActiveToolContextsFromStorage();
   await tabGroupManager.initialize();
   void connectBridge();
   void nativeHostManager.connect();

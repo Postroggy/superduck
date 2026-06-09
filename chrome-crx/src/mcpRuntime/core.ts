@@ -4,6 +4,7 @@ import { DEFAULT_MODEL, FAST_MODEL } from '../constants/models';
 import {
   StorageKeys,
   getStorageValue,
+  setStorageValue,
   getOrCreateAnonymousId,
   PermissionDuration as PermissionDurationEnum
 } from '../extensionServices';
@@ -1444,6 +1445,12 @@ function createDomainTransitionPermission(
 }
 
 // --- Active tool contexts and group finalization ---
+type PersistedActiveToolContext = {
+  toolName: string;
+  requestId: string;
+  startTime: number;
+};
+
 const activeToolContexts = new Map<
   number,
   {
@@ -1453,6 +1460,60 @@ const activeToolContexts = new Map<
     errorCallback?: (error: string) => void;
   }
 >();
+
+/**
+ * Serialize the active tool contexts Map into a plain record keyed by tabId.
+ * `errorCallback` is a function and intentionally not persisted — after an SW
+ * restart the callback is gone and any tool that errors out before completing
+ * will simply not surface a UI error; the tool itself is allowed to finish.
+ */
+function serializeActiveToolContexts(): Record<string, PersistedActiveToolContext> {
+  const out: Record<string, PersistedActiveToolContext> = {};
+  for (const [tabId, ctx] of activeToolContexts) {
+    out[String(tabId)] = {
+      toolName: ctx.toolName,
+      requestId: ctx.requestId,
+      startTime: ctx.startTime
+    };
+  }
+  return out;
+}
+
+async function persistActiveToolContexts(): Promise<void> {
+  try {
+    await setStorageValue(StorageKeys.ACTIVE_TOOL_CONTEXTS, serializeActiveToolContexts());
+  } catch (err) {
+    console.warn('[core] failed to persist activeToolContexts', err);
+  }
+}
+
+/**
+ * Restore the active tool contexts map from storage. Called from
+ * `service-worker.ts` on `chrome.runtime.onStartup` so the in-memory Map
+ * survives a service worker restart and the
+ * `webNavigation.onBeforeNavigate` category interceptor keeps blocking
+ * forbidden-domain navigations even after the SW is killed and respawned.
+ *
+ * `errorCallback` is not persisted (functions cannot cross the
+ * serialization boundary); tools that error out before completing after an
+ * SW restart will not surface a UI error, but the tool itself is allowed
+ * to finish and the bookkeeping is intact.
+ */
+export async function restoreActiveToolContextsFromStorage(): Promise<void> {
+  try {
+    const stored = await getStorageValue<Record<string, PersistedActiveToolContext>>(
+      StorageKeys.ACTIVE_TOOL_CONTEXTS
+    );
+    if (!stored) return;
+    for (const [tabIdStr, ctx] of Object.entries(stored)) {
+      const tabId = Number(tabIdStr);
+      if (!Number.isInteger(tabId)) continue;
+      activeToolContexts.set(tabId, { ...ctx });
+    }
+  } catch (err) {
+    console.warn('[core] failed to restore activeToolContexts', err);
+  }
+}
 const pendingPrefixTimeouts = new Map<number, ReturnType<typeof setTimeout> | null>();
 const PREFIX_CLEANUP_DELAY = 20000;
 
@@ -1516,6 +1577,7 @@ async function startToolContext(
     startTime: Date.now(),
     errorCallback
   });
+  void persistActiveToolContexts();
   await tabGroupManager.addTabToIndicatorGroup({
     tabId,
     isRunning: true,
@@ -1552,6 +1614,7 @@ function cleanupAfterToolExecution(tabId: number, _clientId?: string): void {
   if (!activeToolContexts.has(tabId)) return;
 
   activeToolContexts.delete(tabId);
+  void persistActiveToolContexts();
 
   const mainTabId = findGroupMainTab(tabId);
   if (mainTabId !== undefined && !hasActiveToolsInGroup(mainTabId)) {
