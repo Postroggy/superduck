@@ -1,6 +1,6 @@
-import { setStorageValue, StorageKeys } from "../extensionServices";
-import { tabGroupManager } from "../mcpRuntime";
-import type { ScheduledTask } from "./types";
+import { setStorageValue, StorageKeys } from '../extensionServices';
+import { tabGroupManager } from '../mcpRuntime';
+import type { ScheduledTask } from './types';
 
 export interface OpenSidePanelRequest {
   tabId: number;
@@ -40,13 +40,50 @@ export function createSidePanelController({ connectNativeHost }: SidePanelContro
     }
   }
 
-  async function openSidePanel(tabId: number) {
-    chrome.sidePanel.setOptions({
-      tabId,
-      path: `sidepanel.html?tabId=${encodeURIComponent(tabId)}`,
-      enabled: true,
-    });
-    chrome.sidePanel.open({ tabId });
+  async function openSidePanel(tabId: number, windowId?: number) {
+    // Use window-bound opening instead of tab-bound to allow the sidepanel to
+    // survive tab switches. The sidepanel will track the active tab dynamically
+    // via chrome.tabs.onActivated.
+    //
+    // IMPORTANT: chrome.sidePanel.open() must run inside the user-gesture chain
+    // that triggered it (Chrome 127+). The `await` in chrome.tabs.get() below
+    // would break that chain and cause open() to reject with "may only be
+    // called in response to a user gesture". When the caller already has a
+    // `chrome.tabs.Tab` (e.g. from chrome.action.onClicked), we accept its
+    // `windowId` and call open() synchronously so the gesture chain stays
+    // intact. The `await tabs.get(tabId)` fallback only runs for non-gesture
+    // callers (runtime messages) — those paths can't open the panel anyway
+    // because they have no user gesture, so the await is harmless there.
+    let resolvedWindowId = windowId;
+    if (typeof resolvedWindowId !== 'number') {
+      const tab = await chrome.tabs.get(tabId);
+      resolvedWindowId = tab.windowId;
+    }
+
+    try {
+      chrome.sidePanel.setOptions({
+        path: `sidepanel.html?initialTabId=${encodeURIComponent(tabId)}`,
+        enabled: true
+      });
+    } catch (err) {
+      console.error('[superduck:sidepanel] setOptions FAILED', err);
+    }
+
+    try {
+      // Fire-and-forget: do NOT await. chrome.sidePanel.open() must run
+      // inside the user gesture chain that triggered it, and the gesture
+      // expires across an await. Awaiting here would reject open() with
+      // "may only be called in response to a user gesture" on the
+      // chrome.commands.onCommand path (Ctrl+E) — where the gesture is
+      // real but any await between the callback and open() breaks the
+      // chain. The follow-up tabGroupManager calls below don't need a
+      // user gesture, so they're free to await.
+      chrome.sidePanel.open({ windowId: resolvedWindowId }).catch((err) => {
+        console.error('[superduck:sidepanel] open() FAILED', err);
+      });
+    } catch (err) {
+      console.error('[superduck:sidepanel] open() FAILED', err);
+    }
 
     await tabGroupManager.initialize(true);
     const group = await tabGroupManager.findGroupByTab(tabId);
@@ -76,33 +113,37 @@ export function createSidePanelController({ connectNativeHost }: SidePanelContro
 
     if (request.prompt) {
       await retryRuntimeMessage({
-        type: "POPULATE_INPUT_TEXT",
+        type: 'POPULATE_INPUT_TEXT',
         prompt: request.prompt,
         permissionMode: request.permissionMode,
         selectedModel: request.selectedModel,
-        attachments: request.attachments,
+        attachments: request.attachments
       });
     }
 
     if (request.conversationUuid) {
       await retryRuntimeMessage({
-        type: "LOAD_CONVERSATION",
-        conversationUuid: request.conversationUuid,
+        type: 'LOAD_CONVERSATION',
+        conversationUuid: request.conversationUuid
       });
     }
   }
 
   async function handleActionClick(tab: chrome.tabs.Tab) {
-    if (tab.id) {
+    if (tab.id !== undefined && tab.windowId !== undefined) {
+      await openSidePanel(tab.id, tab.windowId);
+    } else if (tab.id !== undefined) {
       await openSidePanel(tab.id);
     }
   }
 
   async function openOptionsForSetup(): Promise<void> {
-    const optionsBaseUrl = chrome.runtime.getURL("options.html");
-    const targetUrl = chrome.runtime.getURL("options.html#permissions");
+    const optionsBaseUrl = chrome.runtime.getURL('options.html');
+    const targetUrl = chrome.runtime.getURL('options.html#permissions');
     const tabs = await chrome.tabs.query({});
-    const existingTab = tabs.find((tab) => typeof tab.url === "string" && tab.url.startsWith(optionsBaseUrl));
+    const existingTab = tabs.find(
+      (tab) => typeof tab.url === 'string' && tab.url.startsWith(optionsBaseUrl)
+    );
 
     if (existingTab?.id) {
       await chrome.tabs.update(existingTab.id, { url: targetUrl, active: true });
@@ -118,15 +159,15 @@ export function createSidePanelController({ connectNativeHost }: SidePanelContro
   async function openOptionsWithTask(task: ScheduledTask) {
     await setStorageValue(StorageKeys.PENDING_SCHEDULED_TASK, task);
 
-    const optionsBaseUrl = chrome.runtime.getURL("options.html");
-    const promptsUrl = chrome.runtime.getURL("options.html#prompts");
+    const optionsBaseUrl = chrome.runtime.getURL('options.html');
+    const promptsUrl = chrome.runtime.getURL('options.html#prompts');
     const tabs = await chrome.tabs.query({});
     const existingTab = tabs.find((tab) => tab.url?.startsWith(optionsBaseUrl));
 
     if (existingTab?.id) {
       await chrome.tabs.update(existingTab.id, {
         url: promptsUrl,
-        active: true,
+        active: true
       });
       if (existingTab.windowId) {
         await chrome.windows.update(existingTab.windowId, { focused: true });
@@ -142,6 +183,6 @@ export function createSidePanelController({ connectNativeHost }: SidePanelContro
     openSidePanelRequest,
     handleActionClick,
     openOptionsForSetup,
-    openOptionsWithTask,
+    openOptionsWithTask
   };
 }

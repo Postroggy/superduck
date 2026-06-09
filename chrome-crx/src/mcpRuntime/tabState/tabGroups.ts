@@ -190,6 +190,28 @@ class TabGroupManager {
             this.processingMainTabRemoval.add(mainTabId);
             const mainIndicatorState = meta.memberStates.get(mainTabId)?.indicatorState || 'none';
             const oldChromeGroupId = meta.chromeGroupId;
+
+            // User intent takes precedence over self-healing: when the main
+            // tab is ungrouped (or moved to a different group), this is
+            // the user expressing "I want this group gone" — either by
+            // clicking "Ungroup" in Edge's tab group menu or by dragging
+            // the main tab out. Respect that intent by tearing down our
+            // metadata instead of immediately rebuilding a new group.
+            // The user can recreate the group by starting a new agent
+            // task, which calls tabGroupManager.createGroup().
+            if (newGroupId === chrome.tabGroups.TAB_GROUP_ID_NONE) {
+              try {
+                await this.sendIndicatorMessage(mainTabId, 'HIDE_AGENT_INDICATORS');
+              } catch (err) {
+                // ignore
+              }
+              this.groupMetadata.delete(mainTabId);
+              this.groupBlocklistStatuses.delete(oldChromeGroupId);
+              this.processingMainTabRemoval.delete(mainTabId);
+              await this.saveToStorage();
+              return;
+            }
+
             try {
               const newChromeGroupId = await chrome.tabs.group({
                 tabIds: [mainTabId]
