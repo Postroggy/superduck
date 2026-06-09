@@ -54,6 +54,7 @@ import {
   gifCreatorTool,
   type ToolDefinition,
   coerceToolInputTypes,
+  validateToolInput,
   toolsToProviderSchema,
   parseArrayInput,
   shouldShowPlanMode,
@@ -140,6 +141,14 @@ interface ToolInputRecord extends Record<string, unknown> {
 
 function coerceToolInput(toolName: string, input: unknown, tools: ToolDefinition[]): unknown {
   return coerceToolInputTypes(toolName, input, tools);
+}
+
+function validateInput(
+  toolName: string,
+  input: unknown,
+  tools: ToolDefinition[]
+): { valid: boolean; errors: string[] } {
+  return validateToolInput(toolName, input, tools);
 }
 
 function isBridgeMessage(value: unknown): value is BridgeMessage {
@@ -664,6 +673,23 @@ class ToolExecutor {
 
         try {
           const coercedInput = coerceToolInput(toolName, toolInput, allTools);
+          // Schema-driven runtime validation. The `parameters` declaration
+          // on each `ToolDefinition` already specifies `minimum` / `maximum`
+          // / `enum` / `required` / etc — `coerceToolInputTypes` only does
+          // string→number / string→boolean coercion, so the *enforcement*
+          // has to live somewhere. Doing it here, before `tool.execute()`,
+          // means a malicious or buggy model that passes an out-of-range
+          // `duration: 999` to the `computer` tool gets a structured error
+          // instead of letting the bad value flow into the CDP layer.
+          const validation = validateInput(toolName, coercedInput, allTools);
+          if (!validation.valid) {
+            trackData.success = false;
+            span.setAttribute('success', false);
+            span.setAttribute('failure_reason', 'invalid_input');
+            return createErrorResponse(
+              `Invalid input for ${toolName}: ${validation.errors.join('; ')}`
+            );
+          }
           const result = await tool.execute(coercedInput, executionContext);
 
           if (result.type === 'permission_required') {
