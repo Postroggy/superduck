@@ -81,17 +81,44 @@ export function useActiveTabId(initialTabId: number | undefined): number | undef
   const [activeTabId, setActiveTabId] = useState<number | undefined>(initialTabId);
 
   useEffect(() => {
-    // On mount, query the currently active tab as a baseline
+    // Track which Chrome window this sidepanel belongs to. The
+    // `onActivated` event fires for tab switches in every window, so
+    // without this filter a sidepanel opened in window A would retarget
+    // to window B's tabs when the user switched tabs over there. Use
+    // `chrome.windows.getCurrent` when available; fall back to the
+    // windowId of the initial tab on the URL when not (e.g. some test
+    // harnesses don't implement getCurrent).
+    let myWindowId: number | undefined;
+
     void chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      if (tabs[0]?.id != null) {
-        setActiveTabId(tabs[0].id);
+      const real = tabs.find((t) => !t.url?.startsWith(`chrome-extension://${chrome.runtime.id}/`));
+      if (real?.id != null) {
+        setActiveTabId(real.id);
+        myWindowId = real.windowId;
       }
     });
+
+    if (typeof initialTabId === 'number') {
+      void chrome.tabs
+        .get(initialTabId)
+        .then((tab) => {
+          if (typeof myWindowId !== 'number') {
+            myWindowId = tab.windowId;
+          }
+        })
+        .catch(() => {
+          // initialTabId may be invalid in some environments; ignore.
+        });
+    }
 
     // Listen for tab activation changes to track which tab is active.
     // Inlined the listener shape because `chrome.tabs.TabActiveInfo` is
     // not exported in the @types/chrome version this project pins to.
     const onActivated = (info: { tabId: number; windowId: number }) => {
+      // Ignore activations from other windows — see filter above.
+      if (typeof myWindowId === 'number' && info.windowId !== myWindowId) {
+        return;
+      }
       setActiveTabId(info.tabId);
     };
 
@@ -99,7 +126,7 @@ export function useActiveTabId(initialTabId: number | undefined): number | undef
     return () => {
       chrome.tabs.onActivated.removeListener(onActivated);
     };
-  }, []);
+  }, [initialTabId]);
 
   return activeTabId;
 }

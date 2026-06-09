@@ -189,12 +189,29 @@ export function SessionHistoryPanel({
               {filteredEntries.map((entry) => {
                 const isDeleting = deletingId === entry.sessionId;
                 return (
-                  <button
+                  // Outer row is a div, not a button, so the nested
+                  // delete <button> stays valid HTML and reachable for
+                  // keyboard / screen-reader users.
+                  <div
                     key={entry.sessionId}
-                    type="button"
-                    onClick={() => handleLoad(entry)}
-                    className="w-full group flex items-start gap-3 px-4 py-3 text-left hover:bg-bg-200 transition-colors"
-                    disabled={isDeleting}
+                    role="button"
+                    tabIndex={isDeleting ? -1 : 0}
+                    aria-disabled={isDeleting}
+                    aria-label={`加载会话 ${truncatePreview(entry.preview, 30)}`}
+                    onClick={() => {
+                      if (!isDeleting) handleLoad(entry);
+                    }}
+                    onKeyDown={(e) => {
+                      if (isDeleting) return;
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleLoad(entry);
+                      }
+                    }}
+                    className={
+                      'w-full group flex items-start gap-3 px-4 py-3 text-left hover:bg-bg-200 transition-colors ' +
+                      (isDeleting ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer')
+                    }
                   >
                     <div className="shrink-0 mt-0.5">
                       <MessageSquare
@@ -231,7 +248,7 @@ export function SessionHistoryPanel({
                       </button>
                       <ChevronRight size={12} className="text-text-500" />
                     </div>
-                  </button>
+                  </div>
                 );
               })}
             </div>
