@@ -85,7 +85,9 @@ export enum StorageKeys {
   WIDGET_ORDER = 'widgetOrder',
   ACTIVE_TOOL_CONTEXTS = 'activeToolContexts',
   ACTIVE_TOOL_COUNT = 'activeToolCount',
-  PENDING_UPDATE_VERSION = 'pendingUpdateVersion'
+  PENDING_UPDATE_VERSION = 'pendingUpdateVersion',
+  GIF_FRAMES = 'gifFrames',
+  GIF_RECORDING_GROUPS = 'gifRecordingGroups'
 }
 
 export async function getStorageValue<T>(key: string, defaultValue: T): Promise<T>;
