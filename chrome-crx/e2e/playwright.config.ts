@@ -8,7 +8,9 @@ export default defineConfig({
   outputDir: "./test-results",
   reporter: [["html", { outputFolder: "./playwright-report", open: "never" }]],
   use: {
-    headless: false,
+    // Default: run headless to avoid opening real Chromium windows during e2e.
+    // To debug visually, pass `--headed` on the command line.
+    headless: true,
     viewport: { width: 1280, height: 720 },
     trace: "on-first-retry",
   },

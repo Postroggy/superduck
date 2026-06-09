@@ -13,10 +13,15 @@ export interface ExtensionFixtures {
 
 export const test = base.extend<ExtensionFixtures>({
   // eslint-disable-next-line no-empty-pattern
-  context: async ({}, use) => {
+  context: async ({ headless }, use) => {
     const context = await chromium.launchPersistentContext("", {
+      // Keep `headless: false` so Playwright uses the full chromium binary
+      // (not `chrome-headless-shell`, which silently disables --load-extension
+      // and never starts the service worker). When `use.headless` is true we
+      // opt back into the real headless mode via --headless=new below.
       headless: false,
       args: [
+        ...(headless ? ["--headless=new", "--disable-gpu"] : []),
         `--disable-extensions-except=${DIST_PATH}`,
         `--load-extension=${DIST_PATH}`,
         "--no-first-run",

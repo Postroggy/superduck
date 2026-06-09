@@ -1,8 +1,22 @@
 import type { BrowserContext, Page } from "@playwright/test";
 
-export async function openSidepanel(context: BrowserContext, extensionId: string): Promise<Page> {
+/**
+ * Open the extension's sidepanel. If `initialTabId` is given, embed it
+ * in the URL so `useQueryState` / `useActiveTabId` resolve to that tab
+ * even when Playwright's `bringToFront` doesn't fire a real Chrome
+ * `tabs.onActivated` event.
+ */
+export async function openSidepanel(
+  context: BrowserContext,
+  extensionId: string,
+  initialTabId?: number
+): Promise<Page> {
   const page = await context.newPage();
-  await page.goto(`chrome-extension://${extensionId}/sidepanel.html`);
+  const url =
+    initialTabId !== undefined
+      ? `chrome-extension://${extensionId}/sidepanel.html?initialTabId=${initialTabId}`
+      : `chrome-extension://${extensionId}/sidepanel.html`;
+  await page.goto(url);
   await page.waitForLoadState("domcontentloaded");
   await page.waitForSelector("#root");
   return page;
