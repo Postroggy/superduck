@@ -105,6 +105,14 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 chrome.runtime.onStartup.addListener(async () => {
   initializeExtensionPermissions();
   await tabGroupManager.initialize();
+  // Re-register the tab group change listener. MV3 service-worker
+  // listeners do not survive a restart, and the previous flow waited
+  // for the next mcp_connected message — sometimes hours or never —
+  // leaving tab events silently dropped. The listener is idempotent
+  // in the `tabGroupManager` wrapper, and the underlying
+  // `TabEventManager` singleton is fresh in the new SW so no
+  // double-registration can occur here.
+  tabGroupManager.startTabGroupChangeListener();
   void connectBridge();
   void nativeHostManager.connect();
   await scheduledTaskManager.restoreScheduledAlarms();

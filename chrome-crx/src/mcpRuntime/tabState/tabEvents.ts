@@ -2,7 +2,9 @@ type ChromeTabUpdatedListener = Parameters<typeof chrome.tabs.onUpdated.addListe
 type ChromeTabChangeInfo = Parameters<ChromeTabUpdatedListener>[1];
 type ChromeTab = Parameters<ChromeTabUpdatedListener>[2];
 
-type TabEventChangeInfo = Partial<Pick<ChromeTabChangeInfo, 'url' | 'status' | 'title' | 'groupId'>> & {
+type TabEventChangeInfo = Partial<
+  Pick<ChromeTabChangeInfo, 'url' | 'status' | 'title' | 'groupId'>
+> & {
   active?: boolean;
   removed?: boolean;
 };
@@ -64,6 +66,14 @@ class TabEventManager {
   }
 
   startListeners(): void {
+    // Idempotent: if a previous call already registered the chrome
+    // listeners (and we still hold the references), do nothing. This
+    // matters for the SW-restart recovery path in
+    // `service-worker.ts#onStartup`, which now calls
+    // `tabGroupManager.startTabGroupChangeListener()` directly —
+    // without the guard, a future `subscribe()` could double-register
+    // if a stale `tabGroupListenerSubscriptionId` somehow survived.
+    if (this.chromeUpdateListener !== null) return;
     this.chromeUpdateListener = (tabId, changeInfo, tab) => {
       if (this.relevantTabIds.size > 0 && !this.relevantTabIds.has(tabId)) {
         let hasAllSub = false;
@@ -175,3 +185,4 @@ class TabEventManager {
 }
 
 export const getTabEventManager = (): TabEventManager => TabEventManager.getInstance();
+export { TabEventManager };
