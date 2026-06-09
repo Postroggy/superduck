@@ -92,6 +92,9 @@ export function InlinePermissionPrompt({
   // Keyboard shortcuts: Enter = allow once, Cmd/Ctrl+Enter = always allow, Escape = deny
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      // Skip when IME is composing (e.g. CJK input) — e.isComposing
+      // is true while the user is selecting a character candidate.
+      if (e.isComposing) return;
       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         if (!disableAlwaysAllow) handleAllow(PermissionDuration.ALWAYS);

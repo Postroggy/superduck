@@ -121,7 +121,7 @@ class ElementSelectorInjector {
             chrome.runtime.onMessage.removeListener(messageListener);
             resolve(null);
           } else {
-            console.log('[Element Selector] Injection successful for tab:', tabId);
+            // Injection successful
           }
         }
       );
@@ -208,15 +208,15 @@ function elementSelectorScript() {
           selector: currentInputElement.id
             ? `#${currentInputElement.id}`
             : className
-            ? `${currentInputElement.tagName.toLowerCase()}.${className.trim().split(/\s+/).join('.')}`
-            : currentInputElement.tagName.toLowerCase(),
+              ? `${currentInputElement.tagName.toLowerCase()}.${className.trim().split(/\s+/).join('.')}`
+              : currentInputElement.tagName.toLowerCase(),
           name:
             currentInputElement.getAttribute('name') ||
             currentInputElement.getAttribute('placeholder') ||
             currentInputElement.getAttribute('aria-label') ||
-            '',
+            ''
         },
-        isFinal: true,
+        isFinal: true
       });
       keystrokeBuffer = [];
     }
@@ -268,14 +268,14 @@ function elementSelectorScript() {
           selector: inputElement.id
             ? `#${inputElement.id}`
             : className
-            ? `${inputElement.tagName.toLowerCase()}.${className.trim().split(/\s+/).join('.')}`
-            : inputElement.tagName.toLowerCase(),
+              ? `${inputElement.tagName.toLowerCase()}.${className.trim().split(/\s+/).join('.')}`
+              : inputElement.tagName.toLowerCase(),
           name:
             inputElement.getAttribute('name') ||
             inputElement.getAttribute('placeholder') ||
             inputElement.getAttribute('aria-label') ||
-            '',
-        },
+            ''
+        }
       });
     };
 
@@ -354,7 +354,10 @@ function elementSelectorScript() {
       // Class selector
       const className = getClassName(element);
       if (className) {
-        const classes = className.trim().split(/\s+/).filter((c) => c);
+        const classes = className
+          .trim()
+          .split(/\s+/)
+          .filter((c) => c);
         if (classes.length > 0) {
           selectors.push(`${tagName}.${classes.join('.')}`);
         }
@@ -413,7 +416,7 @@ function elementSelectorScript() {
         'data-testid',
         'placeholder',
         'alt',
-        'value',
+        'value'
       ].forEach((attrName) => {
         const attrValue = element.getAttribute(attrName);
         if (attrValue) {
@@ -434,8 +437,8 @@ function elementSelectorScript() {
           top: rect.top,
           right: rect.right,
           bottom: rect.bottom,
-          left: rect.left,
-        },
+          left: rect.left
+        }
       };
 
       // Capture any typed text before the click
@@ -466,15 +469,15 @@ function elementSelectorScript() {
                 selector: typedInElement.id
                   ? `#${typedInElement.id}`
                   : getClassName(typedInElement)
-                  ? `${typedInElement.tagName.toLowerCase()}.${getClassName(typedInElement).trim().split(/\s+/).join('.')}`
-                  : typedInElement.tagName.toLowerCase(),
+                    ? `${typedInElement.tagName.toLowerCase()}.${getClassName(typedInElement).trim().split(/\s+/).join('.')}`
+                    : typedInElement.tagName.toLowerCase(),
                 name:
                   typedInElement.getAttribute('name') ||
                   typedInElement.getAttribute('placeholder') ||
                   typedInElement.getAttribute('aria-label') ||
                   ''
               }
-            : undefined,
+            : undefined
         });
       } catch (error) {
         // Ignore send errors
@@ -516,7 +519,7 @@ function elementSelectorScript() {
       event.preventDefault();
       chrome.runtime.sendMessage({
         type: 'ELEMENT_SELECTION',
-        cancelled: true,
+        cancelled: true
       });
       document.removeEventListener('click', clickListener, true);
       document.removeEventListener('keydown', escapeListener, true);

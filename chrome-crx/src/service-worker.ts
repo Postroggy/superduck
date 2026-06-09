@@ -36,6 +36,22 @@ void connectBridge();
 void nativeHostManager.connect();
 initModelMappingListener();
 
+// Let Chrome own the action click → sidepanel open handshake. Calling
+// chrome.sidePanel.open() from chrome.action.onClicked runs into a
+// "may only be called in response to a user gesture" rejection on
+// Chrome 127+ — service-worker callbacks don't keep the gesture chain
+// alive across awaits reliably, and any setOptions/open ordering hiccup
+// also rejects. setPanelBehavior(openPanelOnActionClick: true) makes
+// the click open the panel entirely inside Chrome, sidestepping the
+// API restriction. We still keep chrome.commands.onCommand wired to
+// openSidePanel() for the keyboard shortcut — that path *does* have a
+// user gesture.
+chrome.sidePanel
+  .setPanelBehavior({ openPanelOnActionClick: true })
+  .catch((err) =>
+    console.error("[superduck] setPanelBehavior failed", err)
+  );
+
 async function handleNotificationClick(notificationId: string) {
   await chrome.notifications.clear(notificationId);
 
@@ -104,10 +120,6 @@ chrome.permissions.onRemoved.addListener((permissions) => {
   if (permissions.permissions?.includes("nativeMessaging")) {
     void nativeHostManager.disconnect();
   }
-});
-
-chrome.action.onClicked.addListener((tab) => {
-  void sidePanelController.handleActionClick(tab);
 });
 
 chrome.notifications.onClicked.addListener((notificationId) => {

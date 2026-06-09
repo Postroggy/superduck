@@ -358,16 +358,26 @@ class ChromeDebuggerProtocol {
       return;
     }
 
-    try {
-      await this.detachDebugger(tabId);
-    } catch {
-      // ignore detach errors
-    }
-
+    // NOTE: Do NOT call detachDebugger before attach. If isDebuggerAttached
+    // returns a stale false (e.g. race during tab navigation or just after
+    // a successful attach), detaching would tear down the live debugger
+    // session and the subsequent attach would create a NEW "X is debugging"
+    // banner on top of the existing one. Just attempt attach directly —
+    // if it's already attached, Chrome reports the error and we ignore it.
     await new Promise<void>((resolve, reject) => {
       chrome.debugger.attach(target, '1.3', () => {
         if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
+          // Treat "already attached" as success — this is the desired
+          // end-state and must NOT trigger a new banner.
+          const msg = chrome.runtime.lastError.message || '';
+          if (
+            msg.toLowerCase().includes('already attached') ||
+            msg.toLowerCase().includes('debugger is already attached')
+          ) {
+            resolve();
+            return;
+          }
+          reject(new Error(msg));
         } else {
           resolve();
         }

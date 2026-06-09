@@ -78,16 +78,8 @@ export function useModelConfig(): UseModelConfigReturn {
     })();
   }, []);
 
-  // Monitor selectedModel changes
-  useEffect(() => {
-    console.log('[Model State] selectedModel changed to:', selectedModel);
-  }, [selectedModel]);
-
   const handleModelChange = useCallback(
     (nextModel: string) => {
-      console.log('[Model Change] Switching to:', nextModel);
-      console.log('[Model Change] Current selectedModel:', selectedModel);
-
       if (!nextModel || nextModel === selectedModel) return;
 
       setSelectedModel(nextModel);

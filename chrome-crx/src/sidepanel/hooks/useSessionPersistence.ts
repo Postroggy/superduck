@@ -215,6 +215,9 @@ export function useSessionPersistence({
   // ─── Session-loading effect ─────────────────────────────────────────────────
 
   useEffect(() => {
+    // Skip if sessionId hasn't been resolved yet (prevents loading with empty key)
+    if (!activeSessionId) return;
+
     hasLoadedSessionRef.current = false;
     let active = true;
     (async () => {
@@ -329,7 +332,7 @@ export function useSessionPersistence({
   // ─── Session persistence effect (debounced) ─────────────────────────────────
 
   useEffect(() => {
-    if (!hasLoadedSessionRef.current) return;
+    if (!activeSessionId || !hasLoadedSessionRef.current) return;
 
     const persistSnapshot = () => {
       const preview = [...messages]
@@ -382,7 +385,66 @@ export function useSessionPersistence({
 
     // Debounce storage writes to avoid thrashing during streaming
     const timer = setTimeout(persistSnapshot, 2000);
-    return () => clearTimeout(timer);
+
+    // On cleanup (component unmount or deps change), save immediately.
+    // This ensures state is persisted when the sidepanel iframe is destroyed
+    // by Chrome (e.g. on tab switch) before the debounce timer fires.
+    return () => {
+      clearTimeout(timer);
+      persistSnapshot();
+    };
+  }, [
+    activeConversationUuid,
+    activeRemoteSessionId,
+    activeSessionId,
+    apiMessages,
+    historyStorageKey,
+    messages,
+    permissionMode,
+    selectedModel
+  ]);
+
+  // ─── Before-unload persistence ──────────────────────────────────────────────
+  // When Chrome destroys the sidepanel iframe (e.g. tab switch), React cleanup
+  // functions may not run reliably. The beforeunload/pagehide events fire on
+  // the iframe's window before destruction, giving us a last chance to persist.
+
+  useEffect(() => {
+    if (!activeSessionId || !hasLoadedSessionRef.current) return;
+
+    const handleBeforeUnload = () => {
+      if (!activeSessionId) return;
+      const preview = [...messages].reverse().find((m) => m.role === 'user' && m.text.trim())?.text;
+      const snapshot: SessionSnapshot = {
+        uiMessages: messages,
+        apiMessages,
+        selectedModel,
+        permissionMode,
+        createdAt: sessionCreatedAtRef.current,
+        conversationUuid: activeConversationUuid || undefined,
+        remoteSessionId: activeRemoteSessionId || undefined
+      };
+      // chrome.storage.local.set is the only synchronous-ish API available
+      // in extension context during beforeunload. Fire and forget — the
+      // browser will typically complete the microtask before destruction.
+      void setStorageValue(historyStorageKey, snapshot);
+      void upsertSessionIndex({
+        sessionId: activeSessionId,
+        conversationUuid: activeConversationUuid || undefined,
+        remoteSessionId: activeRemoteSessionId || undefined,
+        createdAt: sessionCreatedAtRef.current,
+        updatedAt: Date.now(),
+        model: selectedModel || undefined,
+        preview: preview ? preview.slice(0, 240) : undefined
+      });
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('pagehide', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', handleBeforeUnload);
+    };
   }, [
     activeConversationUuid,
     activeRemoteSessionId,

@@ -364,9 +364,7 @@ export function useLightningMode({
                 maxTargetTokens: 1568
               },
               {
-                skipIndicator: true,
-                format: imageFormatRef.current,
-                quality: imageQualityRef.current
+                skipIndicator: true
               }
             );
             userContent.push({
@@ -1132,9 +1130,7 @@ export function useLightningMode({
                       maxTargetTokens: 1568
                     },
                     {
-                      skipIndicator: true,
-                      format: imageFormatRef.current,
-                      quality: imageQualityRef.current
+                      skipIndicator: true
                     }
                   );
                   screenshotBase64 = ss.base64;

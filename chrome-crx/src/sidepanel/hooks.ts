@@ -1,6 +1,6 @@
-import { useRef, useEffect, useCallback, useMemo } from "react";
-import { getTabEventManager } from "../mcpRuntime";
-import { normalizeApiBaseUrl, parseTabId } from "./sidepanelUtils";
+import { useRef, useEffect, useCallback, useMemo, useState } from 'react';
+import { getTabEventManager } from '../mcpRuntime';
+import { normalizeApiBaseUrl, parseTabId } from './sidepanelUtils';
 
 type TabChangeInfo = chrome.tabs.OnUpdatedInfo & {
   active?: boolean;
@@ -20,7 +20,7 @@ interface TabManager {
 const tabManager: TabManager = {
   subscribe: (tabId, properties, callback) =>
     getTabEventManager().subscribe(tabId, properties, callback),
-  unsubscribe: (subscriptionId) => getTabEventManager().unsubscribe(subscriptionId),
+  unsubscribe: (subscriptionId) => getTabEventManager().unsubscribe(subscriptionId)
 };
 
 /**
@@ -55,7 +55,7 @@ export function useTabEvent(
 export function useTabUrlChange(
   tabId: number | undefined,
   onUpdate: (tab: Tab) => void,
-  properties: string[] = ["url", "status"],
+  properties: string[] = ['url', 'status'],
   deps: React.DependencyList = []
 ) {
   const stableOnUpdate = useCallback(
@@ -66,6 +66,69 @@ export function useTabUrlChange(
   );
 
   useTabEvent(tabId, properties, stableOnUpdate, [stableOnUpdate]);
+}
+
+/**
+ * Dynamically track the currently active tab in the current window.
+ * This allows the sidepanel to survive tab switches — the panel stays open
+ * (window-bound, not tab-bound) and updates its target tab when the user
+ * switches tabs.
+ *
+ * Falls back to the initialTabId from the URL query string if tabs.onActivated
+ * is not available (e.g., in tests).
+ */
+export function useActiveTabId(initialTabId: number | undefined): number | undefined {
+  const [activeTabId, setActiveTabId] = useState<number | undefined>(initialTabId);
+
+  useEffect(() => {
+    // Track which Chrome window this sidepanel belongs to. The
+    // `onActivated` event fires for tab switches in every window, so
+    // without this filter a sidepanel opened in window A would retarget
+    // to window B's tabs when the user switched tabs over there. Use
+    // `chrome.windows.getCurrent` when available; fall back to the
+    // windowId of the initial tab on the URL when not (e.g. some test
+    // harnesses don't implement getCurrent).
+    let myWindowId: number | undefined;
+
+    void chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      const real = tabs.find((t) => !t.url?.startsWith(`chrome-extension://${chrome.runtime.id}/`));
+      if (real?.id != null) {
+        setActiveTabId(real.id);
+        myWindowId = real.windowId;
+      }
+    });
+
+    if (typeof initialTabId === 'number') {
+      void chrome.tabs
+        .get(initialTabId)
+        .then((tab) => {
+          if (typeof myWindowId !== 'number') {
+            myWindowId = tab.windowId;
+          }
+        })
+        .catch(() => {
+          // initialTabId may be invalid in some environments; ignore.
+        });
+    }
+
+    // Listen for tab activation changes to track which tab is active.
+    // Inlined the listener shape because `chrome.tabs.TabActiveInfo` is
+    // not exported in the @types/chrome version this project pins to.
+    const onActivated = (info: { tabId: number; windowId: number }) => {
+      // Ignore activations from other windows — see filter above.
+      if (typeof myWindowId === 'number' && info.windowId !== myWindowId) {
+        return;
+      }
+      setActiveTabId(info.tabId);
+    };
+
+    chrome.tabs.onActivated.addListener(onActivated);
+    return () => {
+      chrome.tabs.onActivated.removeListener(onActivated);
+    };
+  }, [initialTabId]);
+
+  return activeTabId;
 }
 
 export interface SidepanelQueryState {
@@ -83,20 +146,19 @@ export function useQueryState(): SidepanelQueryState {
   return useMemo(() => {
     const params = new URLSearchParams(window.location.search);
     const apiUrl =
-      normalizeApiBaseUrl(params.get("api_url")) ||
-      normalizeApiBaseUrl(params.get("apiUrl")) ||
-      "";
-    const apiKey = (params.get("api_key") || params.get("apiKey") || "").trim();
+      normalizeApiBaseUrl(params.get('api_url')) || normalizeApiBaseUrl(params.get('apiUrl')) || '';
+    const apiKey = (params.get('api_key') || params.get('apiKey') || '').trim();
 
     return {
-      tabId: parseTabId(params.get("tabId")),
-      mode: params.get("mode") || "sidepanel",
-      sessionId: params.get("sessionId") || "",
-      mcpPermissionOnly: params.get("mcpPermissionOnly") === "true",
-      requestId: params.get("requestId") || "",
-      skipPermissions: params.get("skipPermissions") === "true",
+      // Support both old "tabId" and new "initialTabId" query params
+      tabId: parseTabId(params.get('initialTabId')) ?? parseTabId(params.get('tabId')),
+      mode: params.get('mode') || 'sidepanel',
+      sessionId: params.get('sessionId') || '',
+      mcpPermissionOnly: params.get('mcpPermissionOnly') === 'true',
+      requestId: params.get('requestId') || '',
+      skipPermissions: params.get('skipPermissions') === 'true',
       apiUrl,
-      apiKey,
+      apiKey
     };
   }, []);
 }

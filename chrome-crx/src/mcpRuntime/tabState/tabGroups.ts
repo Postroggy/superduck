@@ -190,6 +190,46 @@ class TabGroupManager {
             this.processingMainTabRemoval.add(mainTabId);
             const mainIndicatorState = meta.memberStates.get(mainTabId)?.indicatorState || 'none';
             const oldChromeGroupId = meta.chromeGroupId;
+
+            // User intent takes precedence over self-healing: when the main
+            // tab is ungrouped (or moved to a different group), this is
+            // the user expressing "I want this group gone" — either by
+            // clicking "Ungroup" in Edge's tab group menu or by dragging
+            // the main tab out. Respect that intent by tearing down our
+            // metadata instead of immediately rebuilding a new group.
+            // The user can recreate the group by starting a new agent
+            // task, which calls tabGroupManager.createGroup().
+            if (newGroupId === chrome.tabGroups.TAB_GROUP_ID_NONE) {
+              try {
+                await this.sendIndicatorMessage(mainTabId, 'HIDE_AGENT_INDICATORS');
+              } catch (err) {
+                // ignore
+              }
+              // Hide indicators on every member tab BEFORE dropping the
+              // group metadata. Chrome delivers the main tab's groupId
+              // change first and the secondary tabs afterwards, so if we
+              // delete `groupMetadata` first the secondary tab events
+              // can't find their meta and their static overlays stay
+              // visible. Send HIDE_STATIC_INDICATOR / HIDE_AGENT_INDICATORS
+              // per-member based on the recorded indicatorState.
+              for (const [memberTabId, memberState] of meta.memberStates.entries()) {
+                if (memberTabId === mainTabId) continue;
+                const indicator = memberState.indicatorState;
+                const hideType =
+                  indicator === 'static' ? 'HIDE_STATIC_INDICATOR' : 'HIDE_AGENT_INDICATORS';
+                try {
+                  await this.sendIndicatorMessage(memberTabId, hideType, memberState.isMcp);
+                } catch (err) {
+                  // ignore — tab may already be closed
+                }
+              }
+              this.groupMetadata.delete(mainTabId);
+              this.groupBlocklistStatuses.delete(oldChromeGroupId);
+              this.processingMainTabRemoval.delete(mainTabId);
+              await this.saveToStorage();
+              return;
+            }
+
             try {
               const newChromeGroupId = await chrome.tabs.group({
                 tabIds: [mainTabId]

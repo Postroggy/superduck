@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { StorageKeys, getStorageValue, setStorageValue } from '../../extensionServices';
 import { getConversationStorageKey, getHistoryStorageKey } from '../sessionHistory';
 import {
@@ -20,6 +20,7 @@ export interface UseRuntimeMessagesProps {
     isSecondaryTab: boolean;
     mainTabId: number | null;
   };
+  activeSessionId: string;
   setActiveConversationUuid: React.Dispatch<React.SetStateAction<string | null>>;
   setActiveRemoteSessionId: React.Dispatch<React.SetStateAction<string | null>>;
   setActiveSessionId: React.Dispatch<React.SetStateAction<string>>;
@@ -49,6 +50,7 @@ export function useRuntimeMessages({
   querySessionId,
   querySkipPermissions,
   secondaryState,
+  activeSessionId,
   setActiveConversationUuid,
   setActiveRemoteSessionId,
   setActiveSessionId,
@@ -71,6 +73,14 @@ export function useRuntimeMessages({
   abortControllerRef,
   shouldDisableSkipPermissions
 }: UseRuntimeMessagesProps) {
+  // Track the current activeSessionId in a ref so async callbacks (like the
+  // POPULATE_INPUT_TEXT timeout) can detect stale sessions without re-running
+  // the effect on every session change.
+  const activeSessionIdRef = useRef(activeSessionId);
+  useEffect(() => {
+    activeSessionIdRef.current = activeSessionId;
+  }, [activeSessionId]);
+
   // PANEL_OPENED
   useEffect(() => {
     if (typeof queryTabId !== 'number') return;
@@ -204,8 +214,14 @@ export function useRuntimeMessages({
         });
         sendResponse({ success: true });
 
+        // Capture the session ID at the time POPULATE_INPUT_TEXT arrives.
+        // If the user switches sessions during the 500ms delay, we should
+        // NOT send the prompt to the new session (Issue 2.5/3.8 from UX audit).
+        const capturedSessionId = activeSessionIdRef.current;
         timeoutId = setTimeout(() => {
           if (!prompt.trim()) return;
+          // Only send if we're still in the same session
+          if (capturedSessionId !== activeSessionIdRef.current) return;
           if (hasBrowserControlPermissionAcceptedRef.current && !isAgentRunningRef.current) {
             setInput('');
             void sendPromptRef.current?.(prompt, {
