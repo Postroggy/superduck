@@ -4,8 +4,9 @@ import {
   isRecord,
   isTextContentBlock,
   type ApiConversationMessage,
-  type ApiToolResultBlock,
-  type ApiToolResultContentBlock
+  type ApiImageContentBlock,
+  type ApiTextContentBlock,
+  type ApiToolResultBlock
 } from '../messageTypes';
 import { isPermissionMode } from './sidepanelUtils';
 import type { ChatMessage, ChatRole, SessionSnapshot, SupportedImageMediaType } from './types';
@@ -69,7 +70,7 @@ export function normalizeToolResultContent(
     return fallback;
   }
   const filtered = content.filter(
-    (block): block is ApiToolResultContentBlock =>
+    (block): block is ApiTextContentBlock | ApiImageContentBlock =>
       isTextContentBlock(block) || isImageContentBlock(block)
   );
   return filtered.length > 0 ? filtered : fallback;

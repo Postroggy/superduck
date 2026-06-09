@@ -88,8 +88,10 @@ export function useActiveTabId(initialTabId: number | undefined): number | undef
       }
     });
 
-    // Listen for tab activation changes to track which tab is active
-    const onActivated = (info: chrome.tabs.TabActiveInfo) => {
+    // Listen for tab activation changes to track which tab is active.
+    // Inlined the listener shape because `chrome.tabs.TabActiveInfo` is
+    // not exported in the @types/chrome version this project pins to.
+    const onActivated = (info: { tabId: number; windowId: number }) => {
       setActiveTabId(info.tabId);
     };
 

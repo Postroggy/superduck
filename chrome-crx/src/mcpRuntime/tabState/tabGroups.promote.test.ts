@@ -29,7 +29,7 @@ const chromeMock = vi.hoisted(() => ({
       index: 0
     })),
     query: vi.fn(async () => []),
-    sendMessage: vi.fn(async () => {}),
+    sendMessage: vi.fn(async (_tabId: number, _message?: unknown) => {}),
     onRemoved: { addListener: vi.fn() }
   },
   tabGroups: {
