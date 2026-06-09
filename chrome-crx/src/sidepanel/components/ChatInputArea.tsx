@@ -332,7 +332,6 @@ export function ChatInputArea({
                                 setCommandSearchTerm('');
                                 setInput('');
                                 // TODO: Open schedule task modal
-                                console.log('Schedule task clicked');
                               }}
                               onEditShortcut={(shortcut) => {
                                 setShowCommandMenu(false);

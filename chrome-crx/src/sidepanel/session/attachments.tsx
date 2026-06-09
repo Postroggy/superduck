@@ -126,11 +126,9 @@ export function useAttachments() {
   const [error, setError] = useState<string | null>(null);
 
   const handleFiles = useCallback(async (files: File[] | FileList) => {
-    console.log('[DEBUG] handleFiles called with:', files);
-    const fileArray = Array.from(files).filter((file) =>
-      isImageFile(file.type) || isPdfFile(file.type)
+    const fileArray = Array.from(files).filter(
+      (file) => isImageFile(file.type) || isPdfFile(file.type)
     );
-    console.log('[DEBUG] Filtered files:', fileArray);
     if (fileArray.length === 0) return;
 
     setIsUploading(true);
@@ -315,7 +313,14 @@ function AttachmentThumbnail({ attachment, onRemove, isLoading }: AttachmentThum
         className="relative w-[120px] h-[120px] rounded-lg border-2 border-red-500 bg-bg-100 p-2 flex flex-col items-center justify-center"
       >
         <div className="text-red-500 mb-2">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
             <circle cx="12" cy="12" r="10" />
             <line x1="12" y1="8" x2="12" y2="12" />
             <line x1="12" y1="16" x2="12.01" y2="16" />
@@ -326,7 +331,14 @@ function AttachmentThumbnail({ attachment, onRemove, isLoading }: AttachmentThum
           onClick={() => onRemove(attachment.id)}
           className="absolute top-1 right-1 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center hover:bg-red-600 transition-colors"
         >
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 12 12"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
             <line x1="2" y1="2" x2="10" y2="10" />
             <line x1="10" y1="2" x2="2" y2="10" />
           </svg>
@@ -355,7 +367,11 @@ function AttachmentThumbnail({ attachment, onRemove, isLoading }: AttachmentThum
           onMouseLeave={() => setIsHovered(false)}
           onClick={() => setShowPreview(true)}
         >
-          <img src={attachment.url} alt={attachment.file.name} className="w-full h-full object-cover" />
+          <img
+            src={attachment.url}
+            alt={attachment.file.name}
+            className="w-full h-full object-cover"
+          />
           {isHovered && (
             <motion.button
               initial={{ opacity: 0 }}
@@ -366,7 +382,14 @@ function AttachmentThumbnail({ attachment, onRemove, isLoading }: AttachmentThum
               }}
               className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80 transition-colors"
             >
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 12 12"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
                 <line x1="2" y1="2" x2="10" y2="10" />
                 <line x1="10" y1="2" x2="2" y2="10" />
               </svg>
@@ -401,14 +424,23 @@ function AttachmentThumbnail({ attachment, onRemove, isLoading }: AttachmentThum
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <svg
+          width="32"
+          height="32"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
           <polyline points="14 2 14 8 20 8" />
           <line x1="8" y1="13" x2="16" y2="13" />
           <line x1="8" y1="17" x2="16" y2="17" />
           <polyline points="10 9 9 9 8 9" />
         </svg>
-        <p className="text-xs text-text-200 mt-2 text-center line-clamp-2">{attachment.file.name}</p>
+        <p className="text-xs text-text-200 mt-2 text-center line-clamp-2">
+          {attachment.file.name}
+        </p>
         <p className="text-xs text-text-300 mt-1">
           {attachment.file.size > 1024 * 1024
             ? `${(attachment.file.size / (1024 * 1024)).toFixed(1)} MB`
@@ -421,7 +453,14 @@ function AttachmentThumbnail({ attachment, onRemove, isLoading }: AttachmentThum
             onClick={() => onRemove(attachment.id)}
             className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80 transition-colors"
           >
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 12 12"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               <line x1="2" y1="2" x2="10" y2="10" />
               <line x1="10" y1="2" x2="2" y2="10" />
             </svg>
@@ -438,7 +477,14 @@ function AttachmentThumbnail({ attachment, onRemove, isLoading }: AttachmentThum
       exit={{ opacity: 0, scale: 0.9 }}
       className="relative w-[120px] h-[120px] rounded-lg border border-border-300 bg-bg-100 p-3 flex flex-col items-center justify-center"
     >
-      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <svg
+        width="32"
+        height="32"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+      >
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
         <polyline points="14 2 14 8 20 8" />
       </svg>
@@ -452,7 +498,14 @@ function AttachmentThumbnail({ attachment, onRemove, isLoading }: AttachmentThum
         onClick={() => onRemove(attachment.id)}
         className="absolute top-1 right-1 w-5 h-5 rounded-full bg-bg-300 text-text-200 flex items-center justify-center hover:bg-bg-400 transition-colors"
       >
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2">
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 12 12"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
           <line x1="2" y1="2" x2="10" y2="10" />
           <line x1="10" y1="2" x2="2" y2="10" />
         </svg>
@@ -474,7 +527,6 @@ export function AttachmentThumbnails({
   isUploading,
   uploadingCount
 }: AttachmentThumbnailsProps) {
-  console.log('[DEBUG] AttachmentThumbnails render:', { attachments, isUploading, uploadingCount });
   const hasContent = attachments.length > 0 || isUploading;
 
   return (
