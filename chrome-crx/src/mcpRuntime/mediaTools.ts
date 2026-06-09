@@ -5,6 +5,7 @@ import { tabGroupManager } from './tabState';
 import { cdpDebugger } from './cdp';
 import type { CdpRuntimeEvaluateResult } from './cdpTypes';
 import type { ToolContext, ToolDefinition, ToolResult } from './pageTools';
+import { getStorageValue, setStorageValue, StorageKeys } from '../extensionServices';
 
 const MCP_NATIVE_SESSION = 'mcp-native-session';
 
@@ -676,17 +677,30 @@ const uploadImageTool: ToolDefinition<UploadImageToolInput> = {
 interface GifFrameData {
   base64: string;
   action?: GifAction;
+  /** Set by callers that number frames for display; ignored by storage. */
+  frameNumber?: number;
+  /** Set by callers for ordering; ignored by storage (use `lastUpdated`). */
+  timestamp?: number;
   viewportWidth?: number;
   viewportHeight?: number;
   devicePixelRatio?: number;
 }
+
+// Exported so other modules (e.g. `core.ts` `recordToolAction`) can type
+// their frame arguments without re-declaring the shape.
+export type RecordedGifFrame = GifFrameData;
 
 interface GifGroupData {
   frames: GifFrameData[];
   lastUpdated: number;
 }
 
-const gifFrameStorage = new (class GifFrameStorage {
+// gifFrameStorage now persists its in-memory state to chrome.storage.local
+// so that a 5-minute recording survives an SW restart. Storage is treated
+// as a write-through backup; reads always come from the in-memory Map so
+// the public API stays synchronous. `restoreGifFrameStorageFromStorage`
+// (called from `service-worker.ts` onStartup) hydrates the cache.
+export const gifFrameStorage = new (class GifFrameStorage {
   storage: Map<number, GifGroupData> = new Map();
   recordingGroups: Set<number> = new Set();
 
@@ -700,6 +714,7 @@ const gifFrameStorage = new (class GifFrameStorage {
     if (group.frames.length > 50) {
       group.frames.shift();
     }
+    void this.persistFrames();
   }
 
   getFrames(groupId: number): GifFrameData[] {
@@ -710,6 +725,8 @@ const gifFrameStorage = new (class GifFrameStorage {
     this.storage.get(groupId)?.frames.length; // side effect from original
     this.storage.delete(groupId);
     this.recordingGroups.delete(groupId);
+    void this.persistFrames();
+    void this.persistRecordingGroups();
   }
 
   getFrameCount(groupId: number): number {
@@ -722,10 +739,12 @@ const gifFrameStorage = new (class GifFrameStorage {
 
   startRecording(groupId: number): void {
     this.recordingGroups.add(groupId);
+    void this.persistRecordingGroups();
   }
 
   stopRecording(groupId: number): void {
     this.recordingGroups.delete(groupId);
+    void this.persistRecordingGroups();
   }
 
   isRecording(groupId: number): boolean {
@@ -740,8 +759,85 @@ const gifFrameStorage = new (class GifFrameStorage {
     Array.from(this.storage.values()).reduce((acc, group) => acc + group.frames.length, 0); // side effect from original
     this.storage.clear();
     this.recordingGroups.clear();
+    void this.persistFrames();
+    void this.persistRecordingGroups();
+  }
+
+  // --- persistence helpers (write-through) ---
+
+  /**
+   * Serialize the in-memory frame map to a plain record keyed by `groupId`
+   * (stringified). The payload is bounded to 50 frames/group by `addFrame`
+   * but we still cap the storage write at 50 frames/group as a safety net
+   * against unexpected growth after restore.
+   */
+  private async persistFrames(): Promise<void> {
+    try {
+      const payload: Record<string, GifGroupData> = {};
+      for (const [groupId, group] of this.storage) {
+        const frames = group.frames.slice(-50);
+        payload[String(groupId)] = { frames, lastUpdated: group.lastUpdated };
+      }
+      await setStorageValue(StorageKeys.GIF_FRAMES, payload);
+    } catch (err) {
+      console.warn('[gifFrameStorage] failed to persist frames', err);
+    }
+  }
+
+  private async persistRecordingGroups(): Promise<void> {
+    try {
+      await setStorageValue(StorageKeys.GIF_RECORDING_GROUPS, Array.from(this.recordingGroups));
+    } catch (err) {
+      console.warn('[gifFrameStorage] failed to persist recordingGroups', err);
+    }
   }
 })();
+
+/**
+ * Hydrate `gifFrameStorage` from chrome.storage.local. Called from
+ * `service-worker.ts` on `chrome.runtime.onStartup` so that a recording
+ * the user is in the middle of — possibly 5+ minutes of frames — survives
+ * the SW being killed and respawned.
+ *
+ * Tolerates missing / wrong-shape payloads (corrupt storage, pre-fix
+ * migration, fresh install) by leaving the in-memory state empty.
+ */
+export async function restoreGifFrameStorageFromStorage(): Promise<void> {
+  try {
+    const [storedFrames, storedGroups] = await Promise.all([
+      getStorageValue<Record<string, GifGroupData>>(StorageKeys.GIF_FRAMES),
+      getStorageValue<number[]>(StorageKeys.GIF_RECORDING_GROUPS)
+    ]);
+
+    gifFrameStorage.storage.clear();
+    gifFrameStorage.recordingGroups.clear();
+
+    if (storedFrames && typeof storedFrames === 'object') {
+      for (const [groupIdStr, group] of Object.entries(storedFrames)) {
+        const groupId = Number(groupIdStr);
+        if (!Number.isInteger(groupId)) continue;
+        if (!group || !Array.isArray(group.frames)) continue;
+        // Re-cap at 50 frames on restore in case storage was written by a
+        // buggy older version.
+        const frames = group.frames.slice(-50);
+        gifFrameStorage.storage.set(groupId, {
+          frames,
+          lastUpdated: typeof group.lastUpdated === 'number' ? group.lastUpdated : Date.now()
+        });
+      }
+    }
+
+    if (Array.isArray(storedGroups)) {
+      for (const groupId of storedGroups) {
+        if (Number.isInteger(groupId)) {
+          gifFrameStorage.recordingGroups.add(groupId);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[gifFrameStorage] failed to restore from storage', err);
+  }
+}
 
 // =============================================================================
 // GIF delay helper (Me)
