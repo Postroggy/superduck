@@ -1,4 +1,4 @@
-import { setStorageValue, StorageKeys } from "./extensionServices";
+import { getStorageValue, setStorageValue, StorageKeys } from "./extensionServices";
 import {
   connectBridge,
   initializeExtensionPermissions,
@@ -7,7 +7,8 @@ import {
   tabGroupManager,
   trackEvent,
 } from "./mcpRuntime";
-import { restoreActiveToolContextsFromStorage } from "./mcpRuntime/core";
+import { restoreActiveToolContextsFromStorage, restoreActiveToolCountFromStorage } from "./mcpRuntime/core";
+import { restoreGifFrameStorageFromStorage } from "./mcpRuntime/mediaTools";
 import { createExtensionUrlHandler } from "./background/extensionUrl";
 import { createNativeHostManager } from "./background/nativeHost";
 import { registerExternalMessageListener } from "./background/externalMessages";
@@ -106,6 +107,11 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 chrome.runtime.onStartup.addListener(async () => {
   initializeExtensionPermissions();
   await restoreActiveToolContextsFromStorage();
+  await restoreActiveToolCountFromStorage();
+  await restoreGifFrameStorageFromStorage();
+  // Replay any pending update that arrived while the SW was killed —
+  // onUpdateAvailable is a one-shot event and is not redelivered.
+  await replayPendingUpdateIfAny();
   await tabGroupManager.initialize();
   // Re-register the tab group change listener. MV3 service-worker
   // listeners do not survive a restart, and the previous flow waited
@@ -155,11 +161,31 @@ function tryApplyUpdate() {
   chrome.runtime.reload();
 }
 
+/**
+ * On `onStartup`, if the SW was killed between `onUpdateAvailable` firing
+ * and `tryApplyUpdate` running, the one-shot event is lost. Re-read the
+ * persisted version and re-apply it (idempotent: a fresh
+ * `onUpdateAvailable` would be a no-op since `pendingUpdateVersion` is
+ * already set, and reload is what we want anyway).
+ */
+async function replayPendingUpdateIfAny(): Promise<void> {
+  if (pendingUpdateVersion) {
+    tryApplyUpdate();
+    return;
+  }
+  const stored = await getStorageValue<string | null>(StorageKeys.PENDING_UPDATE_VERSION);
+  if (typeof stored === 'string' && stored.length > 0) {
+    pendingUpdateVersion = stored;
+    tryApplyUpdate();
+  }
+}
+
 setOnAgentBecameIdle(() => tryApplyUpdate());
 
 chrome.runtime.onUpdateAvailable.addListener((details) => {
   pendingUpdateVersion = details.version;
   void setStorageValue(StorageKeys.UPDATE_AVAILABLE, true);
+  void setStorageValue(StorageKeys.PENDING_UPDATE_VERSION, details.version);
   void trackEvent("superduck.extension.update_available", {
     current_version: chrome.runtime.getManifest().version,
     new_version: details.version,
