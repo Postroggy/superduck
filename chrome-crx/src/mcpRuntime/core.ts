@@ -4,6 +4,7 @@ import { DEFAULT_MODEL, FAST_MODEL } from '../constants/models';
 import {
   StorageKeys,
   getStorageValue,
+  setStorageValue,
   getOrCreateAnonymousId,
   PermissionDuration as PermissionDurationEnum
 } from '../extensionServices';
@@ -30,10 +31,10 @@ import {
   PermissionType,
   extractAppName,
   formatTabsOutput,
-  normalizeUrl,
-  screenRecorder
+  normalizeUrl
 } from './shared';
 import { categoryChecker, tabGroupManager } from './tabState';
+import { gifFrameStorage } from './mediaTools';
 import {
   cdpDebugger,
   computerTool,
@@ -117,13 +118,23 @@ type ToolExecutorProcessOptions = {
   onPermissionRequired?: PermissionPromptHandler;
 };
 type TabGroupRecord = Awaited<ReturnType<typeof tabGroupManager.findGroupByTab>>;
-type RecordedFrame = Parameters<typeof screenRecorder.addFrame>[1];
-type RecordedAction = NonNullable<RecordedFrame['action']> & {
+type RecordedFrame = {
+  base64: string;
+  action?: Record<string, unknown>;
+  frameNumber?: number;
+  timestamp?: number;
+  viewportWidth?: number;
+  viewportHeight?: number;
+  devicePixelRatio?: number;
+};
+type RecordedAction = {
+  type: string;
   coordinate?: unknown;
   description?: string;
   start_coordinate?: unknown;
   text?: string;
   timestamp?: number;
+  [key: string]: unknown;
 };
 type NavigatorWithUserAgentData = Navigator & {
   userAgentData?: { platform?: string };
@@ -906,7 +917,7 @@ async function recordToolAction(
     const tab = await chrome.tabs.get(tabId);
     if (!tab) return;
     const groupId = tab.groupId ?? -1;
-    if (!screenRecorder.isRecording(groupId)) return;
+    if (!gifFrameStorage.isRecording(groupId)) return;
 
     let actionData: RecordedAction | undefined;
 
@@ -946,7 +957,7 @@ async function recordToolAction(
       actionData &&
       (actionData.type.includes('click') || 'left_click_drag' === actionData.type)
     ) {
-      const frames = screenRecorder.getFrames(groupId);
+      const frames = gifFrameStorage.getFrames(groupId);
       if (frames.length > 0) {
         const lastFrame = frames[frames.length - 1];
         const frameWithAction = {
@@ -958,7 +969,13 @@ async function recordToolAction(
           viewportHeight: lastFrame.viewportHeight,
           devicePixelRatio: lastFrame.devicePixelRatio
         };
-        screenRecorder.addFrame(groupId, frameWithAction);
+        // Cast: GifFrameData.action is `GifAction` (requires `type: string`)
+        // but `RecordedAction` here comes from a record-widened union; the
+        // actual shape satisfies the contract at runtime.
+        gifFrameStorage.addFrame(
+          groupId,
+          frameWithAction as Parameters<typeof gifFrameStorage.addFrame>[1]
+        );
       }
     }
 
@@ -984,7 +1001,7 @@ async function recordToolAction(
       // silently fail
     }
 
-    const frameNumber = screenRecorder.getFrames(groupId).length;
+    const frameNumber = gifFrameStorage.getFrames(groupId).length;
     const frame: RecordedFrame = {
       base64: screenshotData.base64,
       action: actionData,
@@ -994,7 +1011,8 @@ async function recordToolAction(
       viewportHeight: screenshotData.viewportHeight || screenshotData.height,
       devicePixelRatio
     };
-    screenRecorder.addFrame(groupId, frame);
+    // Cast: see note above re: GifAction shape.
+    gifFrameStorage.addFrame(groupId, frame as Parameters<typeof gifFrameStorage.addFrame>[1]);
   } catch {
     // silently fail
   }
@@ -1127,14 +1145,55 @@ interface ExecuteToolOptions {
 // --- executeTool (Sr) --- EXPORT
 export async function executeTool(options: ExecuteToolOptions): Promise<ExecuteToolResponse> {
   activeToolCount++;
+  void persistActiveToolCount();
   try {
     return await executeToolInner(options);
   } finally {
     activeToolCount--;
     if (activeToolCount <= 0) {
       activeToolCount = 0;
+    }
+    void persistActiveToolCount();
+    if (activeToolCount === 0) {
       onAgentBecameIdleCallback?.();
     }
+  }
+}
+
+/**
+ * Persist the active tool count to storage so it survives an SW restart.
+ * `service-worker.ts` reads this back in `onStartup` to make
+ * `isAgentActive()` return the right value across restarts and prevent
+ * `tryApplyUpdate` from reloading Chrome into a running agent.
+ *
+ * The on-disk count is treated as a backup; the in-memory `activeToolCount`
+ * is the source of truth at runtime. Storage writes are fire-and-forget —
+ * we only need eventual consistency.
+ */
+async function persistActiveToolCount(): Promise<void> {
+  try {
+    await setStorageValue(StorageKeys.ACTIVE_TOOL_COUNT, activeToolCount);
+  } catch (err) {
+    console.warn('[core] failed to persist activeToolCount', err);
+  }
+}
+
+/**
+ * Restore the in-memory `activeToolCount` from storage. Called from
+ * `service-worker.ts` on `chrome.runtime.onStartup`. If no value is
+ * present (fresh install or pre-fix migration), defaults to 0.
+ */
+export async function restoreActiveToolCountFromStorage(): Promise<void> {
+  try {
+    const stored = await getStorageValue<number>(StorageKeys.ACTIVE_TOOL_COUNT);
+    if (typeof stored === 'number' && Number.isFinite(stored) && stored >= 0) {
+      activeToolCount = Math.floor(stored);
+    } else {
+      activeToolCount = 0;
+    }
+  } catch (err) {
+    console.warn('[core] failed to restore activeToolCount', err);
+    activeToolCount = 0;
   }
 }
 
@@ -1470,6 +1529,12 @@ function createDomainTransitionPermission(
 }
 
 // --- Active tool contexts and group finalization ---
+type PersistedActiveToolContext = {
+  toolName: string;
+  requestId: string;
+  startTime: number;
+};
+
 const activeToolContexts = new Map<
   number,
   {
@@ -1479,6 +1544,60 @@ const activeToolContexts = new Map<
     errorCallback?: (error: string) => void;
   }
 >();
+
+/**
+ * Serialize the active tool contexts Map into a plain record keyed by tabId.
+ * `errorCallback` is a function and intentionally not persisted — after an SW
+ * restart the callback is gone and any tool that errors out before completing
+ * will simply not surface a UI error; the tool itself is allowed to finish.
+ */
+function serializeActiveToolContexts(): Record<string, PersistedActiveToolContext> {
+  const out: Record<string, PersistedActiveToolContext> = {};
+  for (const [tabId, ctx] of activeToolContexts) {
+    out[String(tabId)] = {
+      toolName: ctx.toolName,
+      requestId: ctx.requestId,
+      startTime: ctx.startTime
+    };
+  }
+  return out;
+}
+
+async function persistActiveToolContexts(): Promise<void> {
+  try {
+    await setStorageValue(StorageKeys.ACTIVE_TOOL_CONTEXTS, serializeActiveToolContexts());
+  } catch (err) {
+    console.warn('[core] failed to persist activeToolContexts', err);
+  }
+}
+
+/**
+ * Restore the active tool contexts map from storage. Called from
+ * `service-worker.ts` on `chrome.runtime.onStartup` so the in-memory Map
+ * survives a service worker restart and the
+ * `webNavigation.onBeforeNavigate` category interceptor keeps blocking
+ * forbidden-domain navigations even after the SW is killed and respawned.
+ *
+ * `errorCallback` is not persisted (functions cannot cross the
+ * serialization boundary); tools that error out before completing after an
+ * SW restart will not surface a UI error, but the tool itself is allowed
+ * to finish and the bookkeeping is intact.
+ */
+export async function restoreActiveToolContextsFromStorage(): Promise<void> {
+  try {
+    const stored = await getStorageValue<Record<string, PersistedActiveToolContext>>(
+      StorageKeys.ACTIVE_TOOL_CONTEXTS
+    );
+    if (!stored) return;
+    for (const [tabIdStr, ctx] of Object.entries(stored)) {
+      const tabId = Number(tabIdStr);
+      if (!Number.isInteger(tabId)) continue;
+      activeToolContexts.set(tabId, { ...ctx });
+    }
+  } catch (err) {
+    console.warn('[core] failed to restore activeToolContexts', err);
+  }
+}
 const pendingPrefixTimeouts = new Map<number, ReturnType<typeof setTimeout> | null>();
 const PREFIX_CLEANUP_DELAY = 20000;
 
@@ -1542,6 +1661,7 @@ async function startToolContext(
     startTime: Date.now(),
     errorCallback
   });
+  void persistActiveToolContexts();
   await tabGroupManager.addTabToIndicatorGroup({
     tabId,
     isRunning: true,
@@ -1578,6 +1698,7 @@ function cleanupAfterToolExecution(tabId: number, _clientId?: string): void {
   if (!activeToolContexts.has(tabId)) return;
 
   activeToolContexts.delete(tabId);
+  void persistActiveToolContexts();
 
   const mainTabId = findGroupMainTab(tabId);
   if (mainTabId !== undefined && !hasActiveToolsInGroup(mainTabId)) {
