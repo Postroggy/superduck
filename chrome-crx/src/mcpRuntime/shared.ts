@@ -58,13 +58,13 @@ export async function checkUrlSecurity(
   }
 }
 
-export const screenRecorder = {
-  isRecording: (_groupId: number): boolean => false,
-  getFrames: (_groupId: number): ScreenRecorderFrame[] => [],
-  addFrame: (_groupId: number, _frame: ScreenRecorderFrame): void => {},
-  startRecording: (_groupId: number): void => {},
-  stopRecording: (_groupId: number): void => {}
-};
+// The actual screen recording lives in `gifFrameStorage` inside
+// `mediaTools.ts`. `core.ts`'s `recordToolAction` used to call the no-op
+// `screenRecorder` stub (removed in this commit), which meant frames
+// were never added during normal tool execution — they only ever landed
+// in `gifFrameStorage` via the explicit `gif_creator start_recording`
+// pathway. Callers (currently only `core.ts`) now import
+// `gifFrameStorage` from `mediaTools.ts` directly.
 
 export const MCP_NATIVE_SESSION_ID = `mcp_native_${Date.now()}`;
 
