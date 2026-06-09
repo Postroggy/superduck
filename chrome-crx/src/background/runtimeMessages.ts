@@ -331,6 +331,7 @@ export function registerRuntimeMessageListener(deps: RuntimeMessageListenerDeps)
 
       if (message.type === 'DISMISS_STATIC_INDICATOR_FOR_GROUP') {
         await deps.handleDismissStaticIndicator(sender, sendResponse);
+        return;
       }
 
       if (message.type === 'PANEL_READY') {

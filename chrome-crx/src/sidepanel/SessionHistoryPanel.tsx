@@ -5,6 +5,9 @@ import {
   SESSION_INDEX_KEY,
   SESSION_CONVERSATION_MAP_KEY,
   SESSION_REMOTE_MAP_KEY,
+  LAST_ACTIVE_SESSION_KEY,
+  collectTabSessionKeysToRemove,
+  isSessionIndexEntry,
   isStringRecord,
   isSessionSnapshot
 } from './sidepanelGuards';
@@ -65,7 +68,10 @@ export function SessionHistoryPanel({
       try {
         const raw = await getStorageValue(SESSION_INDEX_KEY, []);
         if (!active) return;
-        const list = Array.isArray(raw) ? (raw as SessionIndexEntry[]) : [];
+        const candidate: unknown[] = Array.isArray(raw) ? raw : [];
+        // Filter to well-formed entries so a corrupted / migrated storage
+        // payload can't crash the sort or downstream render.
+        const list: SessionIndexEntry[] = candidate.filter(isSessionIndexEntry);
         // Sort by updatedAt descending
         list.sort((a, b) => b.updatedAt - a.updatedAt);
         setEntries(list);
@@ -108,6 +114,19 @@ export function SessionHistoryPanel({
           await setStorageValue(SESSION_REMOTE_MAP_KEY, nextRemoteMap);
         }
       }
+
+      // Remove any tab→session aliases pointing at this session, and
+      // clear the global last-active key if it also points here. Without
+      // this cleanup, a future sidepanel open on a tab whose alias still
+      // resolves to the deleted session would resurrect an empty entry
+      // with the same id.
+      const aliasKeys = await collectTabSessionKeysToRemove(entry.sessionId);
+      keysToRemove.push(...aliasKeys);
+      const lastActive = await getStorageValue(LAST_ACTIVE_SESSION_KEY);
+      if (lastActive === entry.sessionId) {
+        keysToRemove.push(LAST_ACTIVE_SESSION_KEY);
+      }
+
       await chrome.storage.local.remove(keysToRemove);
 
       // Remove from index

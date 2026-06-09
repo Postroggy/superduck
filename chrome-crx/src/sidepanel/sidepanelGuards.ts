@@ -9,7 +9,13 @@ import {
   type ApiToolResultBlock
 } from '../messageTypes';
 import { isPermissionMode } from './sidepanelUtils';
-import type { ChatMessage, ChatRole, SessionSnapshot, SupportedImageMediaType } from './types';
+import type {
+  ChatMessage,
+  ChatRole,
+  SessionIndexEntry,
+  SessionSnapshot,
+  SupportedImageMediaType
+} from './types';
 
 // ─── Type Guards ──────────────────────────────────────────────────────────────
 
@@ -51,6 +57,30 @@ export function isSessionSnapshot(value: unknown): value is SessionSnapshot {
 
 export function isStringRecord(value: unknown): value is Record<string, string> {
   return isRecord(value) && Object.values(value).every((entry) => typeof entry === 'string');
+}
+
+export function isSessionIndexEntry(value: unknown): value is SessionIndexEntry {
+  if (!isRecord(value)) return false;
+  if (typeof value.sessionId !== 'string') return false;
+  if (typeof value.createdAt !== 'number' || !Number.isFinite(value.createdAt)) return false;
+  if (typeof value.updatedAt !== 'number' || !Number.isFinite(value.updatedAt)) return false;
+  if (
+    'conversationUuid' in value &&
+    value.conversationUuid !== undefined &&
+    typeof value.conversationUuid !== 'string'
+  )
+    return false;
+  if (
+    'remoteSessionId' in value &&
+    value.remoteSessionId !== undefined &&
+    typeof value.remoteSessionId !== 'string'
+  )
+    return false;
+  if ('model' in value && value.model !== undefined && typeof value.model !== 'string')
+    return false;
+  if ('preview' in value && value.preview !== undefined && typeof value.preview !== 'string')
+    return false;
+  return true;
 }
 
 // ─── Utility Functions ────────────────────────────────────────────────────────
@@ -124,6 +154,40 @@ export const CUSTOM_API_KEY_KEY = 'customApiKey';
  */
 export function getTabSessionKey(tabId: number): string {
   return `${TAB_SESSION_KEY_PREFIX}${tabId}`;
+}
+
+/**
+ * Returns the storage keys to remove so a deleted session is no longer
+ * referenced by the tab→session alias map or the global last-active key.
+ *
+ * Storage is scanned in-process; the function never deletes anything itself
+ * so the caller can batch the removal with its other delete operations.
+ */
+export async function collectTabSessionKeysToRemove(sessionId: string): Promise<string[]> {
+  const keys: string[] = [];
+  try {
+    // chrome.storage.local exposes the full keys list via getKeys() in
+    // Chrome 130+; fall back to Object.keys on the full data bag for
+    // older targets and test harnesses.
+    const all = await new Promise<Record<string, unknown> | string[]>((resolve) => {
+      const cb = (items: Record<string, unknown>) => resolve(items);
+      chrome.storage.local.get(null, cb);
+    });
+    const allKeys = Array.isArray(all) ? (all as string[]) : Object.keys(all);
+    for (const key of allKeys) {
+      if (key.startsWith(TAB_SESSION_KEY_PREFIX)) {
+        const value = Array.isArray(all) ? undefined : (all as Record<string, unknown>)[key];
+        if (value === sessionId) {
+          keys.push(key);
+        }
+      }
+    }
+  } catch {
+    // Storage scan is best-effort. If the platform cannot enumerate keys
+    // (e.g. some Web extensions shims), the caller still removes the
+    // known snapshot/index entries.
+  }
+  return keys;
 }
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────

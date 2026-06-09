@@ -357,6 +357,12 @@ export function SidepanelApp() {
   // CDP attach on the new tab → duplicate "debugging" banners and
   // unexpected tab group creation).
   const lockedTabIdRef = useRef<number | undefined>(undefined);
+  // Tracks which tab the currently active session belongs to. When the
+  // user switches tabs while the sidepanel stays open, the resolver
+  // re-runs and compares this ref against the new active tab — if they
+  // differ, the previous session no longer applies and we re-resolve
+  // against the new tab's getTabSessionKey mapping.
+  const sessionResolvedForTabRef = useRef<number | undefined>(undefined);
   const hasBrowserControlPermissionAcceptedRef = useRef(hasBrowserControlPermissionAccepted);
   const pushMessageRef = useRef<((role: ChatRole, text: string) => void) | null>(null);
   const _injectedDomainSkillsRef = useRef<Set<string>>(new Set());
@@ -1005,10 +1011,26 @@ export function SidepanelApp() {
       if (typeof query.tabId === 'number') {
         lockedTabIdRef.current = query.tabId;
       }
-      if (isPurlMode && lightningResult) {
-        return lightningResult.sendMessage(text, options?.attachments, null, false);
+      try {
+        if (isPurlMode && lightningResult) {
+          return await lightningResult.sendMessage(text, options?.attachments, null, false);
+        }
+        return await sendPrompt(text, options);
+      } finally {
+        // If neither the normal agent nor the lightning mode actually
+        // transitioned into a "running" state (e.g. sendPrompt hit an
+        // early-return for /compact, /share, empty input, or missing
+        // client; or lightningResult.sendMessage returned before
+        // setting lnIsLoading), the unlock effect would never fire and
+        // `lockedTabIdRef` would stay set forever. Clear it ourselves
+        // in that case so future calls are not bound to a stale tab.
+        const stillRunning = isPurlMode
+          ? Boolean(lightningResult?.isLoading)
+          : isAgentRunningRef.current;
+        if (!stillRunning) {
+          lockedTabIdRef.current = undefined;
+        }
       }
-      return sendPrompt(text, options);
     },
     [isPurlMode, lightningResult, sendPrompt, query.tabId]
   );
@@ -1267,18 +1289,58 @@ export function SidepanelApp() {
   // When the sidepanel is opened without an explicit sessionId in the URL,
   // we try to restore the last session ID that was used for this tab.
   // This prevents chat history from being lost on panel close/reopen.
+  //
+  // We depend on `dynamicTabId` (the live value from useActiveTabId) rather
+  // than `query.tabId` (a useMemo derived from it). useActiveTabId resolves
+  // the active tab asynchronously, so on first render `dynamicTabId` is
+  // `undefined` even when a tab ID will arrive a few frames later. Watching
+  // the memoized `query.tabId` would race against that: if we early-returned
+  // on `query.tabId` being undefined, the effect would never re-run for the
+  // same `activeSessionId` (no `query.tabId` change either) and we'd skip
+  // the tab-specific restore and generate a fresh UUID instead.
+  //
+  // We also re-resolve when the user switches tabs while the sidepanel
+  // is window-bound: `dynamicTabId` changes, the previous `activeSessionId`
+  // belongs to the old tab, and reading `getTabSessionKey(newTabId)` is
+  // the only way to surface the new tab's prior conversation. The
+  // `sessionResolvedForTabRef` ref records which tab the active session
+  // was last resolved for so we only re-resolve on an actual tab change.
   useEffect(() => {
-    // If we already have a sessionId (from URL or from resolution), skip
-    if (activeSessionId) return;
+    // Skip if the current session was already resolved for this tab.
+    // This is the hot path: nothing changed, nothing to re-read.
+    if (activeSessionId && sessionResolvedForTabRef.current === dynamicTabId) {
+      return;
+    }
 
-    // If tabId is not yet resolved (useActiveTabId is still querying), wait.
-    // This prevents generating a fresh session before we know which tab we're
-    // bound to — otherwise we'd miss the stored tab→session mapping.
-    if (typeof query.tabId !== 'number' && !query.sessionId) return;
+    // Wait for dynamicTabId to be known (a real number) before reading
+    // any tab-specific mapping. If we have a URL sessionId, the user
+    // is explicitly opening a specific conversation, so we proceed
+    // without a tab context.
+    if (typeof dynamicTabId !== 'number' && !query.sessionId) return;
 
     let active = true;
     (async () => {
-      const tabId = query.tabId;
+      const tabId = dynamicTabId;
+      const persistTabMapping = async (sessionId: string): Promise<void> => {
+        // Only persist the tab→session mapping when we actually have a tab
+        // to bind to. Writing under the *current* tab's key (not the
+        // previous one the user was on) avoids remapping a tab's prior
+        // conversation when the user simply switches tabs while the
+        // sidepanel is still open.
+        if (typeof tabId === 'number') {
+          await setStorageValue(getTabSessionKey(tabId), sessionId);
+        }
+      };
+
+      // If the active session was opened from a URL (query.sessionId)
+      // it overrides any per-tab mapping. The session is bound to the
+      // URL, not to the tab — so record it as resolved for the current
+      // tab but don't touch the tab→session storage.
+      if (query.sessionId) {
+        sessionResolvedForTabRef.current = tabId;
+        return;
+      }
+
       if (typeof tabId !== 'number') {
         // No tab context — try the global fallback before generating fresh
         const fallbackSessionId = await getStorageValue(LAST_ACTIVE_SESSION_KEY);
@@ -1288,6 +1350,7 @@ export function SidepanelApp() {
         } else {
           setActiveSessionId(crypto.randomUUID());
         }
+        sessionResolvedForTabRef.current = tabId;
         return;
       }
 
@@ -1296,31 +1359,57 @@ export function SidepanelApp() {
       if (!active) return;
 
       if (typeof lastSessionId === 'string' && lastSessionId) {
-        setActiveSessionId(lastSessionId);
-      } else {
-        // Tab-specific session not found — try the global fallback
+        // The previously-resolved session (activeSessionId) belonged to
+        // a different tab. Switch over to whatever the new tab was
+        // last bound to, even if the storage write hasn't fully
+        // settled. The load effect will hydrate the new conversation
+        // from its own snapshot.
+        if (lastSessionId !== activeSessionId) {
+          setActiveSessionId(lastSessionId);
+        }
+        // Re-write the mapping so a fresh write happens for the current
+        // resolution cycle (cheap, idempotent).
+        void persistTabMapping(lastSessionId);
+      } else if (sessionResolvedForTabRef.current !== tabId) {
+        // Tab-specific session not found AND we are entering a tab that
+        // has never been bound before. The currently-active session was
+        // inherited from the previous tab, so don't leak it into this
+        // tab's storage — fall back to the global last-active session
+        // (or generate fresh) and bind that to the new tab.
         const fallbackSessionId = await getStorageValue(LAST_ACTIVE_SESSION_KEY);
         if (!active) return;
-        if (typeof fallbackSessionId === 'string' && fallbackSessionId) {
+        if (
+          typeof fallbackSessionId === 'string' &&
+          fallbackSessionId &&
+          fallbackSessionId !== activeSessionId
+        ) {
           setActiveSessionId(fallbackSessionId);
+          void persistTabMapping(fallbackSessionId);
+        } else if (!activeSessionId) {
+          const newId = crypto.randomUUID();
+          setActiveSessionId(newId);
+          void persistTabMapping(newId);
         } else {
-          setActiveSessionId(crypto.randomUUID());
+          // The active session has no tab binding yet — record the
+          // association now so future tab switches know which tab owns
+          // it.
+          void persistTabMapping(activeSessionId);
         }
       }
+      sessionResolvedForTabRef.current = tabId;
     })();
 
     return () => {
       active = false;
     };
-  }, [activeSessionId, query.tabId, query.sessionId]);
+  }, [activeSessionId, dynamicTabId, query.sessionId]);
 
   // ─── Tab-session mapping persistence ──────────────────────────────────────
-  // Save the tab→session mapping whenever the active session changes,
-  // so the next time the panel opens for this tab we can restore it.
-  useEffect(() => {
-    if (!activeSessionId || typeof query.tabId !== 'number') return;
-    void setStorageValue(getTabSessionKey(query.tabId), activeSessionId);
-  }, [activeSessionId, query.tabId]);
+  // The tab→session mapping is written once inside the resolver effect above
+  // when a session is actually chosen/created for the current tab. Writing
+  // on every `activeSessionId` change would otherwise remap a tab to the
+  // previous tab's session whenever the user switches tabs while the
+  // sidepanel is open.
 
   // ─── Global last-active-session persistence ───────────────────────────────
   // Save the active session globally so it can be restored even when the tab
@@ -1829,6 +1918,15 @@ export function SidepanelApp() {
       // Switch to the historical session — triggers the persistence hook to load snapshot
       sessionCreatedAtRef.current = Date.now();
       setActiveSessionId(sessionId);
+
+      // The resolver only writes the tab→session mapping on its own
+      // resolution path, so explicitly switching to a history session
+      // would otherwise leave the next reopen pointing at the tab's
+      // pre-history session. Persist the alias for the current tab
+      // so the user's explicit choice is restored next time.
+      if (typeof query.tabId === 'number') {
+        void setStorageValue(getTabSessionKey(query.tabId), sessionId);
+      }
     },
     [activeSessionId, query.tabId]
   );

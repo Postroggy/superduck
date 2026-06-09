@@ -205,6 +205,24 @@ class TabGroupManager {
               } catch (err) {
                 // ignore
               }
+              // Hide indicators on every member tab BEFORE dropping the
+              // group metadata. Chrome delivers the main tab's groupId
+              // change first and the secondary tabs afterwards, so if we
+              // delete `groupMetadata` first the secondary tab events
+              // can't find their meta and their static overlays stay
+              // visible. Send HIDE_STATIC_INDICATOR / HIDE_AGENT_INDICATORS
+              // per-member based on the recorded indicatorState.
+              for (const [memberTabId, memberState] of meta.memberStates.entries()) {
+                if (memberTabId === mainTabId) continue;
+                const indicator = memberState.indicatorState;
+                const hideType =
+                  indicator === 'static' ? 'HIDE_STATIC_INDICATOR' : 'HIDE_AGENT_INDICATORS';
+                try {
+                  await this.sendIndicatorMessage(memberTabId, hideType, memberState.isMcp);
+                } catch (err) {
+                  // ignore — tab may already be closed
+                }
+              }
               this.groupMetadata.delete(mainTabId);
               this.groupBlocklistStatuses.delete(oldChromeGroupId);
               this.processingMainTabRemoval.delete(mainTabId);

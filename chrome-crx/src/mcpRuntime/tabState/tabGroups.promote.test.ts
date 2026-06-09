@@ -4,9 +4,10 @@
 //
 //   * Group ownership moves from oldMainTabId → newMainTabId (the metadata
 //     map is re-keyed).
-//   * The new main is removed from `memberStates` (a main isn't a member of
-//     itself), and any indicator the new tab previously had as a secondary
-//     is cleared.
+//   * The new main is tracked in `memberStates` with `indicatorState:
+//     'none'` (main tabs are members of the group's member-state map too —
+//     see createGroup / adoptOrphanedGroup for the seed path), and any
+//     indicator the new tab previously had as a secondary is cleared.
 //   * The old main stays in the group as a secondary tab with no
 //     indicators.
 //   * If the old main was in `pulsing` state (agent actively running
