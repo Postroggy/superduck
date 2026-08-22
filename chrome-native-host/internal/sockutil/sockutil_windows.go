@@ -3,11 +3,15 @@
 package sockutil
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/Microsoft/go-winio"
 )
 
 const DefaultPathValue = `\\.\pipe\superduck-native-host`
@@ -16,12 +20,27 @@ func defaultPath() string {
 	return DefaultPathValue
 }
 
+// listen creates a named-pipe listener. Windows does not support Unix domain
+// sockets for listening, so we use go-winio's named-pipe implementation,
+// which the Go "unix" dialer can still connect to.
 func listen(path string) (net.Listener, error) {
-	return net.Listen("unix", path)
+	cfg := &winio.PipeConfig{
+		// Owner-only DACL: the CLI, MCP server and Chrome-launched
+		// native-host all run as the same user (HKCU-installed), so no one
+		// else should be able to dial this pipe.
+		SecurityDescriptor: "D:P(A;;GA;;;OW)",
+	}
+	l, err := winio.ListenPipe(path, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("listen named pipe: %w", err)
+	}
+	return l, nil
 }
 
 func dialTimeout(path string, timeout time.Duration) (net.Conn, error) {
-	return net.DialTimeout("unix", path, timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return winio.DialPipeContext(ctx, path)
 }
 
 // Prepare checks the transport for a stale listener left by a crashed
@@ -40,16 +59,16 @@ func StatPath(path string) (os.FileInfo, error) {
 }
 
 // RestrictPermissions tightens transport access to the owning user where the
-// transport supports it. On Windows named-pipe ACLs are handled by the OS, so
-// this is a no-op.
+// transport supports it. On Windows the pipe DACL is fixed at creation time
+// (see listen), so this is a no-op.
 func RestrictPermissions(path string) error {
 	return nil
 }
 
 // IsConnRefused reports whether the error indicates the peer is not listening,
-// as opposed to a permission error or other dial failure. On Windows the
-// named-pipe wrapper reports "no such file or directory" for a missing pipe
-// and "connection refused" style errors for an inactive one.
+// as opposed to a permission error or other dial failure. On Windows a missing
+// pipe surfaces as "cannot find the file specified" and a pipe with no active
+// server as "pipe has been ended" / connection-refused style errors.
 func IsConnRefused(err error) bool {
 	if err == nil {
 		return false
@@ -58,10 +77,24 @@ func IsConnRefused(err error) bool {
 	if errors.As(err, &opErr) {
 		var sysErr *os.SyscallError
 		if errors.As(opErr.Err, &sysErr) {
-			return strings.Contains(strings.ToLower(sysErr.Err.Error()), "no such file") ||
-				strings.Contains(strings.ToLower(sysErr.Err.Error()), "connection refused")
+			return containsRefused(sysErr.Err.Error())
 		}
 	}
-	return strings.Contains(strings.ToLower(err.Error()), "no such file") ||
-		strings.Contains(strings.ToLower(err.Error()), "connection refused")
+	return containsRefused(err.Error())
+}
+
+func containsRefused(s string) bool {
+	lower := strings.ToLower(s)
+	for _, sub := range []string{
+		"no such file",
+		"cannot find the file",
+		"connection refused",
+		"actively refused",
+		"pipe",
+	} {
+		if strings.Contains(lower, sub) {
+			return true
+		}
+	}
+	return false
 }

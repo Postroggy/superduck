@@ -56,6 +56,24 @@ func cmdSetup(argv []string) error {
 		return err
 	}
 
+	// On Windows the manifest directory is only a staging area; the browser
+	// finds the host via HKCU registry keys, so register one per browser.
+	if runtime.GOOS == "windows" {
+		registered := 0
+		for _, browserName := range setupBrowsers(*browser) {
+			manifestPath := filepath.Join(dirs[0], nativeHostName+".json")
+			if err := writeNativeHostRegistryKey(browserName, nativeHostName, manifestPath); err != nil {
+				fmt.Fprintf(os.Stderr, "skip registry %s: %v\n", browserName, err)
+				continue
+			}
+			fmt.Fprintf(os.Stderr, "registered %s in registry\n", browserName)
+			registered++
+		}
+		if registered == 0 {
+			return fmt.Errorf("manifest written but registry registration failed. Check HKCU write access")
+		}
+	}
+
 	written := 0
 	for _, d := range dirs {
 		if err := os.MkdirAll(d, 0o755); err != nil {
@@ -100,6 +118,21 @@ func cmdSetup(argv []string) error {
 	fmt.Fprintln(os.Stderr, "   1. Install the SuperDuck extension in Chrome (Web Store or load-unpacked)")
 	fmt.Fprintln(os.Stderr, "   2. Run `superduck doctor` — all green means you're ready")
 	return nil
+}
+
+// setupBrowsers expands the user-facing --browser value into the concrete
+// browser names to configure, mirroring nativeMessagingDirs' expansion.
+func setupBrowsers(browser string) []string {
+	switch strings.ToLower(browser) {
+	case "chrome":
+		return []string{"chrome"}
+	case "edge":
+		return []string{"edge"}
+	case "brave":
+		return []string{"brave"}
+	default:
+		return []string{"chrome", "edge", "brave"}
+	}
 }
 
 func findNativeHost(override string) (string, error) {
@@ -168,7 +201,11 @@ func nativeMessagingDirs(browser string) ([]string, error) {
 			dirs = append(dirs, filepath.Join(home, ".config", "BraveSoftware", "Brave-Browser", "NativeMessagingHosts"))
 		}
 	case "windows":
-		return nil, fmt.Errorf("windows setup not yet automated; see VISION.md and write the registry key manually")
+		// Windows registers native messaging hosts in HKCU registry keys
+		// (default value → manifest JSON path) instead of manifest directories.
+		// A single manifest in the user-local SuperDuck dir is shared by all
+		// browsers; registration keys point at it.
+		dirs = append(dirs, filepath.Join(home, "AppData", "Local", "SuperDuck"))
 	default:
 		return nil, fmt.Errorf("unsupported OS: %s", runtime.GOOS)
 	}
