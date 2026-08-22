@@ -197,7 +197,7 @@ type globalFlags struct {
 }
 
 var gflags = globalFlags{
-	SocketPath: cliclient.DefaultSocketPath,
+	SocketPath: cliclient.DefaultSocketPath(),
 	Timeout:    30 * time.Second,
 }
 
@@ -221,13 +221,13 @@ func main() {
 
 	if len(os.Args) < 2 {
 		emitAndFlush(tracker, "_no_args", "", "", commandStart, errNoArgs)
-		fmt.Fprintf(os.Stderr, usage, version, cliclient.DefaultSocketPath)
+		fmt.Fprintf(os.Stderr, usage, version, cliclient.DefaultSocketPath())
 		os.Exit(ExitUsage)
 	}
 	args := splitGlobalFlags(os.Args[1:])
 	if len(args) == 0 {
 		emitAndFlush(tracker, "_no_args", "", "", commandStart, errNoArgs)
-		fmt.Fprintf(os.Stderr, usage, version, cliclient.DefaultSocketPath)
+		fmt.Fprintf(os.Stderr, usage, version, cliclient.DefaultSocketPath())
 		os.Exit(ExitUsage)
 	}
 
@@ -318,11 +318,11 @@ func main() {
 	case "version", "--version", "-v":
 		fmt.Println(version)
 	case "help", "--help", "-h":
-		fmt.Fprintf(os.Stderr, usage, version, cliclient.DefaultSocketPath)
+		fmt.Fprintf(os.Stderr, usage, version, cliclient.DefaultSocketPath())
 	default:
 		emitAndFlush(tracker, "_unknown", "", cmd, commandStart, errNoArgs)
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n", cmd)
-		fmt.Fprintf(os.Stderr, usage, version, cliclient.DefaultSocketPath)
+		fmt.Fprintf(os.Stderr, usage, version, cliclient.DefaultSocketPath())
 		os.Exit(ExitUsage)
 	}
 

@@ -11,14 +11,19 @@ import (
 	"time"
 
 	"chrome-native-host/internal/protocol"
+	"chrome-native-host/internal/sockutil"
 	"chrome-native-host/internal/udsauth"
 )
-
-const DefaultSocketPath = "/tmp/chrome-native-host.sock"
 
 var ErrNotConnected = errors.New("native-host not reachable")
 var ErrTimeout = errors.New("native-host call timed out")
 var ErrAuthFailed = errors.New("UDS authentication failed")
+
+// DefaultSocketPath returns the platform-specific native-host transport
+// address (Unix socket on unix, named pipe on Windows).
+func DefaultSocketPath() string {
+	return sockutil.DefaultPath()
+}
 
 type ToolError struct {
 	Msg string
@@ -34,7 +39,7 @@ type Options struct {
 
 func defaults(o Options) Options {
 	if o.SocketPath == "" {
-		o.SocketPath = DefaultSocketPath
+		o.SocketPath = DefaultSocketPath()
 	}
 	if o.Timeout == 0 {
 		o.Timeout = 30 * time.Second
@@ -45,7 +50,7 @@ func defaults(o Options) Options {
 func dialAndAuthenticate(opts Options, purpose string) (net.Conn, error) {
 	opts = defaults(opts)
 
-	conn, err := net.DialTimeout("unix", opts.SocketPath, dialTimeout(opts.Timeout))
+	conn, err := sockutil.DialTimeout(opts.SocketPath, dialTimeout(opts.Timeout))
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrNotConnected, err)
 	}
