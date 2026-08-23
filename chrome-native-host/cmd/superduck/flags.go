@@ -94,6 +94,7 @@ var knownValueFlags = map[string]bool{
 	"-H": true, "--header": true,
 	"-d": true, "--data": true,
 	"--selector": true, "--text": true,
+	"--timeout": true, "--absent": true,
 	"--modifiers": true, "--ref": true,
 	"--direction": true, "--amount": true,
 	"--repeat":  true,
