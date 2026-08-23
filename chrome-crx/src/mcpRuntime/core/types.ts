@@ -34,6 +34,7 @@ export type ExecuteToolResponse = {
   tool_use_id?: string;
   type?: string;
   url?: string;
+  [key: string]: unknown;
 };
 export type ToolUseRequest = {
   type: 'tool_use';

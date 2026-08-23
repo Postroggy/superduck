@@ -268,11 +268,31 @@ export class ToolExecutor {
       result: ToolResult
     ): Promise<ExecuteToolResponse> => {
       const isError = !!result.error || result.is_error === true;
+      // Surface every structured field (not just tabContext) so native clients
+      // can expose e.g. `tabs`/`activeWindowId` from superduck_list_tabs as
+      // structuredContent. Content-bearing fields stay in `content`.
+      const structured: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(result)) {
+        if (
+          [
+            'output',
+            'error',
+            'content',
+            'base64Image',
+            'imageFormat',
+            'imageId',
+            'is_error'
+          ].includes(key)
+        )
+          continue;
+        if (value === undefined) continue;
+        structured[key] = value;
+      }
       return {
         type: 'tool_result',
         tool_use_id: toolUseId,
         content: await formatContent(result),
-        ...(result.tabContext && { tabContext: result.tabContext }),
+        ...structured,
         ...(isError && { is_error: true })
       };
     };
