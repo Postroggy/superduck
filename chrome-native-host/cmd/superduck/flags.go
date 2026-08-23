@@ -98,6 +98,7 @@ var knownValueFlags = map[string]bool{
 	"--direction": true, "--amount": true,
 	"--repeat":  true,
 	"--output":  true,
+	"-o":        true,
 	"--file":    true,
 	"--pattern": true, "--limit": true,
 	"--url-pattern": true, "--filter": true,

@@ -17,14 +17,21 @@ func cmdTabs(argv []string) error {
 	}
 
 	rec := cliclient.AuditRecord{Cmd: "tabs"}
+	if gflags.JSON {
+		// RunToolJSON wraps the raw tool response in the stable envelope
+		// {tool, ok, output, <structured fields>} — the same shape tab_group
+		// and every other --json command uses. Without it, `tabs --json`
+		// leaked the extension's raw response ({activeWindowId, tabs:[{id,...}]})
+		// which did NOT match the tabContext envelope other commands emit.
+		raw, err := cliclient.RunToolJSON("superduck_list_tabs", nil, clientOpts(), &rec)
+		if raw != "" {
+			fmt.Println(raw)
+		}
+		return err
+	}
 	raw, err := cliclient.RunTool("superduck_list_tabs", nil, clientOpts(), &rec)
 	if err != nil {
 		return err
-	}
-
-	if gflags.JSON {
-		fmt.Println(raw)
-		return nil
 	}
 	var data struct {
 		ActiveWindowID int `json:"activeWindowId"`
