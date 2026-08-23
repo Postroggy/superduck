@@ -65,6 +65,9 @@ func cmdExec(argv []string) error {
 		"text":   code,
 	}
 	if *output != "" {
+		// rawOutput tells the extension to skip the 1000-char single-value
+		// truncation so large JSON payloads land on disk parseable.
+		args["rawOutput"] = true
 		return runSimpleToolToFile("javascript_tool", "exec", args, *output)
 	}
 	return runSimpleTool("javascript_tool", "exec", args)

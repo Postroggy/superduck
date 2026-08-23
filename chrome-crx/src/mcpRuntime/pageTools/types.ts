@@ -4,6 +4,11 @@ export interface JavaScriptToolInput {
   action: string;
   text: string;
   tabId?: number;
+  /** When true, skip the 1000-char single-value truncation (used by CLI
+   *  `exec --output` which writes the raw result to a file — truncating a
+   *  JSON payload mid-string makes it unparseable). Credential checks still
+   *  apply; only the 51200-char total-output cap remains. */
+  rawOutput?: boolean;
 }
 
 export interface NavigateToolInput {

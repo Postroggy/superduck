@@ -32,7 +32,7 @@ export const javascriptTool: ToolDefinition<JavaScriptToolInput> = {
   },
   execute: async (input, context): Promise<ToolResult> => {
     try {
-      const { action, text: code, tabId } = input;
+      const { action, text: code, tabId, rawOutput } = input;
       if ('javascript_exec' !== action)
         throw new Error("'javascript_exec' is the only supported action");
       if (!code) throw new Error('Code parameter is required');
@@ -189,6 +189,9 @@ export const javascriptTool: ToolDefinition<JavaScriptToolInput> = {
             return blockedNotice(
               'Cookie/query string data — value contains key=value pairs separated by ; or &'
             );
+          // rawOutput (CLI exec --output) keeps the full value so large JSON
+          // payloads stay parseable on disk; only the total-output cap applies.
+          if (rawOutput) return value;
           return value.length > SINGLE_VALUE_CHAR_LIMIT ? truncateNotice(value) : value;
         }
         if (value && 'object' === typeof value && !Array.isArray(value)) {

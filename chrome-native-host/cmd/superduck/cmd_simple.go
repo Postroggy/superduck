@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -47,9 +48,18 @@ func runSimpleToolToFile(toolName, cmdLabel string, args map[string]any, path st
 	args["tabId"] = gflags.Tab
 
 	rec := cliclient.AuditRecord{Cmd: cmdLabel}
-	raw, err := cliclient.RunTool(toolName, args, clientOpts(), &rec)
+	// RunToolJSON + stripTabContextText gives the PURE tool output (no synthetic
+	// "Tab Context" tail), so files written via --output are directly parseable
+	// (e.g. JSON payloads) instead of carrying the human-readable suffix.
+	raw, err := cliclient.RunToolJSON(toolName, args, clientOpts(), &rec)
 	if err != nil {
 		return err
+	}
+	var envelope struct {
+		Output string `json:"output"`
+	}
+	if jsonErr := json.Unmarshal([]byte(raw), &envelope); jsonErr == nil && envelope.Output != "" {
+		raw = envelope.Output
 	}
 	if err := os.WriteFile(path, []byte(raw), 0o644); err != nil {
 		return err
