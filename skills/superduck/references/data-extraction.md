@@ -419,3 +419,49 @@ superduck --session "$SID" --tab "$TAB" page_text --format html
   `[contenteditable="plaintext-only"]` containers when no semantic element
   matches, prefers the largest non-empty matching container, and falls back to
   `document.body` when all candidates are empty.
+
+## Batch Extraction & Lazy-Loaded Pages (experiment/superduck-cli-fixes)
+
+These primitives exist only in the `experiment/superduck-cli-fixes` branch
+(our fork). Upstream may not have them yet.
+
+### Conditional wait instead of fixed sleep
+
+Lazy-loading pages (infinite scroll, SPA data, "load more" buttons) need a
+conditional wait, not `wait N`:
+
+```bash
+# Wait until the job cards actually render (max 15s)
+superduck --session "$SID" --tab "$TAB" wait_for_selector '.job-card' --timeout 15
+
+# Wait until a loading spinner disappears
+superduck --session "$SID" --tab "$TAB" wait_for_selector '.spinner' --absent --timeout 10
+```
+
+On timeout the command errors with
+`not found after Ns — selector "..."` instead of silently continuing, so a
+broken selector is caught immediately.
+
+### exec output transparency & large-payload bypass
+
+`exec` truncates: single string values over 1000 chars are cut with a
+`[TRUNCATED] (first 1000 of N chars)` marker (the original length is stated),
+and total output over 51200 chars is cut with
+`[OUTPUT TRUNCATED] (exceeded 51200 chars; original N chars)`. A
+`[BLOCKED: ...]` message now explains which rule fired, so it is never a
+script bug in disguise.
+
+For batch scraping that produces large JSON, write the raw response to a file
+instead of the terminal channel:
+
+```bash
+# The file gets the RAW tool response (including truncation markers, if any);
+# stdout only prints "wrote N bytes to <path>".
+superduck --session "$SID" --tab "$TAB" exec --output /tmp/jobs.json \
+  'JSON.stringify(window.__collected)'
+```
+
+Parse `/tmp/jobs.json` directly (e.g. with `python3`/`jq`) — no terminal
+encoding or size noise. If the response is still truncated at the exec layer,
+store results on `window.__out` and read back in chunks, or prefer
+`page_text --format html --max-chars N` for page content.
