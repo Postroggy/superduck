@@ -151,6 +151,19 @@ superduck --session "$SID" --tab "$TAB" exec 'JSON.stringify({title: document.ti
 data. The helper `scripts/extract-data.mjs` strips the trailing `Tab Context`
 from `exec` output and is safer for repeated scraping tasks.
 
+**`exec` output is limited and its execution model has quirks:**
+- Code runs inside an async function wrapper — top-level `return` raises
+  `SyntaxError: Illegal return statement`. Write a bare expression
+  (`window.myData.value`), not `return window.myData.value`.
+- Single string values > 1000 chars are truncated with a
+  `[TRUNCATED] (first 1000 of N chars)` marker; total output > 51200 chars is
+  cut off. For large results, store them on `window` and read back in chunks:
+  `superduck --tab "$TAB" exec 'window.__out = [...]; window.__out'`.
+- **Bypass the terminal channel entirely for large payloads:**
+  `superduck --tab "$TAB" exec --output /tmp/out.json '...'` writes the raw
+  tool response (including truncation markers, if any) to a file and prints
+  only a byte-count summary — parse the file directly instead of the terminal.
+
 **Rich-text editors (knowledge bases, Wiki, Feishu/Lark docs, online docs):
 `page_text` already matches their contenteditable containers, so plain
 `page_text` usually works.** Use `page_text --format html` only when you need

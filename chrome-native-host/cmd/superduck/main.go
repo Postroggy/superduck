@@ -176,7 +176,8 @@ EXAMPLES:
 
   # active-tab shortcuts (no --tab needed)
   superduck context --full | head -50
-  superduck tabs --json
+  superduck tabs --json | jq '.output.tabs[]?.id'   # envelope: {tool, ok, output, ...}
+  superduck tabs --json | jq '.tabContext.currentTabId'  # same envelope as tab_group
 
 Run 'superduck <command> --help' for command-specific flags.
 `

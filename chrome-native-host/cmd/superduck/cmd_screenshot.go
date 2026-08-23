@@ -14,6 +14,7 @@ import (
 func cmdScreenshot(argv []string) error {
 	fs := flag.NewFlagSet("screenshot", flag.ContinueOnError)
 	output := fs.String("output", "", "Save the captured image to this path or directory (trailing / uses native-host UUID as filename)")
+	fs.StringVar(output, "o", "", "Shorthand for --output")
 	if err := fs.Parse(reorderFlagsFirst(argv)); err != nil {
 		return err
 	}

@@ -35,6 +35,29 @@ func runToolOutput(toolName, cmdLabel string, args map[string]any) error {
 	return nil
 }
 
+// runSimpleToolToFile dispatches a tool call like runSimpleTool but writes the
+// RAW tool response to a file instead of printing it. This bypasses the
+// terminal channel entirely — large or structured payloads land on disk
+// verbatim (no human-readable reformatting), so callers can parse them without
+// hitting the CLI output limits or terminal-encoding noise.
+func runSimpleToolToFile(toolName, cmdLabel string, args map[string]any, path string) error {
+	if gflags.Tab == 0 {
+		return fmt.Errorf("--tab <id> is required for %s", cmdLabel)
+	}
+	args["tabId"] = gflags.Tab
+
+	rec := cliclient.AuditRecord{Cmd: cmdLabel}
+	raw, err := cliclient.RunTool(toolName, args, clientOpts(), &rec)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(path, []byte(raw), 0o644); err != nil {
+		return err
+	}
+	fmt.Printf("wrote %d bytes to %s\n", len(raw), path)
+	return nil
+}
+
 func readStdin() (string, error) {
 	b, err := io.ReadAll(os.Stdin)
 	if err != nil {
