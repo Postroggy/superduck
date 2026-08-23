@@ -4,6 +4,7 @@ import { AgentIndicatorController } from './controller';
 type FakeElement = {
   parentNode: unknown;
   style: Record<string, string>;
+  dataset?: Record<string, string>;
 };
 
 type ControllerInternals = {
@@ -76,5 +77,31 @@ describe('AgentIndicatorController restoreInterruptiveIndicatorsAfterToolUse', (
     expect(blockingOverlayEl.style.pointerEvents).toBe('auto');
     expect(blockingOverlayEl.style.opacity).toBe('1');
     expect(appendChild).toHaveBeenCalledWith(blockingOverlayEl);
+  });
+
+  it('does not restore the blocking overlay while the CDP layer still hides it', () => {
+    // The CDP input layer set the shared hidden marker (hiddenCount > 0).
+    // The controller must NOT resurrect the pointer-blocking overlay — the
+    // CDP layer owns the restore and would otherwise leave it visible and
+    // swallowing the next click (dropdown/date-picker blocking bug).
+    const appendChild = vi.fn();
+    const blockingOverlayEl: FakeElement = {
+      parentNode: null,
+      style: { display: 'none', pointerEvents: 'none', opacity: '0' },
+      dataset: { superduckCdpHidden: '1' }
+    };
+    const controller = createController({
+      agentActive: true,
+      blockingOverlayEl,
+      shadow: {
+        getDocumentMountRoot: () => ({ appendChild })
+      }
+    });
+
+    controller.restoreInterruptiveIndicatorsAfterToolUse();
+
+    expect(blockingOverlayEl.style.display).toBe('none');
+    expect(blockingOverlayEl.style.pointerEvents).toBe('none');
+    expect(appendChild).not.toHaveBeenCalled();
   });
 });

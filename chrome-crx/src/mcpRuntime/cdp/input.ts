@@ -43,7 +43,13 @@ const BLOCKING_OVERLAY_DATASET_KEYS = {
   hiddenCount: 'superduckToolHiddenCount',
   previousDisplay: 'superduckPreviousDisplay',
   previousVisibility: 'superduckPreviousVisibility',
-  previousPointerEvents: 'superduckPreviousPointerEvents'
+  previousPointerEvents: 'superduckPreviousPointerEvents',
+  // Shared marker between the CDP-input layer (this file) and the agent
+  // indicator controller (content script). The controller's
+  // restoreInterruptiveIndicatorsAfterToolUse must NOT bring the blocking
+  // overlay back while this marker is present — the CDP layer still owns the
+  // hide (its hiddenCount > 0) and will restore it when it reaches zero.
+  hiddenMarker: 'superduckCdpHidden'
 } as const;
 
 export function createCdpInput(deps: CdpInputDeps) {
@@ -65,6 +71,7 @@ export function createCdpInput(deps: CdpInputDeps) {
             overlay.dataset[datasetKeys.previousPointerEvents] = overlay.style.pointerEvents;
           }
           overlay.dataset[datasetKeys.hiddenCount] = String(hiddenCount + 1);
+          overlay.dataset[datasetKeys.hiddenMarker] = '1';
 
           overlay.style.display = 'none';
           overlay.style.visibility = 'hidden';
@@ -106,6 +113,7 @@ export function createCdpInput(deps: CdpInputDeps) {
           delete overlay.dataset[datasetKeys.previousDisplay];
           delete overlay.dataset[datasetKeys.previousVisibility];
           delete overlay.dataset[datasetKeys.previousPointerEvents];
+          delete overlay.dataset[datasetKeys.hiddenMarker];
         },
         args: [BLOCKING_OVERLAY_ID, BLOCKING_OVERLAY_DATASET_KEYS]
       });

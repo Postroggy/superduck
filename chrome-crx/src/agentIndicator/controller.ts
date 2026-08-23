@@ -464,6 +464,13 @@ export class AgentIndicatorController {
     }
 
     if (this.blockingOverlayEl) {
+      // The CDP input layer may still be hiding the blocking overlay (its
+      // hiddenCount > 0, marker present). If so, do NOT restore it here —
+      // the CDP layer owns the restore and will bring it back when its count
+      // reaches zero. Restoring now would resurrect the pointer-blocking
+      // overlay mid-tool-use and swallow the next click (the "overlay blocks
+      // dropdowns/date pickers" bug).
+      if (this.blockingOverlayEl.dataset?.superduckCdpHidden === '1') return;
       this.blockingOverlayEl.style.display = '';
       this.blockingOverlayEl.style.visibility = '';
       this.blockingOverlayEl.style.pointerEvents = 'auto';
