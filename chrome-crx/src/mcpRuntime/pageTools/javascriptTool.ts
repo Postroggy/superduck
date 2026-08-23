@@ -214,7 +214,11 @@ export const javascriptTool: ToolDefinition<JavaScriptToolInput> = {
         return value;
       };
 
-      const maxOutputSize = 51200;
+      // Normal interactive output is capped at 51200 chars. rawOutput (CLI
+      // exec --output) raises the cap to the native-messaging channel budget
+      // (with safety margin, same as get_page_text) so large payloads survive
+      // the trip to disk — the file is the real consumer, not a model context.
+      const maxOutputSize = rawOutput ? 900 * 1024 : 51200;
 
       if (evalResult.exceptionDetails) {
         isError = true;
