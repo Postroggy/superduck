@@ -27,7 +27,14 @@ export const superduckListTabsTool: ToolDefinition<Record<string, never>> = {
           active: t.active,
           focusedWindow: t.windowId === lastFocused.id
         }));
-      return { output: JSON.stringify({ activeWindowId: lastFocused.id, tabs: out }, null, 2) };
+      // `tabs` and `activeWindowId` are top-level fields so the native host /
+      // CLI can surface them in structuredContent (JSON consumers get
+      // .tabs[].id without parsing the human-readable output string).
+      return {
+        output: JSON.stringify({ activeWindowId: lastFocused.id, tabs: out }, null, 2),
+        tabs: out,
+        activeWindowId: lastFocused.id
+      };
     } catch (err) {
       return {
         error: `superduck_list_tabs failed: ${err instanceof Error ? err.message : String(err)}`

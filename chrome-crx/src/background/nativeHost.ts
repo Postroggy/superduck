@@ -184,6 +184,30 @@ export function createNativeHostManager(options: NativeHostManagerOptions = {}):
     return { type: 'tool_response', error: { content: errorContent } };
   }
 
+  // Structured fields from a tool result that should be exposed to native
+  // clients as structuredContent (MCP/CLI JSON consumers). Content-bearing
+  // fields (output/error/base64Image/...) stay in `content`; everything else
+  // that is JSON-friendly — tabContext, tabs, activeWindowId, ... — becomes
+  // structured data so clients don't have to parse the human-readable string.
+  function buildStructuredContent(result: Record<string, unknown>): unknown {
+    const CONTENT_KEYS = new Set([
+      'output',
+      'error',
+      'base64Image',
+      'imageFormat',
+      'imageId',
+      'content',
+      'is_error'
+    ]);
+    const structured: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(result)) {
+      if (CONTENT_KEYS.has(key)) continue;
+      if (value === undefined) continue;
+      structured[key] = value;
+    }
+    return Object.keys(structured).length > 0 ? structured : undefined;
+  }
+
   function sendToolResponse({
     content,
     isError,
@@ -278,7 +302,7 @@ export function createNativeHostManager(options: NativeHostManagerOptions = {}):
       sendToolResponse({
         content: result.content ?? '',
         isError: result.is_error,
-        structuredContent: result.tabContext ? { tabContext: result.tabContext } : undefined
+        structuredContent: buildStructuredContent(result)
       });
     } catch (err) {
       sendToolResponse(
