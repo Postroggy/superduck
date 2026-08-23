@@ -17,7 +17,6 @@ import {
   executeScreenshot,
   executeType,
   executeWait,
-  executeWaitForSelector,
   executeScroll,
   executeKey,
   executeDrag,
@@ -522,9 +521,6 @@ export const computerTool: ToolDefinition<ComputerToolParams> = {
           case 'wait':
             return await executeWait(toolParams);
 
-          case 'wait_for_selector':
-            return await executeWaitForSelector(effectiveTabId, toolParams);
-
           case 'scroll':
             return await executeScroll(
               effectiveTabId,
@@ -706,11 +702,10 @@ export const computerTool: ToolDefinition<ComputerToolParams> = {
             'triple_click',
             'zoom',
             'scroll_to',
-            'hover',
-            'wait_for_selector'
+            'hover'
           ],
           description:
-            'The action to perform:\n* `left_click`: Click an element. Use `ref` from read_page (preferred) or `coordinate` as fallback.\n* `right_click`: Right-click an element. Use `ref` (preferred) or `coordinate`.\n* `double_click`: Double-click an element. Use `ref` (preferred) or `coordinate`.\n* `triple_click`: Triple-click an element. Use `ref` (preferred) or `coordinate`.\n* `type`: Type a string of text.\n* `screenshot`: Take a screenshot of the screen.\n* `wait`: Wait for a specified number of seconds.\n* `wait_for_selector`: Wait until a CSS selector exists (or disappears) in the page. Use instead of `wait` when the page loads content lazily (infinite scroll, SPA rendering, async data).\n* `scroll`: Scroll up, down, left, or right at the specified coordinates.\n* `key`: Press a specific keyboard key.\n* `left_click_drag`: Drag from start_coordinate to coordinate.\n* `zoom`: Take a screenshot of a specific region for closer inspection.\n* `scroll_to`: Scroll an element into view using its element reference ID from read_page or find tools.\n* `hover`: Move the mouse cursor to the specified coordinates or element without clicking. Useful for revealing tooltips, dropdown menus, or triggering hover states.'
+            'The action to perform:\n* `left_click`: Click an element. Use `ref` from read_page (preferred) or `coordinate` as fallback.\n* `right_click`: Right-click an element. Use `ref` (preferred) or `coordinate`.\n* `double_click`: Double-click an element. Use `ref` (preferred) or `coordinate`.\n* `triple_click`: Triple-click an element. Use `ref` (preferred) or `coordinate`.\n* `type`: Type a string of text.\n* `screenshot`: Take a screenshot of the screen.\n* `wait`: Wait for a specified number of seconds.\n* `scroll`: Scroll up, down, left, or right at the specified coordinates.\n* `key`: Press a specific keyboard key.\n* `left_click_drag`: Drag from start_coordinate to coordinate.\n* `zoom`: Take a screenshot of a specific region for closer inspection.\n* `scroll_to`: Scroll an element into view using its element reference ID from read_page or find tools.\n* `hover`: Move the mouse cursor to the specified coordinates or element without clicking. Useful for revealing tooltips, dropdown menus, or triggering hover states.'
         },
         coordinate: {
           type: 'array',
@@ -730,16 +725,6 @@ export const computerTool: ToolDefinition<ComputerToolParams> = {
           minimum: 0,
           maximum: 30,
           description: 'The number of seconds to wait. Required for `wait`. Maximum 30 seconds.'
-        },
-        selector: {
-          type: 'string',
-          description:
-            'A CSS selector to wait for. Required for `wait_for_selector`. Polls the page every 250ms until the selector matches an element (or, with `absent: true`, until it matches none). Max timeout 60s.'
-        },
-        absent: {
-          type: 'boolean',
-          description:
-            'For `wait_for_selector` only. When true, wait until the selector is ABSENT (e.g. a loading spinner disappears) instead of present.'
         },
         scroll_direction: {
           type: 'string',

@@ -92,11 +92,6 @@ MOUSE / KEYBOARD (all require --tab <id>):
                              Scroll wheel ticks at (x,y); --amount is wheel ticks (default 3).
   scroll_to --ref <refId>    Scroll a specific element (from read_page refs) into view.
   wait <seconds>             Pause the CLI between actions (e.g. wait 0.5).
-  wait_for_selector <css> [--timeout N] [--absent]
-                             Wait until a CSS selector appears (default), or
-                             disappears (--absent). Polls every 250ms — prefer
-                             over fixed wait for lazy-loaded content.
-                             --timeout max 60s (default 10).
   zoom <x0> <y0> <x1> <y1> [--output PATH]
                              Capture a rectangular region as a PNG/JPEG (good for icon inspection).
 
@@ -280,8 +275,6 @@ func main() {
 		err = cmdKey(rest)
 	case "wait":
 		err = cmdWait(rest)
-	case "wait_for_selector":
-		err = cmdWaitForSelector(rest)
 	case "scroll":
 		err = cmdScroll(rest)
 	case "left_click_drag":
