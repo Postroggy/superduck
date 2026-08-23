@@ -138,6 +138,19 @@ sleep 2
 Use `context` to verify load. If using `wait`, the unit is seconds:
 `superduck --session "$SID" --tab "$TAB" wait 1`, not `wait 1000`.
 
+For lazily-rendered content (infinite scroll, SPA data, async lists), prefer a
+**conditional wait** over fixed seconds — `wait_for_selector` polls the page
+every 250ms until a CSS selector matches (or, with `--absent`, until it
+disappears, e.g. a loading spinner):
+
+```bash
+superduck --session "$SID" --tab "$TAB" wait_for_selector '.job-card' --timeout 15
+superduck --session "$SID" --tab "$TAB" wait_for_selector '.spinner' --absent --timeout 10
+```
+
+If the selector never appears, the command errors with a clear
+`not found after Ns — selector "..."` message instead of silently continuing.
+
 ## Reading and Extraction
 
 ```bash

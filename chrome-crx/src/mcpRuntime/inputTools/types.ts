@@ -7,6 +7,8 @@ export interface ComputerToolParams {
   coordinate?: [number, number];
   text?: string;
   duration?: number;
+  selector?: string;
+  absent?: boolean;
   scroll_direction?: string;
   scroll_amount?: number;
   start_coordinate?: [number, number];

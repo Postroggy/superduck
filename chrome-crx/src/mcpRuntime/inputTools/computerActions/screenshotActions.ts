@@ -1,4 +1,5 @@
 import { cdpDebugger, generateUniqueId } from '../../cdp';
+import type { CdpRuntimeEvaluateResult } from '../../cdp';
 import type { ToolResult } from '../../pageTools';
 import type { ComputerToolParams, ClickOptions } from '../types';
 
@@ -33,4 +34,73 @@ export async function executeWait(params: ComputerToolParams): Promise<ToolResul
   const ms = Math.round(1000 * params.duration);
   await new Promise<void>((resolve) => setTimeout(resolve, ms));
   return { output: `Waited for ${params.duration} second${params.duration === 1 ? '' : 's'}` };
+}
+
+export interface WaitForSelectorParams {
+  selector?: string;
+  /** Timeout in seconds. Default 10, max 60. */
+  timeout?: number;
+  /** Wait until the selector is ABSENT instead of present. */
+  absent?: boolean;
+}
+
+const MAX_WAIT_FOR_SELECTOR_SECONDS = 60;
+
+// Polls the page for a selector via CDP Runtime.evaluate. Simple polling keeps
+// the implementation self-contained (no content-script round trip) and is
+// accurate enough for the agentic wait-for-element use case; a MutationObserver
+// variant would add latency at the edges for little gain.
+export async function executeWaitForSelector(
+  tabId: number,
+  params: WaitForSelectorParams
+): Promise<ToolResult> {
+  const selector = params.selector;
+  if (!selector) throw new Error('selector parameter is required for wait_for_selector');
+  let timeoutSec = params.timeout ?? 10;
+  if (timeoutSec <= 0) timeoutSec = 10;
+  if (timeoutSec > MAX_WAIT_FOR_SELECTOR_SECONDS)
+    throw new Error(
+      `wait_for_selector timeout cannot exceed ${MAX_WAIT_FOR_SELECTOR_SECONDS} seconds`
+    );
+  const absent = params.absent === true;
+
+  const deadline = Date.now() + Math.round(1000 * timeoutSec);
+  const expression = `
+    (() => {
+      try {
+        return !!document.querySelector(${JSON.stringify(selector)});
+      } catch (e) {
+        return { __invalidSelector: String(e && e.message ? e.message : e) };
+      }
+    })()
+  `;
+
+  while (Date.now() < deadline) {
+    const evalResult = await cdpDebugger.sendCommand<CdpRuntimeEvaluateResult>(
+      tabId,
+      'Runtime.evaluate',
+      {
+        expression,
+        returnByValue: true
+      }
+    );
+    const value = evalResult?.result?.value;
+    if (value && typeof value === 'object' && '__invalidSelector' in value) {
+      const err = (value as { __invalidSelector: string }).__invalidSelector;
+      throw new Error(`wait_for_selector: invalid selector ${JSON.stringify(selector)}: ${err}`);
+    }
+    const present = value === true;
+    if (absent ? !present : present) {
+      return {
+        output: absent
+          ? `Selector "${selector}" is now absent (waited ${timeoutSec}s max)`
+          : `Selector "${selector}" found (waited ${timeoutSec}s max)`
+      };
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+
+  return {
+    error: `wait_for_selector: ${absent ? 'still present' : 'not found'} after ${timeoutSec}s — selector "${selector}"`
+  };
 }
