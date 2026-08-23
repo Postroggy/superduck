@@ -88,6 +88,36 @@ export function createCdpInput(deps: CdpInputDeps) {
     }
   }
 
+  // Polls elementFromPoint at the target until the blocking overlay is no
+  // longer hit-testable there, or the budget runs out. The agent indicator
+  // hides the overlay asynchronously (HIDE_FOR_TOOL_USE defers its response by
+  // up to ~200ms), so a blind sleep can fire the click while the overlay is
+  // still visible — and the click gets swallowed. This makes the "hide before
+  // click" step race-free.
+  async function waitForOverlayCleared(
+    tabId: number,
+    x: number,
+    y: number,
+    budgetMs: number
+  ): Promise<void> {
+    const deadline = Date.now() + budgetMs;
+    while (Date.now() < deadline) {
+      const cleared = await chrome.scripting
+        .executeScript({
+          target: { tabId },
+          func: (px: number, py: number, overlayId: string) => {
+            const hit = document.elementFromPoint(px, py);
+            return !hit || (hit.id !== overlayId && !hit.closest?.('#' + overlayId));
+          },
+          args: [Math.round(x), Math.round(y), BLOCKING_OVERLAY_ID]
+        })
+        .then((results) => results?.[0]?.result === true)
+        .catch(() => false);
+      if (cleared) return;
+      await new Promise<void>((resolve) => setTimeout(resolve, 30));
+    }
+  }
+
   async function restorePointerBlockingOverlaysAfterToolUse(tabId: number): Promise<void> {
     try {
       await chrome.scripting.executeScript({
@@ -204,7 +234,14 @@ export function createCdpInput(deps: CdpInputDeps) {
       });
 
       if (!options?.skipIndicator) {
-        await new Promise<void>((resolve) => setTimeout(resolve, 100));
+        // The agent indicator's HIDE_FOR_TOOL_USE handler delays its response
+        // by up to ~200ms (double rAF + 50ms), so a fixed 100ms wait let the
+        // click fire while the blocking overlay was still visible — the click
+        // landed on the overlay and was swallowed (the "overlay blocks
+        // dropdowns/date pickers" bug). Wait longer AND verify the overlay is
+        // actually gone at the target point before dispatching.
+        await new Promise<void>((resolve) => setTimeout(resolve, 120));
+        await waitForOverlayCleared(tabId, x, y, 250);
       }
 
       for (let i = 1; i <= clickCount; i++) {
