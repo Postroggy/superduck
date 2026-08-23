@@ -22,7 +22,7 @@ export const javascriptTool: ToolDefinition<JavaScriptToolInput> = {
     text: {
       type: 'string',
       description:
-        "The JavaScript code to execute. The code will be evaluated in the page context. The result of the last expression will be returned automatically. Do NOT use 'return' statements - just write the expression you want to evaluate (e.g., 'window.myData.value' not 'return window.myData.value'). You can access and modify the DOM, call page functions, and interact with page variables."
+        "The JavaScript code to execute. Code runs inside an async function wrapper in the page context — top-level 'return' is NOT supported and raises a SyntaxError. Write a bare expression to return it (e.g. 'window.myData.value', not 'return window.myData.value'); use multi-statement code (const x = 1; x + 1) freely, and store larger results on window (e.g. 'window.__out = [...]; window.__out') to read them back. Output is limited: single string values over 1000 chars are truncated with a [TRUNCATED] marker stating the original length, and total output over 51200 chars is cut off — use get_page_text (format='html' preserves markup) to extract large page content instead."
     },
     tabId: {
       type: 'number',
@@ -163,18 +163,33 @@ export const javascriptTool: ToolDefinition<JavaScriptToolInput> = {
       // lookbehind rejects any key=value whose prefix sits inside `<...>`.
       const cookieQueryPattern =
         /(?<!<[^>]*)(?:^|[;&\s])(?:[A-Za-z_][A-Za-z0-9_.-]*=[^;&]*(?:[;&]\s*[A-Za-z_][A-Za-z0-9_.-]*=[^;&]*)*)/;
+      // Human-readable block/truncate notices. Keep the bare `[TRUNCATED]` /
+      // `[BLOCKED: <rule>]` markers greppable (existing consumers match on
+      // them), then append the reason and exact drop counts so callers know
+      // what happened instead of silently working with cut-off data.
+      const SINGLE_VALUE_CHAR_LIMIT = 1000;
+      const truncateNotice = (value: string): string =>
+        `${value.substring(0, SINGLE_VALUE_CHAR_LIMIT)}[TRUNCATED] (first ${SINGLE_VALUE_CHAR_LIMIT} of ${value.length} chars)`;
+      const blockedNotice = (rule: string): string => `[BLOCKED: ${rule}]`;
       const sanitizeValue = (value: unknown, depth: number = 0): unknown => {
         if (depth > 5) return '[TRUNCATED: Max depth exceeded]';
         if ('string' === typeof value) {
           if (value.match(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/))
-            return '[BLOCKED: JWT token]';
-          if (/^[A-Za-z0-9+/]{20,}={0,2}$/.test(value)) return '[BLOCKED: Base64 encoded data]';
-          if (/^[a-f0-9]{32,}$/i.test(value)) return '[BLOCKED: Hex credential]';
+            return blockedNotice('JWT token — value matches JWT header.payload.signature shape');
+          if (/^[A-Za-z0-9+/]{20,}={0,2}$/.test(value))
+            return blockedNotice(
+              'Base64 encoded data — value looks like raw base64 (>=20 chars, no spaces)'
+            );
+          if (/^[a-f0-9]{32,}$/i.test(value))
+            return blockedNotice('Hex credential — value is a 32+ char pure hex string');
           // Normalize HTML entities that act as separators (&amp; -> &) so a
           // credential string followed by entity-encoded HTML is still caught.
           const normalized = value.replace(/&amp;/g, '&');
-          if (cookieQueryPattern.test(normalized)) return '[BLOCKED: Cookie/query string data]';
-          return value.length > 1000 ? value.substring(0, 1000) + '[TRUNCATED]' : value;
+          if (cookieQueryPattern.test(normalized))
+            return blockedNotice(
+              'Cookie/query string data — value contains key=value pairs separated by ; or &'
+            );
+          return value.length > SINGLE_VALUE_CHAR_LIMIT ? truncateNotice(value) : value;
         }
         if (value && 'object' === typeof value && !Array.isArray(value)) {
           const sanitized: Record<string, unknown> = {};
@@ -255,7 +270,10 @@ export const javascriptTool: ToolDefinition<JavaScriptToolInput> = {
       }
 
       if (output.length > maxOutputSize) {
-        output = output.substring(0, maxOutputSize) + '\n[OUTPUT TRUNCATED: Exceeded 50KB limit]';
+        const originalLength = output.length;
+        output =
+          output.substring(0, maxOutputSize) +
+          `\n[OUTPUT TRUNCATED] (exceeded ${maxOutputSize} chars; original ${originalLength} chars)`;
       }
 
       const validTabs = await tabGroupManager.getValidTabsWithMetadataForContext(
@@ -290,7 +308,7 @@ export const javascriptTool: ToolDefinition<JavaScriptToolInput> = {
         text: {
           type: 'string',
           description:
-            "The JavaScript code to execute. The code will be evaluated in the page context. The result of the last expression will be returned automatically. Do NOT use 'return' statements - just write the expression you want to evaluate (e.g., 'window.myData.value' not 'return window.myData.value'). You can access and modify the DOM, call page functions, and interact with page variables."
+            "The JavaScript code to execute. Code runs inside an async function wrapper in the page context — top-level 'return' is NOT supported and raises a SyntaxError. Write a bare expression to return it (e.g. 'window.myData.value', not 'return window.myData.value'); use multi-statement code (const x = 1; x + 1) freely, and store larger results on window (e.g. 'window.__out = [...]; window.__out') to read them back. Output is limited: single string values over 1000 chars are truncated with a [TRUNCATED] marker stating the original length, and total output over 51200 chars is cut off — use get_page_text (format='html' preserves markup) to extract large page content instead."
         },
         tabId: {
           type: 'number',

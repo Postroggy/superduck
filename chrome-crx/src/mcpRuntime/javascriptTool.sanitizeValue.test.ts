@@ -209,7 +209,9 @@ describe('javascript_tool sanitizeValue: truncation before credential detection'
       context
     );
 
-    expect((result as { output: string }).output).toBe('[BLOCKED: Cookie/query string data]');
+    expect((result as { output: string }).output).toMatch(
+      /^\[BLOCKED: Cookie\/query string data[ —]/
+    );
   });
 
   it('still blocks LONG cookie/query strings (>512 chars, no length exemption)', async () => {
@@ -223,7 +225,9 @@ describe('javascript_tool sanitizeValue: truncation before credential detection'
       context
     );
 
-    expect((result as { output: string }).output).toBe('[BLOCKED: Cookie/query string data]');
+    expect((result as { output: string }).output).toMatch(
+      /^\[BLOCKED: Cookie\/query string data[ —]/
+    );
   });
 
   it('still blocks cookie-wrapped JWTs over 512 chars (no length exemption)', async () => {
@@ -242,7 +246,9 @@ describe('javascript_tool sanitizeValue: truncation before credential detection'
       context
     );
 
-    expect((result as { output: string }).output).toBe('[BLOCKED: Cookie/query string data]');
+    expect((result as { output: string }).output).toMatch(
+      /^\[BLOCKED: Cookie\/query string data[ —]/
+    );
   });
 
   it('still blocks credential strings with an HTML suffix (no HTML exemption)', async () => {
@@ -258,7 +264,9 @@ describe('javascript_tool sanitizeValue: truncation before credential detection'
       context
     );
 
-    expect((result as { output: string }).output).toBe('[BLOCKED: Cookie/query string data]');
+    expect((result as { output: string }).output).toMatch(
+      /^\[BLOCKED: Cookie\/query string data[ —]/
+    );
   });
 
   it('still blocks long cookie-wrapped JWTs with an HTML suffix', async () => {
@@ -273,7 +281,9 @@ describe('javascript_tool sanitizeValue: truncation before credential detection'
       context
     );
 
-    expect((result as { output: string }).output).toBe('[BLOCKED: Cookie/query string data]');
+    expect((result as { output: string }).output).toMatch(
+      /^\[BLOCKED: Cookie\/query string data[ —]/
+    );
   });
 
   it('still blocks location.search values with a leading "?"', async () => {
@@ -286,7 +296,9 @@ describe('javascript_tool sanitizeValue: truncation before credential detection'
       context
     );
 
-    expect((result as { output: string }).output).toBe('[BLOCKED: Cookie/query string data]');
+    expect((result as { output: string }).output).toMatch(
+      /^\[BLOCKED: Cookie\/query string data[ —]/
+    );
   });
 
   it('still blocks cookie values containing "=" (base64 padding)', async () => {
@@ -299,7 +311,9 @@ describe('javascript_tool sanitizeValue: truncation before credential detection'
       context
     );
 
-    expect((result as { output: string }).output).toBe('[BLOCKED: Cookie/query string data]');
+    expect((result as { output: string }).output).toMatch(
+      /^\[BLOCKED: Cookie\/query string data[ —]/
+    );
   });
 
   it('still blocks credentials followed by &amp;-encoded HTML', async () => {
@@ -310,7 +324,9 @@ describe('javascript_tool sanitizeValue: truncation before credential detection'
       context
     );
 
-    expect((result as { output: string }).output).toBe('[BLOCKED: Cookie/query string data]');
+    expect((result as { output: string }).output).toMatch(
+      /^\[BLOCKED: Cookie\/query string data[ —]/
+    );
   });
 
   it('still blocks JSON.stringify(document.cookie) — prefixed with quotes', async () => {
@@ -323,7 +339,9 @@ describe('javascript_tool sanitizeValue: truncation before credential detection'
       context
     );
 
-    expect((result as { output: string }).output).toBe('[BLOCKED: Cookie/query string data]');
+    expect((result as { output: string }).output).toMatch(
+      /^\[BLOCKED: Cookie\/query string data[ —]/
+    );
   });
 
   it('still blocks template-literal-prefixed cookies — "Cookies: ..."', async () => {
@@ -334,7 +352,9 @@ describe('javascript_tool sanitizeValue: truncation before credential detection'
       context
     );
 
-    expect((result as { output: string }).output).toBe('[BLOCKED: Cookie/query string data]');
+    expect((result as { output: string }).output).toMatch(
+      /^\[BLOCKED: Cookie\/query string data[ —]/
+    );
   });
 
   it('still blocks short JWT tokens (security unchanged)', async () => {
@@ -348,7 +368,7 @@ describe('javascript_tool sanitizeValue: truncation before credential detection'
       context
     );
 
-    expect((result as { output: string }).output).toBe('[BLOCKED: JWT token]');
+    expect((result as { output: string }).output).toMatch(/^\[BLOCKED: JWT token[ —]/);
   });
 
   it('still blocks short base64 payloads (security unchanged)', async () => {
@@ -359,7 +379,7 @@ describe('javascript_tool sanitizeValue: truncation before credential detection'
       context
     );
 
-    expect((result as { output: string }).output).toBe('[BLOCKED: Base64 encoded data]');
+    expect((result as { output: string }).output).toMatch(/^\[BLOCKED: Base64 encoded data[ —]/);
   });
 
   it('still blocks JWTs longer than the 512-char cookie-detection cap', async () => {
@@ -378,7 +398,7 @@ describe('javascript_tool sanitizeValue: truncation before credential detection'
       context
     );
 
-    expect((result as { output: string }).output).toBe('[BLOCKED: JWT token]');
+    expect((result as { output: string }).output).toMatch(/^\[BLOCKED: JWT token[ —]/);
   });
 
   it('returns long non-credential strings truncated with marker instead of blocked', async () => {
@@ -394,7 +414,37 @@ describe('javascript_tool sanitizeValue: truncation before credential detection'
     const output = (result as { output: string }).output;
     expect(output).not.toContain('[BLOCKED');
     expect(output).toContain('[TRUNCATED]');
-    expect(output.length).toBeLessThanOrEqual(1015);
+    // Marker + length notice: "…[TRUNCATED] (first 1000 of 5054 chars)".
+    expect(output.length).toBeLessThanOrEqual(1038);
+  });
+
+  it('truncation notice reports the original length so agents know what was dropped', async () => {
+    const longText = 'plain prose without credential shape ' + 'y'.repeat(5000);
+    stubEvalValue(longText, 'string');
+
+    const result = await javascriptTool.execute(
+      { action: 'javascript_exec', text: 'document.body.textContent', tabId: 10 },
+      context
+    );
+
+    const output = (result as { output: string }).output;
+    expect(output).toContain('[TRUNCATED]');
+    // The marker must state the exact drop: first 1000 of 5040 chars.
+    expect(output).toContain(`first 1000 of ${longText.length} chars`);
+  });
+
+  it('block notices explain the rule that fired instead of a bare label', async () => {
+    stubEvalValue('session_id=abc123; theme=dark', 'string');
+
+    const result = await javascriptTool.execute(
+      { action: 'javascript_exec', text: 'document.cookie', tabId: 10 },
+      context
+    );
+
+    const output = (result as { output: string }).output;
+    // Marker prefix stays greppable; the reason is appended.
+    expect(output.startsWith('[BLOCKED: Cookie/query string data —')).toBe(true);
+    expect(output).toContain('key=value pairs');
   });
 
   it('still blocks sensitive object keys recursively (security unchanged)', async () => {
