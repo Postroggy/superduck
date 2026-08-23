@@ -425,23 +425,6 @@ superduck --session "$SID" --tab "$TAB" page_text --format html
 These primitives exist only in the `experiment/superduck-cli-fixes` branch
 (our fork). Upstream may not have them yet.
 
-### Conditional wait instead of fixed sleep
-
-Lazy-loading pages (infinite scroll, SPA data, "load more" buttons) need a
-conditional wait, not `wait N`:
-
-```bash
-# Wait until the job cards actually render (max 15s)
-superduck --session "$SID" --tab "$TAB" wait_for_selector '.job-card' --timeout 15
-
-# Wait until a loading spinner disappears
-superduck --session "$SID" --tab "$TAB" wait_for_selector '.spinner' --absent --timeout 10
-```
-
-On timeout the command errors with
-`not found after Ns — selector "..."` instead of silently continuing, so a
-broken selector is caught immediately.
-
 ### exec output transparency & large-payload bypass
 
 `exec` truncates: single string values over 1000 chars are cut with a
