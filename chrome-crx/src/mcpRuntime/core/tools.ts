@@ -26,6 +26,7 @@ import { superduckTools, superduckToolNames } from '../superduckTools';
 import { superduckCdpTool } from '../superduckTools/cdpTool';
 import { superduckDownloadFileTool } from '../superduckTools/downloadFileTool';
 import {
+  tabsCloseMcpTool,
   tabsContextMcpTool,
   tabsCreateMcpTool,
   tabsFinalizeMcpTool,
@@ -66,6 +67,7 @@ export function getAllTools(): ToolRegistryEntry[] {
       tabsContextMcpTool,
       tabsCreateMcpTool,
       tabsFinalizeMcpTool,
+      tabsCloseMcpTool,
       tabsNameSessionMcpTool,
       shortcutsListTool,
       shortcutsGetTool,
@@ -100,6 +102,7 @@ export const allTools: ToolRegistryEntry[] = [
   tabsContextMcpTool,
   tabsCreateMcpTool,
   tabsFinalizeMcpTool,
+  tabsCloseMcpTool,
   tabsNameSessionMcpTool,
   shortcutsListTool,
   shortcutsGetTool,

@@ -1,5 +1,6 @@
 import { formatTabsOutput } from './urlUtils';
 import { tabGroupManager } from '../tabState';
+import { closeSessionTabs } from '../tabState/tabClose';
 import type { ToolContext, ToolDefinition } from '../browserAutomation';
 
 interface TabsContextMcpArgs {
@@ -16,6 +17,10 @@ interface TabsFinalizeMcpArgs {
     tabId?: number;
     status?: 'handoff' | 'deliverable';
   }[];
+}
+
+interface TabsCloseMcpArgs {
+  tabIds?: number[];
 }
 
 interface TabsNameSessionMcpArgs {
@@ -237,6 +242,56 @@ export const tabsFinalizeMcpTool: ToolDefinition<TabsFinalizeMcpArgs> = {
         }
       },
       required: []
+    }
+  })
+};
+
+export const tabsCloseMcpTool: ToolDefinition<TabsCloseMcpArgs> = {
+  name: 'tabs_close_mcp',
+  description:
+    'Close tabs this session opened for its own work once the results no longer need to stay on screen. Only tabs leased to the current browser session are closed; anything else is skipped and reported. Leave tabs the user should inspect open.',
+  tabAccess: 'write',
+  parameters: {
+    tabIds: {
+      type: 'array',
+      description: 'Tab IDs to close, as returned by tabs_context_mcp or tabs_create_mcp.',
+      items: { type: 'integer' }
+    }
+  },
+  execute: async (args, context) => {
+    const tabIds = (args?.tabIds ?? []).filter(
+      (tabId): tabId is number => typeof tabId === 'number' && Number.isInteger(tabId)
+    );
+    if (tabIds.length === 0) return { error: 'tabs_close_mcp needs a non-empty tabIds array' };
+    try {
+      const result = await closeSessionTabs(context.browserSessionScope?.sessionId, tabIds);
+      const skipped =
+        result.skippedTabIds.length > 0
+          ? ` Skipped ${result.skippedTabIds.join(', ')}: not leased to this session.`
+          : '';
+      return {
+        output: `Closed ${result.closedTabIds.length} tab(s): ${result.closedTabIds.join(', ')}.${skipped}`
+      };
+    } catch (err) {
+      return {
+        error: `Failed to close tabs: ${err instanceof Error ? err.message : 'Unknown error'}`
+      };
+    }
+  },
+  toProviderSchema: async () => ({
+    name: 'tabs_close_mcp',
+    description:
+      'Close tabs this session opened for its own work once they are no longer needed on screen. Tabs outside the current session are skipped.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        tabIds: {
+          type: 'array',
+          description: 'Tab IDs to close.',
+          items: { type: 'integer' }
+        }
+      },
+      required: ['tabIds']
     }
   })
 };
