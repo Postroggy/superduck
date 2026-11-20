@@ -31,9 +31,11 @@ export const resizeWindowTool: ToolDefinition<ResizeWindowToolInput> = {
       const tab = await chrome.tabs.get(effectiveTabId);
       if (!tab.windowId) throw new Error('Tab does not have an associated window');
 
+      const win = await chrome.windows.get(tab.windowId);
       await chrome.windows.update(tab.windowId, {
         width: Math.floor(width),
-        height: Math.floor(height)
+        height: Math.floor(height),
+        ...(win.state && win.state !== 'normal' ? { state: 'normal' as const } : {})
       });
 
       return {
