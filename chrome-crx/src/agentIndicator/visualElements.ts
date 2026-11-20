@@ -1,4 +1,4 @@
-import { BLOCKING_OVERLAY_ID } from './constants';
+const BLOCKING_OVERLAY_ID = 'superduck-agent-blocking-overlay';
 
 export function createGlowBorder(): HTMLElement {
   const wrapper = document.createElement('div');
