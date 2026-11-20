@@ -1,9 +1,27 @@
 import { PermissionTools } from '../domainPermissions';
 import { tabGroupManager } from '../tabState';
 import { cdpDebugger } from '../cdp';
-import type { NetworkRequest } from '../cdp';
+import type { NetworkRequest, WebSocketFrame } from '../cdp';
 import type { ToolDefinition, ToolResult } from '../pageToolsSupport/types';
 import type { ReadNetworkRequestsToolInput } from './types';
+
+const DEFAULT_MAX_BODY_CHARS = 4000;
+const MAX_LISTED_WS_FRAMES = 10;
+
+function clip(text: string, limit: number): string {
+  if (limit <= 0 || text.length <= limit) return text;
+  return `${text.slice(0, limit)}… [+${text.length - limit} chars]`;
+}
+
+function formatFrames(frames: WebSocketFrame[], limit: number): string[] {
+  const shown = frames.slice(-MAX_LISTED_WS_FRAMES);
+  const lines = shown.map(
+    (frame) => `ws ${'sent' === frame.direction ? '->' : '<-'} ${clip(frame.payload, limit)}`
+  );
+  if (frames.length > shown.length)
+    lines.unshift(`... ${frames.length - shown.length} earlier frames omitted`);
+  return lines;
+}
 
 export const readNetworkRequestsTool: ToolDefinition<ReadNetworkRequestsToolInput> = {
   name: 'read_network_requests',
@@ -34,11 +52,30 @@ export const readNetworkRequestsTool: ToolDefinition<ReadNetworkRequestsToolInpu
       description:
         'Maximum number of requests to return. Defaults to 100. Increase only if you need more results.',
       required: false
+    },
+    includeBodies: {
+      type: 'boolean',
+      description:
+        'Include request bodies (postData), response bodies (fetched through Network.getResponseBody) and WebSocket frame payloads. Bodies are clipped by maxBodyChars.',
+      required: false
+    },
+    maxBodyChars: {
+      type: 'number',
+      description:
+        'Clip each body/frame payload to this many characters when includeBodies is set. Defaults to 4000, 0 = no clip.',
+      required: false
     }
   },
   execute: async (input, context): Promise<ToolResult> => {
     try {
-      const { tabId, urlPattern, clear = false, limit = 100 } = input;
+      const {
+        tabId,
+        urlPattern,
+        clear = false,
+        limit = 100,
+        includeBodies = false,
+        maxBodyChars = DEFAULT_MAX_BODY_CHARS
+      } = input;
       if (!context?.tabId) throw new Error('No active tab found');
 
       const effectiveTabId = await context.resolveTabId(tabId);
@@ -94,10 +131,44 @@ export const readNetworkRequestsTool: ToolDefinition<ReadNetworkRequestsToolInpu
       const limitedRequests = requests.slice(0, limit);
       const hasMore = requests.length > limit;
 
+      if (includeBodies) {
+        for (const request of limitedRequests) {
+          if ('WEBSOCKET' === request.method) continue;
+          if (
+            undefined === request.postData ||
+            (undefined === request.responseBody && !request.responseBodyError && !request.failure)
+          )
+            await cdpDebugger.readNetworkBodies(trackedTabId, request.requestId);
+        }
+      }
+
       const formatted = limitedRequests
         .map((req: NetworkRequest, idx: number) => {
-          const status = req.status || 'pending';
-          return `${idx + 1}. url: ${req.url}\n   method: ${req.method}\n   statusCode: ${status}`;
+          const lines = [
+            `${idx + 1}. url: ${req.url}`,
+            `method: ${req.method}`,
+            `statusCode: ${req.status ?? (req.failure ? 'unavailable' : 'pending')}`
+          ];
+          if (req.mimeType) lines.push(`mimeType: ${req.mimeType}`);
+          if (req.protocol) lines.push(`protocol: ${req.protocol}`);
+          if (req.responseTimeMs !== undefined) lines.push(`responseTimeMs: ${req.responseTimeMs}`);
+          if (req.durationMs !== undefined) lines.push(`durationMs: ${req.durationMs}`);
+          if (req.transferredBytes !== undefined)
+            lines.push(`transferredBytes: ${req.transferredBytes}`);
+          if (req.failure) lines.push(`failure: ${req.failure}`);
+          if (includeBodies && req.postData)
+            lines.push(`requestBody: ${clip(req.postData, maxBodyChars)}`);
+          if (includeBodies && req.responseBody !== undefined)
+            lines.push(
+              `responseBody${req.responseBodyBase64Encoded ? ' (base64)' : ''}: ${clip(req.responseBody, maxBodyChars)}`
+            );
+          if (includeBodies && req.responseBodyError)
+            lines.push(`responseBodyError: ${req.responseBodyError}`);
+          if (req.webSocketFrames?.length) {
+            lines.push(`webSocketFrames: ${req.webSocketFrameCount ?? req.webSocketFrames.length}`);
+            if (includeBodies) lines.push(...formatFrames(req.webSocketFrames, maxBodyChars));
+          }
+          return lines.join('\n   ');
         })
         .join('\n\n');
 
@@ -152,6 +223,16 @@ export const readNetworkRequestsTool: ToolDefinition<ReadNetworkRequestsToolInpu
           type: 'number',
           description:
             'Maximum number of requests to return. Defaults to 100. Increase only if you need more results.'
+        },
+        includeBodies: {
+          type: 'boolean',
+          description:
+            'Include request bodies (postData), response bodies (fetched through Network.getResponseBody) and WebSocket frame payloads. Bodies are clipped by maxBodyChars.'
+        },
+        maxBodyChars: {
+          type: 'number',
+          description:
+            'Clip each body/frame payload to this many characters when includeBodies is set. Defaults to 4000, 0 = no clip.'
         }
       },
       required: ['tabId']

@@ -18,6 +18,7 @@ export const javascriptTool: ToolDefinition<JavaScriptToolInput> = {
     "Execute JavaScript code in the context of the current page. The code runs in the page's context and can interact with the DOM, window object, and page variables. Returns the result of the last expression or any thrown errors. If you don't have a valid tab ID, use tabs_context first to get available tabs.",
   tabAccess: 'write',
   parameters: {
+    resultOnly: { type: 'boolean', description: 'Print the result without any tab notes.' },
     action: { type: 'string', description: "Must be set to 'javascript_exec'" },
     text: {
       type: 'string',
@@ -32,7 +33,7 @@ export const javascriptTool: ToolDefinition<JavaScriptToolInput> = {
   },
   execute: async (input, context): Promise<ToolResult> => {
     try {
-      const { action, text: code, tabId } = input;
+      const { action, text: code, tabId, resultOnly } = input;
       if ('javascript_exec' !== action)
         throw new Error("'javascript_exec' is the only supported action");
       if (!code) throw new Error('Code parameter is required');
@@ -197,11 +198,10 @@ export const javascriptTool: ToolDefinition<JavaScriptToolInput> = {
         } else if ('object' === result.type) {
           if ('node' === result.subtype) {
             output = result.description || '[DOM Node]';
-          } else if ('array' === result.subtype) {
-            output = result.description || '[Array]';
+          } else if (result.value !== undefined) {
+            output = JSON.stringify(sanitizeValue(result.value), null, 2);
           } else {
-            const sanitized = sanitizeValue(result.value || {});
-            output = result.description || JSON.stringify(sanitized, null, 2);
+            output = result.description || '[Object]';
           }
         } else if (void 0 !== result.value) {
           const sanitized = sanitizeValue(result.value);
@@ -229,7 +229,7 @@ export const javascriptTool: ToolDefinition<JavaScriptToolInput> = {
         };
       }
 
-      if (openedTabIds.length > 0) {
+      if (openedTabIds.length > 0 && resultOnly !== true) {
         const suffix = `Opened new tab${openedTabIds.length === 1 ? '' : 's'} in current group: ${openedTabIds.join(', ')}`;
         output = output ? `${output}\n${suffix}` : suffix;
       }
@@ -266,6 +266,7 @@ export const javascriptTool: ToolDefinition<JavaScriptToolInput> = {
     input_schema: {
       type: 'object',
       properties: {
+        resultOnly: { type: 'boolean', description: 'Print the result without any tab notes.' },
         action: { type: 'string', description: "Must be set to 'javascript_exec'" },
         text: {
           type: 'string',

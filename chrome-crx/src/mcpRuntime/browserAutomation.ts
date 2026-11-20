@@ -1,4 +1,4 @@
-export { cdpDebugger } from './cdp';
+export { cdpDebugger, describeTabPause, isTabPaused } from './cdp';
 export {
   javascriptTool,
   navigateTool,

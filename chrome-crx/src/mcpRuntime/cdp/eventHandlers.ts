@@ -1,15 +1,27 @@
 import { extractDomain } from './helpers';
 import { addConsoleMessage } from './consoleTracking';
-import { addNetworkRequest, updateNetworkRequestStatus } from './networkTracking';
+import { recordCdpEvent } from './eventBuffer';
+import {
+  addNetworkRequest,
+  appendWebSocketFrame,
+  finishNetworkRequest,
+  recordNetworkResponse,
+  registerWebSocketRequest
+} from './networkTracking';
 import { getWindowOpenEventsByTab } from './state';
+import { noteCdpEvent } from './sessionState';
 import type {
   ConsoleApiCalledParams,
   ConsoleMessage,
   ExceptionThrownParams,
   LoadingFailedParams,
+  LoadingFinishedParams,
   NetworkRequest,
   RequestWillBeSentParams,
   ResponseReceivedParams,
+  WebSocketClosedParams,
+  WebSocketCreatedParams,
+  WebSocketFrameParams,
   WindowOpenEvent
 } from './types';
 
@@ -35,6 +47,11 @@ export function registerDebuggerEventHandlers(): void {
     ) => {
       const tabId = source.tabId;
       if (!tabId) return;
+
+      // Raw feed for `superduck_cdp` `events` reads; a no-op unless capture is on.
+      recordCdpEvent(tabId, method, params);
+      // Pause/breakpoint bookkeeping for `cdp status` and the paused-tab guard.
+      noteCdpEvent(tabId, method, params);
 
       if ('Runtime.consoleAPICalled' === method) {
         const consoleParams = params as ConsoleApiCalledParams;
@@ -78,20 +95,64 @@ export function registerDebuggerEventHandlers(): void {
         const requestId = requestParams.requestId;
         const request = requestParams.request;
         const documentURL = requestParams.documentURL;
+        if (requestParams.redirectResponse) {
+          recordNetworkResponse(
+            tabId,
+            requestId,
+            requestParams.timestamp,
+            requestParams.redirectResponse
+          );
+          finishNetworkRequest(tabId, requestId, requestParams.timestamp);
+        }
         const networkRequest: NetworkRequest = {
           requestId,
           url: request.url,
-          method: request.method
+          method: request.method,
+          startedAt: requestParams.timestamp
         };
+        if (request.postData) networkRequest.postData = request.postData;
         const pageUrl = documentURL || request.url;
         const domain = extractDomain(pageUrl);
         addNetworkRequest(tabId, domain, networkRequest);
       } else if ('Network.responseReceived' === method) {
         const responseParams = params as ResponseReceivedParams;
-        updateNetworkRequestStatus(tabId, responseParams.requestId, responseParams.response.status);
+        recordNetworkResponse(
+          tabId,
+          responseParams.requestId,
+          responseParams.timestamp,
+          responseParams.response
+        );
+      } else if ('Network.loadingFinished' === method) {
+        const { requestId, timestamp, encodedDataLength } = params as LoadingFinishedParams;
+        finishNetworkRequest(tabId, requestId, timestamp, { transferredBytes: encodedDataLength });
       } else if ('Network.loadingFailed' === method) {
-        const requestId = (params as LoadingFailedParams).requestId;
-        updateNetworkRequestStatus(tabId, requestId, 503);
+        const { requestId, timestamp, canceled, errorText } = params as LoadingFailedParams;
+        const failure = canceled
+          ? 'canceled'
+          : (errorText?.match(/^net::ERR_[A-Z0-9_]+$/)?.[0] ?? 'failed');
+        finishNetworkRequest(tabId, requestId, timestamp, { failure });
+      } else if ('Network.webSocketCreated' === method) {
+        const { requestId, url } = params as WebSocketCreatedParams;
+        registerWebSocketRequest(tabId, requestId, url, extractDomain(url));
+      } else if ('Network.webSocketFrameSent' === method) {
+        const { requestId, timestamp, response } = params as WebSocketFrameParams;
+        appendWebSocketFrame(tabId, requestId, {
+          direction: 'sent',
+          timestamp,
+          opcode: response?.opcode,
+          payload: response?.payloadData ?? ''
+        });
+      } else if ('Network.webSocketFrameReceived' === method) {
+        const { requestId, timestamp, response } = params as WebSocketFrameParams;
+        appendWebSocketFrame(tabId, requestId, {
+          direction: 'received',
+          timestamp,
+          opcode: response?.opcode,
+          payload: response?.payloadData ?? ''
+        });
+      } else if ('Network.webSocketClosed' === method) {
+        const { requestId, timestamp } = params as WebSocketClosedParams;
+        finishNetworkRequest(tabId, requestId, timestamp);
       } else if ('Page.windowOpen' === method) {
         const windowOpenParams = params as PageWindowOpenParams;
         if (windowOpenParams.url) {

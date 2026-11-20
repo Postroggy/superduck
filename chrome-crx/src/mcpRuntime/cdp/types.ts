@@ -24,11 +24,33 @@ export interface ConsoleTabData {
   messages: ConsoleMessage[];
 }
 
+export interface WebSocketFrame {
+  direction: 'sent' | 'received';
+  timestamp: number;
+  opcode?: number;
+  payload: string;
+  truncated?: boolean;
+}
+
 export interface NetworkRequest {
   requestId: string;
   url: string;
   method: string;
+  startedAt: number;
   status?: number;
+  mimeType?: string;
+  protocol?: string;
+  responseTimeMs?: number;
+  durationMs?: number;
+  transferredBytes?: number;
+  failure?: string;
+  postData?: string;
+  postDataFetched?: boolean;
+  webSocketFrames?: WebSocketFrame[];
+  webSocketFrameCount?: number;
+  responseBody?: string;
+  responseBodyBase64Encoded?: boolean;
+  responseBodyError?: string;
 }
 
 export interface NetworkTabData {
@@ -227,22 +249,39 @@ export interface ExceptionThrownParams {
 
 export interface RequestWillBeSentParams {
   requestId: string;
+  timestamp: number;
+  redirectResponse?: NetworkResponse;
   request: {
     url: string;
     method: string;
+    postData?: string;
   };
   documentURL?: string;
 }
 
+export interface NetworkResponse {
+  status: number;
+  mimeType?: string;
+  protocol?: string;
+}
+
 export interface ResponseReceivedParams {
   requestId: string;
-  response: {
-    status?: number;
-  };
+  timestamp: number;
+  response: NetworkResponse;
+}
+
+export interface LoadingFinishedParams {
+  requestId: string;
+  timestamp: number;
+  encodedDataLength: number;
 }
 
 export interface LoadingFailedParams {
   requestId: string;
+  timestamp: number;
+  errorText?: string;
+  canceled?: boolean;
 }
 
 export type DispatchMouseEventParams = {
@@ -262,3 +301,107 @@ export type SendCommand = (
   method: string,
   params?: Record<string, unknown>
 ) => Promise<object | undefined>;
+
+export interface WebSocketCreatedParams {
+  requestId: string;
+  url: string;
+}
+
+export interface WebSocketFrameParams {
+  requestId: string;
+  timestamp: number;
+  response?: {
+    opcode?: number;
+    payloadData?: string;
+  };
+}
+
+export interface WebSocketClosedParams {
+  requestId: string;
+  timestamp: number;
+}
+
+export interface ResponseBodyResult {
+  body?: string;
+  base64Encoded?: boolean;
+}
+
+export interface BufferedCdpEvent {
+  seq: number;
+  method: string;
+  params: unknown;
+  timestamp: number;
+  bytes: number;
+}
+
+export interface CdpTabEventBuffer {
+  nextSeq: number;
+  events: BufferedCdpEvent[];
+  bytes: number;
+  capturing: boolean;
+}
+
+export interface CdpPausedFrame {
+  functionName?: string;
+  url?: string;
+  lineNumber?: number;
+  columnNumber?: number;
+  callFrameId?: string;
+}
+
+export interface CdpPausedState {
+  reason?: string;
+  since: number;
+  hitBreakpoints?: string[];
+  frames: CdpPausedFrame[];
+}
+
+export interface CdpBreakpointRecord {
+  id: string;
+  url?: string;
+  urlRegex?: string;
+  lineNumber?: number;
+  columnNumber?: number;
+  scriptId?: string;
+  createdAt: number;
+}
+
+// SuperDuck's own bookkeeping around a chrome.debugger session. Chrome stays the
+// source of truth for the protocol; this only mirrors what the extension needs
+// to answer "what is this tab doing right now" without a round trip.
+export interface CdpTabSessionState {
+  enabledDomains: Set<string>;
+  breakpoints: Map<string, CdpBreakpointRecord>;
+  paused?: CdpPausedState;
+  lastCommand?: string;
+  lastCommandAt?: number;
+  lastError?: string;
+}
+
+export interface CdpSessionReport {
+  attached: boolean;
+  enabledDomains: string[];
+  attachedTargets?: string[];
+  paused?: {
+    reason?: string;
+    sinceMs: number;
+    hitBreakpoints?: string[];
+    topFrame?: CdpPausedFrame;
+    frameCount: number;
+    frames: CdpPausedFrame[];
+  };
+  breakpoints: CdpBreakpointRecord[];
+  lastCommand?: string;
+  lastCommandAgeMs?: number;
+  lastError?: string;
+  events: { capturing: boolean; buffered: number; nextSeq: number };
+  network: { tracking: boolean; requests: number };
+}
+
+export interface CdpTargetSummary {
+  targetId: string;
+  type: string;
+  title?: string;
+  url?: string;
+  attached: boolean;
+}

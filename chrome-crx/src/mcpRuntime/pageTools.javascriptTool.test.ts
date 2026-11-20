@@ -188,3 +188,25 @@ describe('javascript_tool popup search isolation', () => {
     });
   });
 });
+
+it('returns the sanitized array value without appending tab notes in result-only mode', async () => {
+  fixtures.adoptChildTabsFromOpener.mockResolvedValue([41]);
+  fixtures.sendCommand.mockResolvedValue({
+    result: {
+      type: 'object',
+      subtype: 'array',
+      description: 'Array(2)',
+      value: [{ href: '/help' }, { accessToken: 'fixture-value' }]
+    }
+  });
+
+  const result = await javascriptTool.execute(
+    { action: 'javascript_exec', text: '[]', tabId: 10, resultOnly: true },
+    context
+  );
+  expect(JSON.parse(result.output!)).toEqual([
+    { href: '/help' },
+    { accessToken: '[BLOCKED: Sensitive key]' }
+  ]);
+  expect(result.tabContext?.executedOnTabId).toBe(41);
+});

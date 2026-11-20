@@ -23,6 +23,8 @@ import {
   type ToolResult
 } from '../browserAutomation';
 import { superduckTools, superduckToolNames } from '../superduckTools';
+import { superduckCdpTool } from '../superduckTools/cdpTool';
+import { superduckDownloadFileTool } from '../superduckTools/downloadFileTool';
 import {
   tabsContextMcpTool,
   tabsCreateMcpTool,
@@ -69,6 +71,8 @@ export function getAllTools(): ToolRegistryEntry[] {
       shortcutsGetTool,
       shortcutsExecuteTool,
       batchTool,
+      superduckCdpTool,
+      superduckDownloadFileTool,
       ...superduckTools
     ];
   }
@@ -101,6 +105,8 @@ export const allTools: ToolRegistryEntry[] = [
   shortcutsGetTool,
   shortcutsExecuteTool,
   batchTool,
+  superduckCdpTool,
+  superduckDownloadFileTool,
   ...superduckTools
 ];
 

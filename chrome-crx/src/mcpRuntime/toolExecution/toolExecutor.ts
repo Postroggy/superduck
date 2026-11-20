@@ -13,6 +13,7 @@ import { compressBase64Image } from '../../utils/imageCompressor';
 import { extractAppName } from '../core/urlUtils';
 import { trackEvent } from '../analytics';
 import { allTools, mcpToolNames } from '../core/tools';
+import { isBrowserScopedToolCall } from './toolScope';
 import type { BrowserSessionScope } from '../sessionScope';
 import { tabGroupManager } from '../tabState';
 
@@ -69,10 +70,18 @@ export class ToolExecutor {
   ): Promise<ToolResult> {
     const action =
       isRecord(toolInput) && typeof toolInput.action === 'string' ? toolInput.action : undefined;
+    const targetId =
+      isRecord(toolInput) && typeof toolInput.targetId === 'string'
+        ? toolInput.targetId
+        : undefined;
     return await withTracing(
       `tool_execution_${toolName}${action ? '_' + action : ''}`,
       async (span: Span) => {
-        if (!this.context.tabId && !mcpToolNames.includes(toolName)) {
+        if (
+          !this.context.tabId &&
+          !isBrowserScopedToolCall(toolName, action, targetId) &&
+          !mcpToolNames.includes(toolName)
+        ) {
           throw new Error('No tab available');
         }
         span.setAttribute('session_id', this.context.sessionId);
