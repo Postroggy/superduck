@@ -14,6 +14,8 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"runtime"
 	"sync"
 	"syscall"
 	"time"
@@ -532,7 +534,17 @@ func (s *Server) Close() error {
 func main() {
 	analytics.EnsureInstallID()
 
-	logFile, err := os.OpenFile("/tmp/chrome-native-host.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+	logPath := "/tmp/chrome-native-host.log"
+	if runtime.GOOS == "windows" {
+		if localAppData := os.Getenv("LOCALAPPDATA"); localAppData != "" {
+			logPath = filepath.Join(localAppData, "SuperDuck", "chrome-native-host.log")
+		}
+	}
+	if err := os.MkdirAll(filepath.Dir(logPath), 0700); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to create log directory: %v\n", err)
+		os.Exit(1)
+	}
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to open log file: %v\n", err)
 		os.Exit(1)
