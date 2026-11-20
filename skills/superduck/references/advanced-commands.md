@@ -28,6 +28,61 @@ superduck --session "$SID" --tab "$TAB" network --url-pattern /api/ --limit 20
 
 Use `--clear` after reading if you need a fresh capture window.
 
+`--bodies` adds request/response bodies and captured WebSocket frames
+(`--max-body-chars` clips each payload, default 4000, `0` = no clip). This is the
+*assembled* view: the request list, timings, bodies and frames already joined, so
+you do not rebuild `requestId -> getResponseBody` by hand. For interception,
+blocking, extra headers or the raw `Network.webSocketFrame*` events, use
+`cdp Network.*` on the same tab.
+
+## Raw CDP
+
+`cdp` forwards any DevTools Protocol method verbatim. Enable a domain first, then
+call it; results come back as plain protocol JSON.
+
+```bash
+superduck --session "$SID" --tab "$TAB" cdp Network.enable
+superduck --session "$SID" --tab "$TAB" cdp Page.getLayoutMetrics
+superduck --session "$SID" --tab "$TAB" cdp CSS.enable
+superduck --session "$SID" --tab "$TAB" cdp CSS.getMatchedStylesForNode --params-file node.json
+superduck --session "$SID" --tab "$TAB" cdp status
+superduck --session "$SID" --tab "$TAB" cdp events --pattern Debugger.paused --wait-ms 8000
+superduck cdp targets --pattern worker
+```
+
+A script keeps a whole sequence inside one call: steps are `{"method","params"}`,
+`{"waitFor":"Debugger.paused","timeoutMs":5000}` (waits for a *new* event) or
+`{"sleepMs":200}`, and params can reference earlier steps
+(`"${2.event.params.callFrames.0.callFrameId}"`).
+
+```bash
+superduck --session "$SID" --tab "$TAB" cdp --script breakpoint-steps.json
+```
+
+On Windows PowerShell pass JSON through a file (`--params-file`, `--script`):
+native arguments lose their double quotes.
+
+## End-to-End Encrypted Sockets
+
+A Noise/AES-GCM tunnel (`/v1/noise`-style URLs, high-entropy frame bytes) never
+yields plaintext at the protocol layer. Hook the page's encrypt/decrypt instead:
+
+```bash
+SKILL_DIR="${SUPERDUCK_SKILL_DIR:-$HOME/.agent/skills/superduck}"
+node "$SKILL_DIR/scripts/cdp-ws-plaintext.mjs" list-hooks
+node "$SKILL_DIR/scripts/cdp-ws-plaintext.mjs" wrap --hooks ws,crypto --out /tmp/probe.json
+superduck --session "$SID" --tab "$TAB" cdp Runtime.evaluate --params-file /tmp/probe.json
+# ... drive the app ...
+superduck --session "$SID" --tab "$TAB" cdp Runtime.evaluate \
+  --params '{"expression":"JSON.stringify(globalThis.__sdWs||[])","returnByValue":true}' > /tmp/log.json
+node "$SKILL_DIR/scripts/cdp-ws-plaintext.mjs" decode /tmp/log.json --out /tmp/plain.txt
+```
+
+Plaintext often turns out to be a protobuf envelope carrying HTTP requests inside
+the socket, with zstd-compressed bodies; `decode` expands the fields and decompresses
+the bodies. If page hooks see nothing at all, the socket lives in a worker — check
+`cdp targets` and drive that target with `--target`.
+
 ## Ref-Based Interaction
 
 `read_page` returns refs for accessible elements. Refs are usually more stable
@@ -79,19 +134,43 @@ superduck --session "$SID" --tab "$TAB" exec 'window.scrollTo(0, 0)'
 superduck --session "$SID" --tab "$TAB" exec 'window.scrollTo(0, document.body.scrollHeight)'
 ```
 
-## Screenshots, Region Zoom, and Resize
+## Screenshots, Region Zoom, Resize, and Viewport Emulation
 
 ```bash
 superduck --session "$SID" --tab "$TAB" screenshot --output /tmp/
 superduck --session "$SID" --tab "$TAB" screenshot --output /tmp/step1.jpg
 superduck --session "$SID" --tab "$TAB" zoom 100 100 600 500 --output /tmp/region.jpg
 superduck --session "$SID" --tab "$TAB" resize 1366 768
+superduck --session "$SID" --tab "$TAB" viewport 375 812 --dpr 2 --mobile
+superduck --session "$SID" --tab "$TAB" viewport --clear --reload
 ```
 
 `zoom` captures or inspects a rectangular region. It is not browser page zoom.
 For screenshot output, a directory path ending in `/` auto-generates a filename;
 a file path uses that basename but may be extension-aligned to the real image
 format, commonly `.jpg`.
+
+`resize` moves the real browser window, so browser chrome eats into the result,
+`devicePixelRatio` keeps the display scale, the OS rejects tiny sizes, and a
+maximized window is restored first. `viewport` overrides the layout viewport
+instead: media queries, `innerWidth`, `devicePixelRatio` (`--dpr`) and `screen.*`
+follow the emulated size, with `--mobile` for mobile viewport behaviour, and no
+window is moved. Prefer `viewport` for breakpoint work; use `resize` only when the
+real window size is the thing under test.
+
+Emulation belongs to the debugger session and is dropped when it detaches
+(service worker restart, browser restart, user cancelling the debugging infobar).
+After clearing a mobile emulation the page keeps its emulated layout until it
+reloads, which is why `--clear` takes `--reload`.
+
+Raw CDP equivalent, when you need more knobs:
+
+```bash
+superduck --session "$SID" --tab "$TAB" cdp Emulation.setDeviceMetricsOverride \
+  --params '{"width":375,"height":812,"deviceScaleFactor":2,"mobile":true,"screenWidth":375,"screenHeight":812}'
+superduck --session "$SID" --tab "$TAB" cdp Emulation.setTouchEmulationEnabled --params '{"enabled":true,"maxTouchPoints":5}'
+superduck --session "$SID" --tab "$TAB" cdp Emulation.clearDeviceMetricsOverride
+```
 
 ## Uploads
 

@@ -44,6 +44,7 @@ vi.mock('./mcpTools', () => ({
   tabsContextMcpTool: fixtures.tool('tabs_context_mcp'),
   tabsCreateMcpTool: fixtures.tool('tabs_create_mcp'),
   tabsFinalizeMcpTool: fixtures.tool('tabs_finalize_mcp'),
+  tabsCloseMcpTool: fixtures.tool('tabs_close_mcp'),
   tabsNameSessionMcpTool: fixtures.tool('tabs_name_session_mcp')
 }));
 

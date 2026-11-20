@@ -120,6 +120,10 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    // Chrome extension pages run in an isolated world; <link rel="modulepreload">
+    // tags emitted by Vite trigger "cross-world extension resource mismatch"
+    // console noise and are redundant since Chrome 116+ supports modulepreload natively.
+    modulePreload: false,
     rollupOptions: {
       input: {
         // Extra HTML pages that are not listed in manifest.json

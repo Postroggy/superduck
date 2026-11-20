@@ -1,6 +1,6 @@
 import { isRecord } from '../../messageTypes';
 import type { MessagesClient } from '../../mcpServersStore';
-import { cdpDebugger } from '../browserAutomation';
+import { cdpDebugger, describeTabPause, isTabPaused } from '../browserAutomation';
 import { trackEvent } from '../analytics';
 import { tabGroupManager } from '../tabState';
 import { BrowserSessionConflictError } from '../tabState/tabLeases';
@@ -29,13 +29,30 @@ import type {
   ToolExecutorProcessOptions
 } from '../core/types';
 
-const TOOLS_WITH_INTERNAL_DEBUGGER_MANAGEMENT = new Set(['browser_batch']);
+const TOOLS_WITH_INTERNAL_DEBUGGER_MANAGEMENT = new Set([
+  'browser_batch',
+  'superduck_download_file'
+]);
 const DEBUGGER_ATTACH_TIMEOUT_MS = 10000;
 const TOOLS_WITH_SCRIPT_FALLBACK_ON_DEBUGGER_FAILURE = new Set([
   'read_page',
   'find',
   'get_page_text',
   'form_input'
+]);
+// While the debugger holds the renderer paused these tools would sit on the
+// timeout instead of returning anything useful, so they are answered with a
+// pointer to the paused frame instead. Debugger commands stay available.
+const TOOLS_BLOCKED_WHILE_PAUSED = new Set([
+  'javascript_tool',
+  'navigate',
+  'computer',
+  'form_input',
+  'upload_image',
+  'upload_file',
+  'browser_batch',
+  'gif_creator',
+  'resize_window'
 ]);
 
 let navigationBlockedError: string | undefined;
@@ -157,6 +174,17 @@ async function executeToolInner(options: ExecuteToolOptions): Promise<ExecuteToo
     }
     return createErrorResponse(
       'No tabs available. Please open a new tab or window in your browser.'
+    );
+  }
+
+  if (
+    tabId !== undefined &&
+    TOOLS_BLOCKED_WHILE_PAUSED.has(options.toolName) &&
+    isTabPaused(tabId)
+  ) {
+    const detail = describeTabPause(tabId) ?? `Tab ${tabId} is paused by the debugger.`;
+    return createErrorResponse(
+      `${detail}. Page tools are held while the renderer is paused — run 'cdp Debugger.resume' (or step), and 'cdp status' for the frame list.`
     );
   }
 

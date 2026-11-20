@@ -296,7 +296,7 @@ JSON.stringify(
 ### Node.js Data Extractor
 
 ```bash
-SKILL_DIR="${SUPERDUCK_SKILL_DIR:-${CODEX_HOME:-$HOME/.codex}/skills/superduck}"
+SKILL_DIR="${SUPERDUCK_SKILL_DIR:-$HOME/.agent/skills/superduck}"
 node "$SKILL_DIR/scripts/extract-data.mjs" \
   https://example.com \
   ".item" \

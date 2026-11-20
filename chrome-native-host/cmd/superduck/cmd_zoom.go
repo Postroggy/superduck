@@ -4,9 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"strconv"
-	"time"
-
-	"chrome-native-host/internal/cliclient"
 )
 
 // cmdZoom: `superduck zoom --tab <id> <x0> <y0> <x1> <y1> [--output PATH]`
@@ -34,15 +31,5 @@ func cmdZoom(argv []string) error {
 		region[i] = v
 	}
 
-	args := map[string]any{"action": "zoom", "tabId": gflags.Tab, "region": region}
-	rec := cliclient.AuditRecord{Cmd: "zoom"}
-	v, err := callWithRetry("computer", args, 6, 500*time.Millisecond)
-	if err != nil {
-		_ = cliclient.WriteAudit(rec)
-		return err
-	}
-	rec.OK = true
-	_ = cliclient.WriteAudit(rec)
-
-	return handleImageCapture(v, *output, "zoom")
+	return runImageCapture("zoom", region, *output)
 }

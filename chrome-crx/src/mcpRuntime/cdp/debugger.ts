@@ -25,6 +25,14 @@ import {
   setDebuggerListenerRegistered
 } from './state';
 import { registerDebuggerEventHandlers as registerDebuggerEventHandlersImpl } from './eventHandlers';
+import { resetCdpEventBuffer } from './eventBuffer';
+import {
+  noteCdpCommandFailure,
+  noteCdpCommandResult,
+  noteCdpCommandSent,
+  resetCdpSessionState
+} from './sessionState';
+import { noteCdpTargetDetached } from './targets';
 import {
   enableConsoleTracking as enableConsoleTrackingImpl,
   getConsoleMessages as getConsoleMessagesImpl,
@@ -34,7 +42,8 @@ import {
   enableNetworkTracking as enableNetworkTrackingImpl,
   getNetworkRequests as getNetworkRequestsImpl,
   clearNetworkRequests as clearNetworkRequestsImpl,
-  isNetworkTrackingEnabled as isNetworkTrackingEnabledImpl
+  isNetworkTrackingEnabled as isNetworkTrackingEnabledImpl,
+  readNetworkBodies as readNetworkBodiesImpl
 } from './networkTracking';
 import type {
   ClickOptions,
@@ -150,11 +159,20 @@ class ChromeDebuggerProtocol {
    */
   registerDebuggerDetachHandler(): void {
     chrome.debugger.onDetach.addListener((source: chrome.debugger.Debuggee, reason: string) => {
+      if (source.targetId) {
+        noteCdpTargetDetached(source.targetId);
+        return;
+      }
       const tabId = source.tabId;
       if (!tabId) return;
 
       chrome.tabs.sendMessage(tabId, { type: 'HIDE_AGENT_INDICATORS' }).catch(() => {});
       tabGroupManager.setTabIndicatorState(tabId, 'none').catch(() => {});
+      resetCdpEventBuffer(tabId);
+      resetCdpSessionState(tabId);
+      // Domains do not survive a detach, so drop the flags that claim they are on.
+      ChromeDebuggerProtocol.networkTrackingEnabled.delete(tabId);
+      ChromeDebuggerProtocol.consoleTrackingEnabled.delete(tabId);
 
       if (reason !== 'canceled_by_user') return;
 
@@ -181,6 +199,8 @@ class ChromeDebuggerProtocol {
     ChromeDebuggerProtocol.consoleTrackingEnabled.delete(tabId);
     ChromeDebuggerProtocol.networkTrackingEnabled.delete(tabId);
     ChromeDebuggerProtocol.windowOpenEventsByTab.delete(tabId);
+    resetCdpEventBuffer(tabId);
+    resetCdpSessionState(tabId);
   }
 
   clearWindowOpenEvents(tabId: number): void {
@@ -375,14 +395,20 @@ class ChromeDebuggerProtocol {
         });
       });
 
+    noteCdpCommandSent(tabId, method, params);
     try {
-      return (await executeCommand()) as TResult;
+      const result = (await executeCommand()) as TResult;
+      noteCdpCommandResult(tabId, method, params, result);
+      return result;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       if (errorMessage.toLowerCase().includes('debugger is not attached')) {
         await this.attachDebuggerInner(tabId);
-        return (await executeCommand()) as TResult;
+        const result = (await executeCommand()) as TResult;
+        noteCdpCommandResult(tabId, method, params, result);
+        return result;
       }
+      noteCdpCommandFailure(tabId, method, error);
       throw error;
     }
   }
@@ -491,6 +517,10 @@ class ChromeDebuggerProtocol {
 
   getNetworkRequests(tabId: number, urlFilter?: string): NetworkRequest[] {
     return getNetworkRequestsImpl(tabId, urlFilter);
+  }
+
+  readNetworkBodies(tabId: number, requestId: string): Promise<NetworkRequest | undefined> {
+    return readNetworkBodiesImpl(tabId, requestId, this.boundSendCommand);
   }
 
   clearNetworkRequests(tabId: number): void {

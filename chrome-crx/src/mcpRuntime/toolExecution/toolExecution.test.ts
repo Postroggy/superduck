@@ -8,7 +8,9 @@ const fixtures = vi.hoisted(() => ({
   getOrCreateToolExecutor: vi.fn(),
   getToolTabAccess: vi.fn(),
   hasTool: vi.fn(),
-  trackEvent: vi.fn()
+  trackEvent: vi.fn(),
+  isTabPaused: vi.fn(),
+  describeTabPause: vi.fn()
 }));
 
 vi.mock('../agentActivity', () => ({
@@ -24,7 +26,9 @@ vi.mock('../browserAutomation', () => ({
   cdpDebugger: {
     isDebuggerAttached: vi.fn(),
     attachDebugger: vi.fn()
-  }
+  },
+  isTabPaused: fixtures.isTabPaused,
+  describeTabPause: fixtures.describeTabPause
 }));
 
 vi.mock('../core/tools', () => ({
@@ -105,5 +109,50 @@ describe('executeTool', () => {
         error_type: 'unknown_tool'
       })
     );
+  });
+
+  it('answers page tools with the paused frame instead of letting them hang', async () => {
+    fixtures.getTabForMcp.mockResolvedValue({
+      tabId: 9,
+      domain: 'example.test',
+      url: 'https://example.test/'
+    });
+    fixtures.isTabPaused.mockReturnValue(true);
+    fixtures.describeTabPause.mockReturnValue(
+      'tab 9 is paused at https://example.test/app.js:3 in pickUser (other)'
+    );
+
+    const result = await executeTool({
+      toolName: 'javascript_tool',
+      args: { tabId: 9 },
+      tabId: 9,
+      browserSessionId: 'session-a'
+    });
+
+    expect(result).toMatchObject({ is_error: true });
+    expect(JSON.stringify(result.content)).toContain('is paused at https://example.test/app.js:3');
+    expect(JSON.stringify(result.content)).toContain('Debugger.resume');
+    expect(fixtures.getOrCreateToolExecutor).not.toHaveBeenCalled();
+  });
+
+  it('leaves debugger-driven tools available while paused', async () => {
+    fixtures.getTabForMcp.mockResolvedValue({
+      tabId: 9,
+      domain: 'example.test',
+      url: 'https://example.test/'
+    });
+    fixtures.isTabPaused.mockReturnValue(true);
+    fixtures.getOrCreateToolExecutor.mockResolvedValue({
+      processToolResults: vi.fn().mockResolvedValue([{ content: [{ type: 'text', text: 'ok' }] }])
+    });
+
+    await executeTool({
+      toolName: 'superduck_cdp',
+      args: { tabId: 9 },
+      tabId: 9,
+      browserSessionId: 'session-a'
+    });
+
+    expect(fixtures.getOrCreateToolExecutor).toHaveBeenCalled();
   });
 });

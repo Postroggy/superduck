@@ -68,6 +68,41 @@ func runSimpleToolToFile(toolName, cmdLabel string, args map[string]any, path st
 	return nil
 }
 
+func runSimpleResultOnly(toolName, cmdLabel string, args map[string]any) error {
+	if gflags.Tab == 0 {
+		return fmt.Errorf("--tab <id> is required for %s", cmdLabel)
+	}
+	args["tabId"] = gflags.Tab
+	rec := cliclient.AuditRecord{Cmd: cmdLabel}
+	raw, err := cliclient.RunToolJSON(toolName, args, clientOpts(), &rec)
+	if err != nil {
+		return err
+	}
+	output, err := toolResultOnly(raw)
+	if err != nil {
+		return err
+	}
+	fmt.Println(output)
+	return nil
+}
+
+func toolResultOnly(raw string) (string, error) {
+	var response struct {
+		Output json.RawMessage `json:"output"`
+	}
+	if err := json.Unmarshal([]byte(raw), &response); err != nil || len(response.Output) == 0 {
+		return "", fmt.Errorf("tool response has no result")
+	}
+	var text string
+	if response.Output[0] == '"' {
+		if err := json.Unmarshal(response.Output, &text); err != nil {
+			return "", err
+		}
+		return text, nil
+	}
+	return string(response.Output), nil
+}
+
 func readStdin() (string, error) {
 	b, err := io.ReadAll(os.Stdin)
 	if err != nil {

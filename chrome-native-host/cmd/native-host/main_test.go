@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"chrome-native-host/internal/protocol"
+	"chrome-native-host/internal/sockutil"
 	"encoding/json"
 	"io"
 	"net"
@@ -27,8 +28,8 @@ func TestPrepareSocketPathRemovesStaleSocket(t *testing.T) {
 	listener.Close()
 	// Socket file still exists, but nothing is listening - it's stale
 
-	if err := prepareSocketPath(path); err != nil {
-		t.Fatalf("prepareSocketPath() error = %v", err)
+	if err := sockutil.Prepare(path); err != nil {
+		t.Fatalf("sockutil.Prepare() error = %v", err)
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("socket path still exists after stale cleanup: %v", err)
@@ -45,9 +46,9 @@ func TestPrepareSocketPathRejectsRegularFile(t *testing.T) {
 	}
 
 	// Should fail because the path exists but is not a socket
-	err := prepareSocketPath(path)
+	err := sockutil.Prepare(path)
 	if err == nil {
-		t.Fatal("prepareSocketPath() should fail for regular file, got nil")
+		t.Fatal("sockutil.Prepare() should fail for regular file, got nil")
 	}
 	// File should still exist (we don't remove non-socket files)
 	if _, statErr := os.Stat(path); statErr != nil {
@@ -66,8 +67,8 @@ func TestPrepareSocketPathKeepsLiveSocket(t *testing.T) {
 	}
 	defer listener.Close()
 
-	if err := prepareSocketPath(path); err == nil {
-		t.Fatal("prepareSocketPath() error = nil, want active socket error")
+	if err := sockutil.Prepare(path); err == nil {
+		t.Fatal("sockutil.Prepare() error = nil, want active socket error")
 	}
 
 	conn, err := net.Dial("unix", path)
@@ -424,7 +425,7 @@ func TestChromeResponseTimeoutForNonBatchUsesFallback(t *testing.T) {
 
 // TestPrepareSocketPathRaceWithShutdown simulates the race where the old
 // process is shutting down: first dial succeeds (old process still listening),
-// but by the time prepareSocketPath retries (after 500ms), the old process
+// but by the time sockutil.Prepare retries (after 500ms), the old process
 // has exited and the socket is stale.
 func TestPrepareSocketPathRaceWithShutdown(t *testing.T) {
 	t.Parallel()
@@ -438,17 +439,17 @@ func TestPrepareSocketPathRaceWithShutdown(t *testing.T) {
 	}
 
 	// Close the listener after 200ms — simulating the old process
-	// exiting during prepareSocketPath's 500ms wait. Don't remove the
+	// exiting during sockutil.Prepare's 500ms wait. Don't remove the
 	// socket file: it stays on disk as a stale socket (connection refused).
 	go func() {
 		<-time.After(200 * time.Millisecond)
 		listener.Close()
 	}()
 
-	// prepareSocketPath should: first dial succeeds → wait 500ms →
+	// sockutil.Prepare should: first dial succeeds → wait 500ms →
 	// second dial fails (listener closed) → treat as stale → succeed.
-	if err := prepareSocketPath(path); err != nil {
-		t.Fatalf("prepareSocketPath() should succeed after old process exits, got: %v", err)
+	if err := sockutil.Prepare(path); err != nil {
+		t.Fatalf("sockutil.Prepare() should succeed after old process exits, got: %v", err)
 	}
 
 	// Socket file should be cleaned up

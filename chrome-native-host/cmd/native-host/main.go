@@ -4,6 +4,7 @@ import (
 	"chrome-native-host/internal/analytics"
 	"chrome-native-host/internal/bridge"
 	"chrome-native-host/internal/protocol"
+	"chrome-native-host/internal/sockutil"
 	"chrome-native-host/internal/udsauth"
 	"encoding/json"
 	"errors"
@@ -13,14 +14,11 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"strings"
+	"path/filepath"
+	"runtime"
 	"sync"
 	"syscall"
 	"time"
-)
-
-const (
-	socketPath = "/tmp/chrome-native-host.sock"
 )
 
 const defaultIdentitySyncWait = 2 * time.Second
@@ -60,22 +58,23 @@ type Server struct {
 }
 
 func NewServer() (*Server, error) {
+	socketPath := sockutil.DefaultPath()
 	// bindAttempts covers the edge case where the old process's
 	// Listener.Close() removes our freshly-bound socket file. If
 	// net.Listen fails, re-run prepareSocketPath and retry.
 	const bindAttempts = 3
 	var listener net.Listener
 	for attempt := 0; attempt < bindAttempts; attempt++ {
-		if err := prepareSocketPath(socketPath); err != nil {
+		if err := sockutil.Prepare(socketPath); err != nil {
 			return nil, err
 		}
 
 		var err error
-		listener, err = net.Listen("unix", socketPath)
+		listener, err = sockutil.Listen(socketPath)
 		if err == nil {
 			// Verify the socket file still exists: the old process's
 			// Listener.Close() may have unlinked it after our bind.
-			if _, statErr := os.Lstat(socketPath); statErr != nil {
+			if _, statErr := sockutil.StatPath(socketPath); statErr != nil {
 				_ = listener.Close()
 				if os.IsNotExist(statErr) {
 					if attempt == bindAttempts-1 {
@@ -101,7 +100,7 @@ func NewServer() (*Server, error) {
 	}
 
 	// Restrict socket to owner-only so other local users cannot connect.
-	if err := os.Chmod(socketPath, 0700); err != nil {
+	if err := sockutil.RestrictPermissions(socketPath); err != nil {
 		slog.Warn("failed to restrict socket permissions", "path", socketPath, "error", err)
 	}
 
@@ -117,120 +116,6 @@ func NewServer() (*Server, error) {
 		startedAt:      time.Now(),
 		chromeReady:    true,
 	}, nil
-}
-
-// prepareSocketPath checks if a socket file exists at the given path and handles
-// stale socket cleanup. It reduces the TOCTOU race window by renaming before
-// removal rather than removing in place.
-func prepareSocketPath(path string) error {
-	// Check if socket exists
-	info, err := os.Lstat(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil // No existing socket, safe to proceed
-		}
-		return fmt.Errorf("failed to stat UDS socket: %w", err)
-	}
-
-	// Verify it's actually a socket, not a regular file or directory
-	if info.Mode()&os.ModeSocket == 0 {
-		return fmt.Errorf("path %s exists but is not a socket (mode: %v)", path, info.Mode())
-	}
-
-	// Socket exists, try to connect to see if it's active
-	conn, err := net.DialTimeout("unix", path, 200*time.Millisecond)
-	if err == nil {
-		_ = conn.Close()
-
-		// The socket is responding, but the owning process may be shutting
-		// down (race between old process SIGTERM/stdin-close and new process
-		// startup). Retry with short intervals — the old process typically
-		// exits within 200-300ms based on observed logs.
-		const maxRetries = 5
-		const retryInterval = 300 * time.Millisecond
-
-		slog.Info("socket appears active, retrying in case old process is shutting down", "path", path, "maxRetries", maxRetries)
-		stillAlive := true
-		for i := 0; i < maxRetries; i++ {
-			time.Sleep(retryInterval)
-			c, e := net.DialTimeout("unix", path, 200*time.Millisecond)
-			if e != nil {
-				if isConnRefused(e) {
-					slog.Info("previous process exited during retry", "path", path, "attempt", i+1)
-					stillAlive = false
-					break
-				}
-				return fmt.Errorf("socket at %s dial failed with unexpected error during retry %d: %w", path, i+1, e)
-			}
-			_ = c.Close()
-		}
-		if stillAlive {
-			return fmt.Errorf("chrome-native-host already listening at %s", path)
-		}
-		// Fall through to stale socket cleanup below
-	} else if !isConnRefused(err) {
-		// Only treat connection-refused errors as stale sockets.
-		// Other dial failures (permission denied, path is a directory, etc.)
-		// indicate a real problem and should not be silently removed.
-		return fmt.Errorf("socket at %s exists and dial failed with unexpected error: %w", path, err)
-	}
-
-	// Revalidate before cleanup: another replacement process may have
-	// bound a live socket at this path while we were in the retry loop.
-	// If the socket is now active, abort — the other process owns it.
-	conn, err = net.DialTimeout("unix", path, 200*time.Millisecond)
-	if err == nil {
-		_ = conn.Close()
-		return fmt.Errorf("chrome-native-host already listening at %s (recheck)", path)
-	}
-	if !isConnRefused(err) {
-		return fmt.Errorf("socket at %s recheck dial failed with unexpected error: %w", path, err)
-	}
-
-	// Socket is stale. Rename first to free the path immediately, then
-	// remove the renamed file. A unique suffix avoids colliding with a
-	// leftover .stale file from a previous crashed cleanup.
-	stalePath := fmt.Sprintf("%s.stale.%d", path, os.Getpid())
-	if err := os.Rename(path, stalePath); err != nil {
-		// Rename failed — the file may have been removed by the dying
-		// process (Go's net.Listener.Close removes UDS files). Check
-		// if the path is already gone; if so, we're done.
-		if os.IsNotExist(err) {
-			return nil
-		}
-		// If rename fails for other reasons, try direct remove as fallback
-		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("failed to remove stale UDS socket: %w", err)
-		}
-		return nil
-	}
-	// Successfully renamed, now remove the renamed file
-	if err := os.Remove(stalePath); err != nil {
-		// Log but don't fail - the important thing is the original path is clear
-		slog.Warn("failed to remove renamed stale socket", "path", stalePath, "error", err)
-	}
-	return nil
-}
-
-// isConnRefused reports whether the error indicates the peer is not listening
-// (connection refused or socket file does not exist), as opposed to a
-// permission error or other dial failure.
-func isConnRefused(err error) bool {
-	if err == nil {
-		return false
-	}
-	// net.OpError wraps the underlying syscall error
-	var opErr *net.OpError
-	if errors.As(err, &opErr) {
-		var sysErr *os.SyscallError
-		if errors.As(opErr.Err, &sysErr) {
-			return sysErr.Err == syscall.ECONNREFUSED || sysErr.Err == syscall.ENOENT
-		}
-	}
-	// Fallback: check the error string for common refused patterns
-	errStr := err.Error()
-	return strings.Contains(errStr, "connection refused") ||
-		strings.Contains(errStr, "no such file or directory")
 }
 
 func (s *Server) Run() error {
@@ -476,7 +361,7 @@ func (s *Server) healthSnapshot() map[string]interface{} {
 		"type":                        "health_response",
 		"ok":                          !closed,
 		"pid":                         os.Getpid(),
-		"socketPath":                  socketPath,
+		"socketPath":                  sockutil.DefaultPath(),
 		"chromeReady":                 chromeReady && !closed,
 		"udsConnections":              udsConnectionCount,
 		"authenticatedUdsConnections": authenticatedUDSConnectionCount,
@@ -632,8 +517,8 @@ func (s *Server) Close() error {
 			s.udsListener.Close()
 			// Note: Go's net.Listener.Close() for Unix domain sockets
 			// automatically removes the socket file. We intentionally do
-			// NOT call os.Remove(socketPath) here because it creates a
-			// race condition: if a new process has already bound a new
+			// NOT call os.Remove here because it creates a race
+			// condition: if a new process has already bound a new
 			// socket at the same path, os.Remove would delete the NEW
 			// socket, leaving the new process unreachable.
 		}
@@ -649,7 +534,17 @@ func (s *Server) Close() error {
 func main() {
 	analytics.EnsureInstallID()
 
-	logFile, err := os.OpenFile("/tmp/chrome-native-host.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+	logPath := "/tmp/chrome-native-host.log"
+	if runtime.GOOS == "windows" {
+		if localAppData := os.Getenv("LOCALAPPDATA"); localAppData != "" {
+			logPath = filepath.Join(localAppData, "SuperDuck", "chrome-native-host.log")
+		}
+	}
+	if err := os.MkdirAll(filepath.Dir(logPath), 0700); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to create log directory: %v\n", err)
+		os.Exit(1)
+	}
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to open log file: %v\n", err)
 		os.Exit(1)

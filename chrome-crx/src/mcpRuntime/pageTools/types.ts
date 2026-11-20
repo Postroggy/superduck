@@ -1,6 +1,7 @@
 import { isRecord } from '../../messageTypes';
 
 export interface JavaScriptToolInput {
+  resultOnly?: boolean;
   action: string;
   text: string;
   tabId?: number;
@@ -69,6 +70,8 @@ export interface ReadNetworkRequestsToolInput {
   urlPattern?: string;
   clear?: boolean;
   limit?: number;
+  includeBodies?: boolean;
+  maxBodyChars?: number;
 }
 
 export type EmptyToolInput = Record<string, never>;

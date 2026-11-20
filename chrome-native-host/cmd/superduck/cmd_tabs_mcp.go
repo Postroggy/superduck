@@ -16,9 +16,10 @@ import (
 //	superduck tab_group list [--create-if-empty]
 //	superduck tab_group new [--force]
 //	superduck tab_group finalize [--handoff TAB] [--deliverable TAB]
+//	superduck tab_group close --tab TAB
 func cmdTabGroup(argv []string) error {
 	if len(argv) == 0 {
-		return fmt.Errorf("usage: superduck tab_group <list|new|finalize> [flags]")
+		return fmt.Errorf("usage: superduck tab_group <list|new|finalize|close> [flags]")
 	}
 	sub, rest := argv[0], argv[1:]
 	switch sub {
@@ -28,6 +29,8 @@ func cmdTabGroup(argv []string) error {
 		return cmdTabGroupNew(rest)
 	case "finalize", "finish":
 		return cmdTabGroupFinalize(rest)
+	case "close":
+		return cmdTabGroupClose(rest)
 	case "-h", "--help", "help":
 		fmt.Println(`usage: superduck tab_group <subcommand> [flags]
 
@@ -42,13 +45,17 @@ Subcommands:
   finalize                  Finalize the current MCP tab group as an explicit tab disposition.
       --handoff TAB         Keep TAB in the managed group for continuation.
       --deliverable TAB     Keep TAB open but remove it from the managed group.
+  close TAB [TAB...]        Close tabs this session opened for its own work and no
+                            longer needs on screen. Tabs outside the session are
+                            skipped and reported. Default finalize never closes
+                            anything, so closing is always this explicit step.
 
 Examples:
   TAB=$(superduck --json tab_group list --create-if-empty | jq -r '.tabContext.currentTabId')
-  superduck tab_group finalize --deliverable "$TAB"`)
+  superduck tab_group close "$TAB"`)
 		return nil
 	default:
-		return fmt.Errorf("unknown tab_group subcommand: %s (want list|new|finalize)", sub)
+		return fmt.Errorf("unknown tab_group subcommand: %s (want list|new|finalize|close)", sub)
 	}
 }
 
@@ -127,6 +134,22 @@ func cmdTabGroupFinalize(argv []string) error {
 	}
 
 	return runTabGroupTool("tabs_finalize_mcp", "tab_group finalize", args)
+}
+
+// cmdTabGroupClose: superduck tab_group close TAB [TAB...]
+func cmdTabGroupClose(argv []string) error {
+	if len(argv) == 0 {
+		return fmt.Errorf("usage: superduck tab_group close <tabId> [tabId...] (see `superduck tab_group list`)")
+	}
+	tabIDs := make([]int, 0, len(argv))
+	for _, raw := range argv {
+		id, err := strconv.Atoi(raw)
+		if err != nil || id <= 0 {
+			return fmt.Errorf("invalid tab id: %s", raw)
+		}
+		tabIDs = append(tabIDs, id)
+	}
+	return runTabGroupTool("tabs_close_mcp", "tab_group close", map[string]any{"tabIds": tabIDs})
 }
 
 func runTabGroupTool(toolName string, cmdLabel string, args map[string]any) error {

@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 )
 
 // cmdExec: superduck exec --tab <id> <js-code>
@@ -34,10 +35,15 @@ func cmdExec(argv []string) error {
 	file := fs.String("file", "", "Read JS source from this file")
 	stdin := fs.Bool("stdin", false, "Read JS source from stdin")
 	output := fs.String("output", "", "Write the raw tool response to this file instead of stdout (bypasses terminal channel)")
+	resultOnly := fs.Bool("result-only", false, "Print only the execution result")
 	if err := fs.Parse(reorderFlagsFirst(argv)); err != nil {
 		return err
 	}
 
+	rest := fs.Args()
+	if (*stdin && *file != "") || ((*stdin || *file != "") && len(rest) != 0) || (!*stdin && *file == "" && len(rest) != 1) {
+		return fmt.Errorf("usage: superduck --tab <id> exec [--result-only] [--output PATH] <js-code> | --file PATH | --stdin")
+	}
 	var code string
 	switch {
 	case *file != "":
@@ -53,11 +59,10 @@ func cmdExec(argv []string) error {
 		}
 		code = s
 	default:
-		rest := fs.Args()
-		if len(rest) < 1 {
-			return fmt.Errorf("usage: superduck exec --tab <id> <js-code> | --file PATH | --stdin [--output PATH]")
-		}
 		code = rest[0]
+	}
+	if strings.TrimSpace(code) == "" {
+		return fmt.Errorf("JavaScript source is empty")
 	}
 
 	args := map[string]any{
@@ -69,6 +74,10 @@ func cmdExec(argv []string) error {
 		// truncation so large JSON payloads land on disk parseable.
 		args["rawOutput"] = true
 		return runSimpleToolToFile("javascript_tool", "exec", args, *output)
+	}
+	if *resultOnly {
+		args["resultOnly"] = true
+		return runSimpleResultOnly("javascript_tool", "exec", args)
 	}
 	return runSimpleTool("javascript_tool", "exec", args)
 }

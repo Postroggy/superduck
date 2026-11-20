@@ -40,7 +40,7 @@ func main() {
 	// Allow UDS path override via environment variable
 	udsPath := os.Getenv("SUPERDUCK_UDS_PATH")
 	if udsPath == "" {
-		udsPath = bridge.DefaultUDSPath
+		udsPath = bridge.DefaultUDSPath()
 	}
 
 	slog.Info("preparing native host bridge", "uds_path", udsPath)

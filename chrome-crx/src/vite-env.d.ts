@@ -55,6 +55,9 @@ declare var __cdpNetworkRequestsByTab: Map<number, unknown>;
 declare var __cdpNetworkTrackingEnabled: Set<number>;
 declare var __cdpConsoleTrackingEnabled: Set<number>;
 declare var __cdpWindowOpenEventsByTab: Map<number, unknown[]>;
+declare var __cdpEventBuffersByTab: Map<number, unknown>;
+declare var __cdpSessionStateByTab: Map<number, unknown>;
 declare var __cdpDebuggerEventHandler:
   | ((source: chrome.debugger.Debuggee, method: string, params: unknown) => void)
   | undefined;
+declare var __cdpAttachedTargets: Set<string>;

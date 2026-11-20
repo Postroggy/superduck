@@ -36,6 +36,7 @@ func TestExtractSubcommand(t *testing.T) {
 		{"tab_group/ls-alias", "tab_group", "list", []string{"ls", "--create-if-empty"}},
 		{"tab_group/new", "tab_group", "new", []string{"new"}},
 		{"tab_group/finalize", "tab_group", "finalize", []string{"finalize", "--deliverable", "123"}},
+		{"tab_group/close", "tab_group", "close", []string{"close", "123"}},
 		{"tab_group/unknown", "tab_group", "unknown", []string{"weird"}},
 		{"tab_group/empty", "tab_group", "", nil},
 		{"gif/start", "gif", "start", []string{"start"}},
@@ -63,7 +64,7 @@ func TestExtractSubcommand(t *testing.T) {
 func TestSplitGlobalFlagsSession(t *testing.T) {
 	original := gflags
 	t.Cleanup(func() { gflags = original })
-	gflags = globalFlags{SocketPath: cliclient.DefaultSocketPath, Timeout: 30 * time.Second}
+	gflags = globalFlags{SocketPath: cliclient.DefaultSocketPath(), Timeout: 30 * time.Second}
 
 	args := splitGlobalFlags([]string{
 		"--session", "session-a",
@@ -80,7 +81,7 @@ func TestSplitGlobalFlagsSession(t *testing.T) {
 }
 
 func TestSplitGlobalFlagsSessionEquals(t *testing.T) {
-	withCLIFlags(t, globalFlags{SocketPath: cliclient.DefaultSocketPath, Timeout: 30 * time.Second})
+	withCLIFlags(t, globalFlags{SocketPath: cliclient.DefaultSocketPath(), Timeout: 30 * time.Second})
 
 	args := splitGlobalFlags([]string{
 		"tab_group",
@@ -99,7 +100,7 @@ func TestSplitGlobalFlagsSessionEquals(t *testing.T) {
 }
 
 func TestSplitGlobalFlagsAllGlobalsRegardlessOfPosition(t *testing.T) {
-	withCLIFlags(t, globalFlags{SocketPath: cliclient.DefaultSocketPath, Timeout: 30 * time.Second})
+	withCLIFlags(t, globalFlags{SocketPath: cliclient.DefaultSocketPath(), Timeout: 30 * time.Second})
 
 	args := splitGlobalFlags([]string{
 		"tab_group",
@@ -137,7 +138,7 @@ func TestSplitGlobalFlagsAllGlobalsRegardlessOfPosition(t *testing.T) {
 }
 
 func TestSplitGlobalFlagsRepeatedFlagsLastWins(t *testing.T) {
-	withCLIFlags(t, globalFlags{SocketPath: cliclient.DefaultSocketPath, Timeout: 30 * time.Second})
+	withCLIFlags(t, globalFlags{SocketPath: cliclient.DefaultSocketPath(), Timeout: 30 * time.Second})
 
 	args := splitGlobalFlags([]string{
 		"--session", "old-session",
@@ -211,7 +212,7 @@ func TestSplitGlobalFlagsHelperProcess(t *testing.T) {
 	args := os.Args
 	for i, arg := range args {
 		if arg == "--" {
-			gflags = globalFlags{SocketPath: cliclient.DefaultSocketPath, Timeout: 30 * time.Second}
+			gflags = globalFlags{SocketPath: cliclient.DefaultSocketPath(), Timeout: 30 * time.Second}
 			splitGlobalFlags(args[i+1:])
 			os.Exit(0)
 		}
@@ -222,7 +223,7 @@ func TestSplitGlobalFlagsHelperProcess(t *testing.T) {
 func TestResolvedBrowserSession(t *testing.T) {
 	original := gflags
 	t.Cleanup(func() { gflags = original })
-	gflags = globalFlags{SocketPath: cliclient.DefaultSocketPath, Timeout: 30 * time.Second}
+	gflags = globalFlags{SocketPath: cliclient.DefaultSocketPath(), Timeout: 30 * time.Second}
 
 	t.Setenv("SUPERDUCK_SESSION_ID", "env-session")
 	if got := resolvedBrowserSessionID(); got != "env-session" {
@@ -236,7 +237,7 @@ func TestResolvedBrowserSession(t *testing.T) {
 }
 
 func TestResolvedBrowserSessionPrecedenceAndExplicit(t *testing.T) {
-	withCLIFlags(t, globalFlags{SocketPath: cliclient.DefaultSocketPath, Timeout: 30 * time.Second})
+	withCLIFlags(t, globalFlags{SocketPath: cliclient.DefaultSocketPath(), Timeout: 30 * time.Second})
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
 	clearBrowserSessionEnv(t)
@@ -277,7 +278,7 @@ func TestResolvedBrowserSessionPrecedenceAndExplicit(t *testing.T) {
 }
 
 func TestResolvedBrowserSessionFallback(t *testing.T) {
-	withCLIFlags(t, globalFlags{SocketPath: cliclient.DefaultSocketPath, Timeout: 30 * time.Second})
+	withCLIFlags(t, globalFlags{SocketPath: cliclient.DefaultSocketPath(), Timeout: 30 * time.Second})
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
 	clearBrowserSessionEnv(t)
@@ -301,7 +302,7 @@ func TestResolvedBrowserSessionFallback(t *testing.T) {
 func TestResolvedBrowserSessionUsesSessionFile(t *testing.T) {
 	original := gflags
 	t.Cleanup(func() { gflags = original })
-	gflags = globalFlags{SocketPath: cliclient.DefaultSocketPath, Timeout: 30 * time.Second}
+	gflags = globalFlags{SocketPath: cliclient.DefaultSocketPath(), Timeout: 30 * time.Second}
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
 	clearBrowserSessionEnv(t)
@@ -327,7 +328,7 @@ func TestResolvedBrowserSessionUsesSessionFile(t *testing.T) {
 }
 
 func TestResolvedBrowserSessionErrorsWhenSessionFileIsUnusable(t *testing.T) {
-	withCLIFlags(t, globalFlags{SocketPath: cliclient.DefaultSocketPath, Timeout: 30 * time.Second})
+	withCLIFlags(t, globalFlags{SocketPath: cliclient.DefaultSocketPath(), Timeout: 30 * time.Second})
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
 	clearBrowserSessionEnv(t)
@@ -537,7 +538,7 @@ func TestClientOptsExplicitSessionDoesNotWarn(t *testing.T) {
 }
 
 func TestClientOptsDefaultSessionWarnsOnce(t *testing.T) {
-	withCLIFlags(t, globalFlags{SocketPath: cliclient.DefaultSocketPath, Timeout: 30 * time.Second})
+	withCLIFlags(t, globalFlags{SocketPath: cliclient.DefaultSocketPath(), Timeout: 30 * time.Second})
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
 	clearBrowserSessionEnv(t)
@@ -561,7 +562,7 @@ func TestClientOptsDefaultSessionWarnsOnce(t *testing.T) {
 }
 
 func TestClientOptsDefaultSessionWarningCanBeDisabled(t *testing.T) {
-	withCLIFlags(t, globalFlags{SocketPath: cliclient.DefaultSocketPath, Timeout: 30 * time.Second})
+	withCLIFlags(t, globalFlags{SocketPath: cliclient.DefaultSocketPath(), Timeout: 30 * time.Second})
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
 	clearBrowserSessionEnv(t)

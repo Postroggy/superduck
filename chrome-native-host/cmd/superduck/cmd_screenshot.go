@@ -21,9 +21,16 @@ func cmdScreenshot(argv []string) error {
 	if gflags.Tab == 0 {
 		return fmt.Errorf("--tab <id> is required for screenshot (use `superduck tabs` to find a tab id)")
 	}
-	args := map[string]any{"action": "screenshot", "tabId": gflags.Tab}
+	return runImageCapture("screenshot", nil, *output)
+}
 
-	rec := cliclient.AuditRecord{Cmd: "screenshot"}
+func runImageCapture(action string, region []float64, output string) error {
+	args := map[string]any{"action": action, "tabId": gflags.Tab}
+	if region != nil {
+		args["region"] = region
+	}
+
+	rec := cliclient.AuditRecord{Cmd: action}
 	v, err := callWithRetry("computer", args, 6, 500*time.Millisecond)
 	if err != nil {
 		_ = cliclient.WriteAudit(rec)
@@ -32,5 +39,5 @@ func cmdScreenshot(argv []string) error {
 	rec.OK = true
 	_ = cliclient.WriteAudit(rec)
 
-	return handleImageCapture(v, *output, "screenshot")
+	return handleImageCapture(v, output, action)
 }

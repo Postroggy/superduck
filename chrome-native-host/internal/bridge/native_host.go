@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"chrome-native-host/internal/protocol"
+	"chrome-native-host/internal/sockutil"
 	"chrome-native-host/internal/udsauth"
 )
 
 const (
-	DefaultUDSPath               = "/tmp/chrome-native-host.sock"
 	ConnectTimeout               = 5 * time.Second
 	ConnectRetries               = 3
 	DefaultTimeout               = 30 * time.Second
@@ -26,6 +26,11 @@ const (
 	toolResponseHeadroom           = 15 * time.Second
 	lockRetryInterval              = 10 * time.Millisecond
 )
+
+// DefaultUDSPath returns the platform-specific native-host transport address.
+func DefaultUDSPath() string {
+	return sockutil.DefaultPath()
+}
 
 // Options configures the NativeHostBridge.
 type Options struct {
@@ -100,14 +105,14 @@ type NativeHostBridge struct {
 
 // New creates a new bridge to the Chrome Native Host with default options.
 func New() (*NativeHostBridge, error) {
-	return NewWithOptions(Options{UDSPath: DefaultUDSPath})
+	return NewWithOptions(Options{UDSPath: DefaultUDSPath()})
 }
 
 // NewWithOptions creates a new bridge with custom options.
 func NewWithOptions(opts Options) (*NativeHostBridge, error) {
 	udsPath := opts.UDSPath
 	if udsPath == "" {
-		udsPath = DefaultUDSPath
+		udsPath = DefaultUDSPath()
 	}
 
 	bridge := &NativeHostBridge{
@@ -204,7 +209,7 @@ func connectWithRetry(ctx context.Context, udsPath string) (net.Conn, error) {
 		if timeoutErr != nil {
 			return nil, fmt.Errorf("connect canceled: %w", timeoutErr)
 		}
-		conn, err = net.DialTimeout("unix", udsPath, dialTimeout)
+		conn, err = sockutil.DialTimeout(udsPath, dialTimeout)
 		if err == nil {
 			return conn, nil
 		}
