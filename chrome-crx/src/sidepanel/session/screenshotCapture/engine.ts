@@ -1,6 +1,7 @@
 import type { ScreenshotRegion } from './types';
 import { isScreenshotOverlayMessage, isScreenshotRegion } from './types';
 import { blobToDataUrl, dataUrlToBlob } from '../../../mcpServersStore';
+import { awaitCommittedFrame } from '../../../utils/awaitCommittedFrame';
 
 class ScreenshotCaptureManager {
   private static instance: ScreenshotCaptureManager | null = null;
@@ -24,8 +25,7 @@ class ScreenshotCaptureManager {
 
         if (!tab.active && resolvedTabId && forceTabActivation) {
           await chrome.tabs.update(resolvedTabId, { active: true });
-          await new Promise((resolve) => setTimeout(resolve, 200));
-          await chrome.tabs.get(resolvedTabId);
+          await awaitCommittedFrame(resolvedTabId);
         }
       } else {
         const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -40,7 +40,7 @@ class ScreenshotCaptureManager {
       const targetWindow = await chrome.windows.get(targetWindowId);
       if (!targetWindow.focused) {
         await chrome.windows.update(targetWindowId, { focused: true });
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        if (resolvedTabId) await awaitCommittedFrame(resolvedTabId);
       }
 
       return await chrome.tabs.captureVisibleTab(targetWindowId, { format: 'png' });

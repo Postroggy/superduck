@@ -1,6 +1,7 @@
 import { processScreenshotInContentScript } from './contentScriptScreenshot';
 import { screenshotContextManager } from './screenshotContext';
 import { tabGroupManager } from '../tabState';
+import { awaitCommittedFrame } from '../../utils/awaitCommittedFrame';
 import type {
   CdpCaptureScreenshotResult,
   ResizeParams,
@@ -55,6 +56,8 @@ export async function screenshot(
     console.info(
       `[Screenshot] viewport=${viewportWidth}x${viewportHeight} dpr=${devicePixelRatio}`
     );
+
+    await awaitCommittedFrame(tabId);
 
     const captureResult = (await sendCommand(tabId, 'Page.captureScreenshot', {
       format: 'jpeg',
