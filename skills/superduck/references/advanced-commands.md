@@ -28,6 +28,61 @@ superduck --session "$SID" --tab "$TAB" network --url-pattern /api/ --limit 20
 
 Use `--clear` after reading if you need a fresh capture window.
 
+`--bodies` adds request/response bodies and captured WebSocket frames
+(`--max-body-chars` clips each payload, default 4000, `0` = no clip). This is the
+*assembled* view: the request list, timings, bodies and frames already joined, so
+you do not rebuild `requestId -> getResponseBody` by hand. For interception,
+blocking, extra headers or the raw `Network.webSocketFrame*` events, use
+`cdp Network.*` on the same tab.
+
+## Raw CDP
+
+`cdp` forwards any DevTools Protocol method verbatim. Enable a domain first, then
+call it; results come back as plain protocol JSON.
+
+```bash
+superduck --session "$SID" --tab "$TAB" cdp Network.enable
+superduck --session "$SID" --tab "$TAB" cdp Page.getLayoutMetrics
+superduck --session "$SID" --tab "$TAB" cdp CSS.enable
+superduck --session "$SID" --tab "$TAB" cdp CSS.getMatchedStylesForNode --params-file node.json
+superduck --session "$SID" --tab "$TAB" cdp status
+superduck --session "$SID" --tab "$TAB" cdp events --pattern Debugger.paused --wait-ms 8000
+superduck cdp targets --pattern worker
+```
+
+A script keeps a whole sequence inside one call: steps are `{"method","params"}`,
+`{"waitFor":"Debugger.paused","timeoutMs":5000}` (waits for a *new* event) or
+`{"sleepMs":200}`, and params can reference earlier steps
+(`"${2.event.params.callFrames.0.callFrameId}"`).
+
+```bash
+superduck --session "$SID" --tab "$TAB" cdp --script breakpoint-steps.json
+```
+
+On Windows PowerShell pass JSON through a file (`--params-file`, `--script`):
+native arguments lose their double quotes.
+
+## End-to-End Encrypted Sockets
+
+A Noise/AES-GCM tunnel (`/v1/noise`-style URLs, high-entropy frame bytes) never
+yields plaintext at the protocol layer. Hook the page's encrypt/decrypt instead:
+
+```bash
+SKILL_DIR="${SUPERDUCK_SKILL_DIR:-$HOME/.agent/skills/superduck}"
+node "$SKILL_DIR/scripts/cdp-ws-plaintext.mjs" list-hooks
+node "$SKILL_DIR/scripts/cdp-ws-plaintext.mjs" wrap --hooks ws,crypto --out /tmp/probe.json
+superduck --session "$SID" --tab "$TAB" cdp Runtime.evaluate --params-file /tmp/probe.json
+# ... drive the app ...
+superduck --session "$SID" --tab "$TAB" cdp Runtime.evaluate \
+  --params '{"expression":"JSON.stringify(globalThis.__sdWs||[])","returnByValue":true}' > /tmp/log.json
+node "$SKILL_DIR/scripts/cdp-ws-plaintext.mjs" decode /tmp/log.json --out /tmp/plain.txt
+```
+
+Plaintext often turns out to be a protobuf envelope carrying HTTP requests inside
+the socket, with zstd-compressed bodies; `decode` expands the fields and decompresses
+the bodies. If page hooks see nothing at all, the socket lives in a worker — check
+`cdp targets` and drive that target with `--target`.
+
 ## Ref-Based Interaction
 
 `read_page` returns refs for accessible elements. Refs are usually more stable

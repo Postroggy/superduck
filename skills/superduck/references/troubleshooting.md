@@ -13,7 +13,7 @@ Common issues and their solutions.
 1. Check if the native host is running:
 
    ```bash
-   SKILL_DIR="${SUPERDUCK_SKILL_DIR:-${CODEX_HOME:-$HOME/.codex}/skills/superduck}"
+   SKILL_DIR="${SUPERDUCK_SKILL_DIR:-$HOME/.agent/skills/superduck}"
    node "$SKILL_DIR/scripts/check-superduck-status.mjs"
    ```
 
@@ -190,6 +190,37 @@ superduck --session "$SID" --tab "$TAB" screenshot --output /tmp/my-screenshot.j
    # Good: JSON.stringify(data)
    ```
 
+## Raw CDP Issues
+
+### Error: `{"code":-32000,"message":"Not allowed"}` on `Target.*`
+
+`chrome.debugger` refuses the `Target` domain for tab debuggees. Use
+`superduck cdp targets` (it calls `chrome.debugger.getTargets()` directly), then
+drive the target you need with `--target <targetId>`.
+
+### Error: `No resource with given identifier found` on `Network.getResponseBody`
+
+Chrome drops the body cache on reload and on `Network.disable`. Enable the domain
+once, trigger the request, then read the body while the request is still in the
+list — `network --bodies` does exactly that sequence for you.
+
+### Error: `Inspected target navigated or closed`
+
+A `Page.reload` / `Page.navigate` step invalidates the next command when both sit
+in one batch. Split it: reload in one call, then run the evaluate in a second call.
+
+### WebSocket frames are base64 noise
+
+That is ciphertext (Noise/AES-GCM tunnels, `/v1/noise`-style URLs), and no amount
+of capturing changes it. Hook the page where it encrypts/decrypts with
+`scripts/cdp-ws-plaintext.mjs`. If page-level hooks never fire, the socket lives in
+a worker: confirm with `cdp targets` and use `--target`.
+
+### A page tool hangs around 35s while a breakpoint is hit
+
+The renderer is paused. Page tools answer with the paused frame instead of running;
+resume with `cdp Debugger.resume` (or step), and use `cdp status` for the frame list.
+
 ## Permission Denied
 
 ### Error: Permission denied when running scripts
@@ -197,7 +228,7 @@ superduck --session "$SID" --tab "$TAB" screenshot --output /tmp/my-screenshot.j
 **Solution**: Make scripts executable:
 
 ```bash
-SKILL_DIR="${SUPERDUCK_SKILL_DIR:-${CODEX_HOME:-$HOME/.codex}/skills/superduck}"
+SKILL_DIR="${SUPERDUCK_SKILL_DIR:-$HOME/.agent/skills/superduck}"
 chmod +x "$SKILL_DIR"/scripts/*.mjs
 chmod +x "$SKILL_DIR"/templates/*.sh
 ```
@@ -248,7 +279,7 @@ If issues persist:
 
    ```bash
    superduck doctor
-   SKILL_DIR="${SUPERDUCK_SKILL_DIR:-${CODEX_HOME:-$HOME/.codex}/skills/superduck}"
+   SKILL_DIR="${SUPERDUCK_SKILL_DIR:-$HOME/.agent/skills/superduck}"
    node "$SKILL_DIR/scripts/check-superduck-status.mjs" --json
    ```
 
