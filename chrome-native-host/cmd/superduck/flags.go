@@ -111,6 +111,7 @@ var knownValueFlags = map[string]bool{
 	"--value":          true,
 	"--image-id":       true, "--filename": true,
 	"--coord": true, "--command": true,
+	"--dpr":     true,
 	"--quality": true,
 	"--path":    true,
 }

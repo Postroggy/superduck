@@ -157,7 +157,14 @@ OBSERVABILITY (require --tab <id>):
                              cdp Network.* on the same tab.
 
 WINDOW / NAV (require --tab <id>):
-  resize <w> <h>             Resize the browser window — useful for responsive testing.
+  resize <w> <h>             Resize the real browser window (un-maximizes it first).
+  viewport <w> <h> [--dpr N] [--mobile]
+                             Emulate a viewport inside the current window: media
+                             queries, devicePixelRatio and screen.* follow the
+                             emulated size, not the window. Reaches widths the OS
+                             window cannot, e.g. 375. Undo with --clear. Emulation
+                             lives on the debugger session, so it ends when the
+                             debugger detaches.
   navigate <url|back|forward>
                              Load a URL, or move through history. Reuse a tab from
                              'tab_group list --create-if-empty' unless you explicitly
@@ -340,6 +347,8 @@ func main() {
 		err = cmdDownload(rest)
 	case "resize":
 		err = cmdResize(rest)
+	case "viewport":
+		err = cmdViewport(rest)
 	case "navigate":
 		err = cmdNavigate(rest)
 	case "upload_image":
