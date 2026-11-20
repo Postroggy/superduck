@@ -12,6 +12,7 @@ import (
 
 // Native messaging host name. Must match the allowed list in service-worker.ts.
 const nativeHostName = "com.me.superduck_browser_extension"
+const nativeHostBinaryName = "chrome-native-host"
 
 // Pinned extension ID — derived from the public "key" field baked into
 // chrome-crx/manifest.json. Same ID regardless of how the extension is loaded

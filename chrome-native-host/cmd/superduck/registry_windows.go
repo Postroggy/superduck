@@ -46,3 +46,20 @@ func writeNativeHostRegistryKey(browser, hostName, manifestPath string) error {
 	}
 	return nil
 }
+
+func readNativeHostRegistryManifest(browser, hostName string) (string, bool) {
+	base, ok := windowsRegistryPaths(browser)
+	if !ok {
+		return "", false
+	}
+	key, err := registry.OpenKey(registry.CURRENT_USER, base+`\`+hostName, registry.QUERY_VALUE)
+	if err != nil {
+		return "", false
+	}
+	defer key.Close()
+	value, _, err := key.GetStringValue("")
+	if err != nil || value == "" {
+		return "", false
+	}
+	return value, true
+}

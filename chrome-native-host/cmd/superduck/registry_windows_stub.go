@@ -7,3 +7,7 @@ package main
 func writeNativeHostRegistryKey(browser, hostName, manifestPath string) error {
 	return nil
 }
+
+func readNativeHostRegistryManifest(browser, hostName string) (string, bool) {
+	return "", false
+}
