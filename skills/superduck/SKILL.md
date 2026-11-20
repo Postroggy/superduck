@@ -91,6 +91,14 @@ chat, omit the tab even if it helped you answer. Do not ask the user whether to
 clean up ordinary intermediate tabs; make the disposition decision from the
 task outcome.
 
+When the tabs you opened were only your own scratch work — test runs, fixtures,
+pages you loaded to verify a behaviour and nobody needs to see again — close
+them instead of leaving them to pile up:
+
+```bash
+superduck --session "$SID" tab_group close 123 456   # ids from tab_group list
+```
+
 Use `--deliverable TAB` when the tab itself is a user-facing output or a page
 the user explicitly asked to keep open or inspect directly. Examples include a
 created/edited document, dashboard, checkout/cart, submitted form result, or a
