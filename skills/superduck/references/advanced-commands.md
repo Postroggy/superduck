@@ -134,19 +134,43 @@ superduck --session "$SID" --tab "$TAB" exec 'window.scrollTo(0, 0)'
 superduck --session "$SID" --tab "$TAB" exec 'window.scrollTo(0, document.body.scrollHeight)'
 ```
 
-## Screenshots, Region Zoom, and Resize
+## Screenshots, Region Zoom, Resize, and Viewport Emulation
 
 ```bash
 superduck --session "$SID" --tab "$TAB" screenshot --output /tmp/
 superduck --session "$SID" --tab "$TAB" screenshot --output /tmp/step1.jpg
 superduck --session "$SID" --tab "$TAB" zoom 100 100 600 500 --output /tmp/region.jpg
 superduck --session "$SID" --tab "$TAB" resize 1366 768
+superduck --session "$SID" --tab "$TAB" viewport 375 812 --dpr 2 --mobile
+superduck --session "$SID" --tab "$TAB" viewport --clear --reload
 ```
 
 `zoom` captures or inspects a rectangular region. It is not browser page zoom.
 For screenshot output, a directory path ending in `/` auto-generates a filename;
 a file path uses that basename but may be extension-aligned to the real image
 format, commonly `.jpg`.
+
+`resize` moves the real browser window, so browser chrome eats into the result,
+`devicePixelRatio` keeps the display scale, the OS rejects tiny sizes, and a
+maximized window is restored first. `viewport` overrides the layout viewport
+instead: media queries, `innerWidth`, `devicePixelRatio` (`--dpr`) and `screen.*`
+follow the emulated size, with `--mobile` for mobile viewport behaviour, and no
+window is moved. Prefer `viewport` for breakpoint work; use `resize` only when the
+real window size is the thing under test.
+
+Emulation belongs to the debugger session and is dropped when it detaches
+(service worker restart, browser restart, user cancelling the debugging infobar).
+After clearing a mobile emulation the page keeps its emulated layout until it
+reloads, which is why `--clear` takes `--reload`.
+
+Raw CDP equivalent, when you need more knobs:
+
+```bash
+superduck --session "$SID" --tab "$TAB" cdp Emulation.setDeviceMetricsOverride \
+  --params '{"width":375,"height":812,"deviceScaleFactor":2,"mobile":true,"screenWidth":375,"screenHeight":812}'
+superduck --session "$SID" --tab "$TAB" cdp Emulation.setTouchEmulationEnabled --params '{"enabled":true,"maxTouchPoints":5}'
+superduck --session "$SID" --tab "$TAB" cdp Emulation.clearDeviceMetricsOverride
+```
 
 ## Uploads
 

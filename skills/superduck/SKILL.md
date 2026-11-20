@@ -226,8 +226,37 @@ superduck --session "$SID" --tab "$TAB" zoom 100 100 600 500 --output /tmp/regio
 
 `--output /tmp/` saves an auto-named JPEG. `--output /tmp/name.png` may be
 written as `/tmp/name.jpg` when the browser returns JPEG data. `zoom` captures a
-rectangular region; it is not page zoom. Use `resize <width> <height>` to change
-the browser window size.
+rectangular region; it is not page zoom.
+
+## Responsive Checks
+
+Two different tools. `viewport` emulates the size inside the current window and is
+what you want for breakpoints; `resize` moves the real window and is visible to the
+user.
+
+```bash
+superduck --session "$SID" --tab "$TAB" viewport 375 812 --dpr 2 --mobile
+superduck --session "$SID" --tab "$TAB" screenshot --output /tmp/mobile.jpg
+superduck --session "$SID" --tab "$TAB" viewport 1280 800
+superduck --session "$SID" --tab "$TAB" screenshot --output /tmp/desktop.jpg
+superduck --session "$SID" --tab "$TAB" viewport --clear --reload
+```
+
+`viewport` sets width, height, deviceScaleFactor and mobile emulation, so
+`innerWidth`, `devicePixelRatio`, `screen.*` and media queries all follow the
+emulated numbers while the window itself stays where it is. Widths below the
+minimum real window (about 500px on Windows) are reachable this way.
+
+`resize <width> <height>` changes the real window: the viewport ends up smaller
+than the requested size because browser chrome takes space, `devicePixelRatio`
+stays at the display scale, and the OS refuses very small sizes. It also
+un-maximizes the window, which is visible to the user, so prefer `viewport`
+unless the task is about the real window size.
+
+Emulation lives on the debugger session: it ends when the debugger detaches
+(service worker restart, browser restart, or the user cancelling Chrome's
+debugging infobar). Mobile emulation also leaves the page laid out at the
+emulated width after clearing, hence `--clear --reload`.
 
 ## Console and Network
 
