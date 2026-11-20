@@ -71,6 +71,10 @@ MCP TAB GROUP (each conversation usually owns one group of tabs):
                              Finalize the current MCP tab group with explicit tab disposition.
                              Omitted tabs are ungrouped and left open (never closed); deliverable
                              tabs stay open outside the group (✓ badge); handoff tabs stay grouped.
+  tab_group close TAB [TAB...] Close tabs this session opened for its own work and no
+                             longer needs on screen. Tabs outside the session are
+                             skipped. Keeping tabs is the default, so closing is
+                             always this explicit call.
 
 MOUSE / KEYBOARD (all require --tab <id>):
   left_click <x> <y> [--modifiers M] [--ref R]
@@ -456,7 +460,8 @@ func extractSubcommand(cmd string, rest []string) string {
 			"list": "list", "ls": "list",
 			"new": "new", "create": "new",
 			"finalize": "finalize", "finish": "finalize",
-			"help": "help", "--help": "help", "-h": "help",
+			"close": "close",
+			"help":  "help", "--help": "help", "-h": "help",
 		})
 	case "gif":
 		return pickFirst(map[string]string{

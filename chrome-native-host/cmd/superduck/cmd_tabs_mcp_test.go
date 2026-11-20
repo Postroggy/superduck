@@ -217,6 +217,53 @@ func TestCmdTabGroupFinalizeRejectsInvalidTabIDs(t *testing.T) {
 	}
 }
 
+func TestCmdTabGroupCloseSendsTabIDs(t *testing.T) {
+	socketPath, reqCh, wait := startFakeCLIToolServer(t, map[string]any{
+		"type": "tool_response",
+		"result": map[string]any{
+			"content": []map[string]any{{"type": "text", "text": "Closed 2 tab(s): 12, 34."}},
+		},
+	})
+	withCLIFlags(t, globalFlags{
+		SocketPath: socketPath,
+		Timeout:    time.Second,
+		SessionID:  "session-a",
+	})
+
+	out := captureStdout(t, func() {
+		if err := cmdTabGroupClose([]string{"12", "34"}); err != nil {
+			t.Fatalf("cmdTabGroupClose() error = %v", err)
+		}
+	})
+
+	req := <-reqCh
+	wait()
+	if got, want := req.Params.Tool, "tabs_close_mcp"; got != want {
+		t.Fatalf("tool = %q, want %q", got, want)
+	}
+	tabIDs, ok := req.Params.Args["tabIds"].([]any)
+	if !ok {
+		t.Fatalf("args.tabIds has type %T, want []any", req.Params.Args["tabIds"])
+	}
+	if len(tabIDs) != 2 {
+		t.Fatalf("tabIds length = %d, want 2 (%v)", len(tabIDs), tabIDs)
+	}
+	for i, want := range []int{12, 34} {
+		if got := intFromJSONNumber(t, tabIDs[i]); got != want {
+			t.Fatalf("tabIds[%d] = %d, want %d", i, got, want)
+		}
+	}
+	if !strings.Contains(out, "Closed 2 tab(s)") {
+		t.Fatalf("stdout = %q, want closed-tab text", out)
+	}
+}
+
+func TestCmdTabGroupCloseRequiresTabFlag(t *testing.T) {
+	if err := cmdTabGroupClose(nil); err == nil {
+		t.Fatal("cmdTabGroupClose(nil) error = nil, want usage error")
+	}
+}
+
 func TestCmdSessionNameSendsTrimmedName(t *testing.T) {
 	socketPath, reqCh, wait := startFakeCLIToolServer(t, map[string]any{
 		"type": "tool_response",
@@ -288,6 +335,7 @@ func startFakeCLIToolServer(
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(tmp) })
 	t.Setenv("HOME", tmp)
+	t.Setenv("USERPROFILE", tmp)
 	if err := udsauth.WriteToken("test-token"); err != nil {
 		t.Fatalf("WriteToken() error = %v", err)
 	}
