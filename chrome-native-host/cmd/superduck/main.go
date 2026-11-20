@@ -96,12 +96,11 @@ MOUSE / KEYBOARD (all require --tab <id>):
                              Capture a rectangular region as a PNG/JPEG (good for icon inspection).
 
 PAGE / DOM (usually require --tab <id>):
-  exec <js> | --file PATH | --stdin
+  exec [--result-only] <js> | --file PATH | --stdin
                              Evaluate JS in the page context. The last expression's value is
-                             returned (do NOT use 'return'). Use for assertions and debugging.
-  batch --file PATH | --stdin
-                             Execute browser_batch JSON. Input can be either an actions array
-                             or {"actions":[...]}; global --tab writes outer tabId.
+                             returned (do NOT use 'return'). This is page JavaScript: it
+                             cannot set breakpoints, read request bodies, inspect the CSS
+                             cascade or intercept traffic — use cdp for those.
   page_text                  Extract the main article text (skips chrome/nav, like Reader Mode).
   read_page [--filter interactive|all] [--depth N] [--ref R] [--max-chars N]
                              Accessibility-tree snapshot with stable ref ids. Filter to
@@ -110,13 +109,48 @@ PAGE / DOM (usually require --tab <id>):
                              Set a form field by ref. Booleans toggle checkboxes; option text
                              or value selects a <select>. --string forces string interpretation.
   screenshot [--output PATH] Capture the visible viewport as PNG/JPEG. PATH may be a directory.
+  batch --file PATH | --stdin
+                             Execute browser_batch JSON. Input can be either an actions array
+                             or {"actions":[...]}; global --tab writes outer tabId.
+
+RAW CDP (what page tools cannot reach: breakpoints, CSS cascade, request/response
+bodies, WebSocket frames, interception, workers):
+  cdp <METHOD> [--params JSON | --params-file PATH]
+                             Pass any DevTools Protocol method straight through and print the
+                             protocol result verbatim (cdp Network.enable, cdp CSS.getMatchedStylesForNode,
+                             cdp Debugger.setBreakpointByUrl). Domains must be enabled first with
+                             another cdp call. On Windows PowerShell use --params-file: native
+                             args lose their double quotes.
+  cdp --batch '<json>' | --batch-file PATH | --script PATH|-
+                             Run a CDP script: an ordered JSON array of steps.
+                             {"method","params"} runs a command; {"waitFor":"Debugger.paused",
+                             "timeoutMs":5000} blocks for a NEW event; {"sleepMs":200} waits.
+                             Params may reference earlier steps: "${2.event.params.callFrames.0.callFrameId}".
+                             Prints one {ok, result} / {ok, error} per step; --continue-on-error.
+  cdp status                 Session state without re-deriving it: attached, enabled domains,
+                             breakpoints with resolved locations, pause state + frames,
+                             last command/error, event and network counters.
+  cdp events [--pattern M] [--wait-ms N] [--cursor N] [--limit N] [--clear]
+                             Drain buffered CDP events (Debugger.paused call frames,
+                             Network.webSocketFrameReceived, ...). --wait-ms blocks until a
+                             matching event arrives (max 15000). CDP cannot hand events back
+                             synchronously, hence the per-tab ring buffer.
+  cdp targets [--pattern M]  List debuggeable targets (page, workers, service workers). Needs no --tab.
+  --target <targetId> cdp <METHOD>
+                             Drive a worker / service worker instead of a tab (also needs no
+                             --tab). Worker targets answer commands only, not events/status.
+                             Sockets or crypto that page hooks never see usually live there.
 
 OBSERVABILITY (require --tab <id>):
   console [--pattern P] [--only-errors] [--clear] [--limit N]
                              Read browser console messages from the current page (only those
                              since the last --clear). Always pass --pattern to filter noise.
-  network [--url-pattern P] [--clear] [--limit N]
-                             List XHR/fetch/document requests captured for this tab.
+  network [--url-pattern P] [--clear] [--limit N] [--bodies] [--max-body-chars N]
+                             Assembled request view for this tab: list + status + timing + bytes
+                             + request/response bodies + captured WebSocket frames. One call
+                             instead of re-deriving requestId -> getResponseBody. For request
+                             interception, blocking, extra headers or raw frame events, use
+                             cdp Network.* on the same tab.
 
 WINDOW / NAV (require --tab <id>):
   resize <w> <h>             Resize the browser window — useful for responsive testing.
@@ -125,7 +159,10 @@ WINDOW / NAV (require --tab <id>):
                              'tab_group list --create-if-empty' unless you explicitly
                              need a fresh group from 'tab_group new'.
 
-UPLOAD_IMAGE / SHORTCUTS / GIF (require --tab <id>):
+FILES / SHORTCUTS / GIF (require --tab <id>):
+  download <URL> --output RELATIVE_PATH | --id <id>
+                             Save a same-origin URL under Chrome Downloads without a Save As chooser,
+                             or check a download started in this session.
   upload_image --image-id <id> (--ref R | --coord x,y) [--filename N]
                              Drop a previously captured image onto a file input or drag target
                              (works for hidden <input type=file>).
@@ -281,6 +318,8 @@ func main() {
 		err = cmdScrollTo(rest)
 	case "exec":
 		err = cmdExec(rest)
+	case "cdp":
+		err = cmdCdp(rest)
 	case "batch":
 		err = cmdBatch(rest)
 	case "page_text":
@@ -293,6 +332,8 @@ func main() {
 		err = cmdConsole(rest)
 	case "network":
 		err = cmdNetwork(rest)
+	case "download":
+		err = cmdDownload(rest)
 	case "resize":
 		err = cmdResize(rest)
 	case "navigate":
@@ -437,6 +478,29 @@ func extractSubcommand(cmd string, rest []string) string {
 				return a
 			}
 			return "url"
+		}
+		return ""
+	case "cdp":
+		for _, a := range rest {
+			if a == "--batch" || a == "--batch-file" {
+				return "batch"
+			}
+			if len(a) > 0 && a[0] == '-' {
+				continue
+			}
+			if a == "events" {
+				return "events"
+			}
+			if a == "status" {
+				return "status"
+			}
+			if a == "targets" {
+				return "targets"
+			}
+			if idx := strings.Index(a, "."); idx > 0 {
+				return a[:idx]
+			}
+			return "send"
 		}
 		return ""
 	}
